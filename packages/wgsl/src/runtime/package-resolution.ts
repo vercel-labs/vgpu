@@ -5,7 +5,7 @@ import { dirname, extname, join, normalize, resolve, sep } from "node:path";
 import { wgslError, wgslWarning } from "./errors.ts";
 import type { Diagnostic } from "./diagnostic-types.ts";
 
-export interface PackageResolveOptions { readonly entry: string; readonly rootDir?: string; readonly packageMap?: Record<string, string>; readonly modules?: Record<string, string> }
+export interface PackageResolveOptions { readonly entry: string; readonly rootDir?: string; readonly packageMap?: Record<string, string>; readonly modules?: Record<string, string>; readonly readPackageManifest?: (path: string) => string }
 
 const entrySourceKey = Symbol("@vgpu/wgsl entry source");
 interface EntrySourceOverride { readonly path: string; readonly source: string }
@@ -46,7 +46,7 @@ export function resolveImport(spec: string, from: string, opts: PackageResolveOp
   if (opts.modules && (spec.startsWith("./") || spec.startsWith("../"))) return defaultVirtual(join(dirname(from), spec), opts.modules);
   if (opts.modules) throw packageNotFound(packageNameOf(spec), PKG_NOTFOUND_VIRTUAL_FIXIT);
   if (spec.startsWith("./") || spec.startsWith("../")) return defaultFile(resolve(dirname(from), spec));
-  return packageImport(spec, from, diagnostics);
+  return packageImport(spec, from, diagnostics, opts.readPackageManifest);
 }
 
 export async function readModule(path: string, opts: PackageResolveOptions): Promise<string> {
@@ -64,7 +64,7 @@ export function canonicalEntry(entry: string, opts: PackageResolveOptions): stri
   return opts.modules ? defaultVirtual(entry, opts.modules) : defaultFile(resolve(entry));
 }
 
-function packageImport(spec: string, from: string, diagnostics: Diagnostic[]): string {
+function packageImport(spec: string, from: string, diagnostics: Diagnostic[], readManifest?: (path: string) => string): string {
   const pkg = packageNameOf(spec);
   const sub = `.${spec.slice(pkg.length) || ""}`;
   // Project-local first: the importing project's own node_modules always wins, so a project can
@@ -73,14 +73,14 @@ function packageImport(spec: string, from: string, diagnostics: Diagnostic[]): s
   // never at another project.
   const start = dirname(from);
   const boundary = workspaceBoundary(start);
-  const local = walkForPackage(start, boundary, pkg, sub, diagnostics);
+  const local = walkForPackage(start, boundary, pkg, sub, diagnostics, readManifest);
   if (local) return local;
   // Same walk from the importer's real path, which is what rescues a WGSL package that imports
   // another WGSL package under pnpm (see walkForPackage).
   const real = realPathOf(start);
   const realBoundary = realPathOf(boundary);
   if (real !== start && isInside(real, realBoundary)) {
-    const stored = walkForPackage(real, realBoundary, pkg, sub, diagnostics);
+    const stored = walkForPackage(real, realBoundary, pkg, sub, diagnostics, readManifest);
     if (stored) return stored;
   }
   // Yarn PnP installs packages inside zip archives with no node_modules directories at all, so the
@@ -118,10 +118,10 @@ function packageImport(spec: string, from: string, diagnostics: Diagnostic[]): s
  * path as written and skips the second pass entirely when the real path escapes it, leaving a linked
  * package's own imports to fail with PKG-NOTFOUND rather than resolve to something arbitrary.
  */
-function walkForPackage(start: string, stopAt: string, pkg: string, sub: string, diagnostics: Diagnostic[]): string | undefined {
+function walkForPackage(start: string, stopAt: string, pkg: string, sub: string, diagnostics: Diagnostic[], readManifest?: (path: string) => string): string | undefined {
   for (let dir = start;;) {
     const pkgJson = join(dir, "node_modules", pkg, "package.json");
-    if (existsSync(pkgJson)) return packageExport(pkgJson, sub, diagnostics);
+    if (existsSync(pkgJson)) return packageExport(pkgJson, sub, diagnostics, readManifest);
     if (dir === stopAt) return undefined;
     const next = dirname(dir); if (next === dir) return undefined; dir = next;
   }
@@ -173,9 +173,9 @@ function resolveAlongsideResolver(spec: string): string | undefined {
   }
 }
 
-function packageExport(pkgJson: string, sub: string, diagnostics: Diagnostic[]): string {
+function packageExport(pkgJson: string, sub: string, diagnostics: Diagnostic[], readManifest?: (path: string) => string): string {
   const root = dirname(pkgJson);
-  const parsed = JSON.parse(readFileSync(pkgJson, "utf8")) as { name?: string; exports?: Record<string, string | Record<string, string>> };
+  const parsed = JSON.parse(readManifest ? readManifest(pkgJson) : readFileSync(pkgJson, "utf8")) as { name?: string; exports?: Record<string, string | Record<string, string>> };
   const value = parsed.exports?.[sub];
   if (typeof value === "string") return defaultFile(join(root, value));
   if (value && typeof value.default === "string") {

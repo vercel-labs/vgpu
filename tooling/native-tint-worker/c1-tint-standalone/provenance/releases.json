@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "source": "Official google/dawn GitHub release assets",
+  "license": {
+    "spdx": "BSD-3-Clause",
+    "urlTemplate": "https://dawn.googlesource.com/dawn/+/{commit}/LICENSE"
+  },
+  "releases": [
+    {
+      "tag": "v20260319.174537",
+      "commit": "7d5e33062472c8ab700d40ed485ce868c4a58151",
+      "archive": {
+        "name": "Dawn-7d5e33062472c8ab700d40ed485ce868c4a58151-macos-latest-Release.tar.gz",
+        "url": "https://github.com/google/dawn/releases/download/v20260319.174537/Dawn-7d5e33062472c8ab700d40ed485ce868c4a58151-macos-latest-Release.tar.gz",
+        "bytes": 9385236,
+        "sha256": "2623b45909bbf6283149b0e72fd1871495e2d819ffea358c2e2a9f7015f68cea"
+      },
+      "observedPlatform": {
+        "architecture": "arm64",
+        "minimumMacOS": "15.0"
+      },
+      "files": {
+        "bin/tint": {
+          "bytes": 5415608,
+          "sha256": "d8f37b4a56273292fbb6b716a1c1518319d16248430a676fc56b85326d8d8b0b"
+        },
+        "bin/tint_info": {
+          "bytes": 4094168,
+          "sha256": "c1bab23369950d228c391114bc5ac12bfaa2cb349258ff2fa930770c5d026747"
+        },
+        "lib/libwebgpu_dawn.a": {
+          "bytes": 19629136,
+          "sha256": "623a618fd9f30b2ab2d8eecee9751f3cf9c40a7379cf2bbbba22fadf15acc5bf"
+        }
+      },
+      "knownBehavior": {
+        "tint": "passes the normalized corpus",
+        "tintInfo": "traps with TINT_UNREACHABLE on tested WGSL"
+      }
+    },
+    {
+      "tag": "v20260831.205016",
+      "commit": "8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca",
+      "archive": {
+        "name": "Dawn-8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca-macos-latest-Release.tar.gz",
+        "url": "https://github.com/google/dawn/releases/download/v20260831.205016/Dawn-8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca-macos-latest-Release.tar.gz",
+        "bytes": 13563334,
+        "sha256": "a8421b7784ef1b03d29f9b0c2ca688c276d30ef47264cbc8281dc0fb223c7886"
+      },
+      "observedPlatform": {
+        "architecture": "arm64",
+        "minimumMacOS": "26.0"
+      },
+      "includeTree": {
+        "algorithm": "relative-path-nul-file-sha256-lines-v1",
+        "files": 608,
+        "sha256": "9b9b189f2e7ecef26d9daa20f56aebe7be9499259bc209c9b6c20670c4490be3"
+      },
+      "files": {
+        "bin/tint": {
+          "bytes": 5636200,
+          "sha256": "4ab987c31766765ab0e7aa631c9b2ba1602f57cc2a5c10c851af4f1a7270788f"
+        },
+        "bin/tint_info": {
+          "bytes": 4140600,
+          "sha256": "aec9fe7bfaeaf2f58f74d5787b14e18d951bf331a7fc992543f43c5d28a8dc89"
+        },
+        "lib/libtint_api_helpers.a": {
+          "bytes": 51152,
+          "sha256": "a600efc5c428097174c2df516f5ae268c1ff00eb2dcb8a1a134eb6e134c4feab"
+        },
+        "lib/libwebgpu_dawn.a": {
+          "bytes": 20683640,
+          "sha256": "ea58691c7062e8c9c253fba54889dd73fa3f84527016804bf0e0287937de4240"
+        }
+      },
+      "knownBehavior": {
+        "tint": "passes the normalized corpus",
+        "tintInfo": "returns structured pre-lowering metadata"
+      }
+    }
+  ],
+  "supplementalSource": {
+    "purpose": "Header omitted by the installed files in the later release archive",
+    "path": "src/utils/compiler.h",
+    "commit": "8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca",
+    "url": "https://dawn.googlesource.com/dawn/+/8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca/src/utils/compiler.h?format=TEXT",
+    "transportEncoding": "base64",
+    "sha256": "00ff3eeb387d0c6e325b557816cfdb33f801ee4c25c67520fa27e5f36561e1c5"
+  }
+}

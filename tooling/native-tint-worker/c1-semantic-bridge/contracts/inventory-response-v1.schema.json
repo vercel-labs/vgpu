@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vgpu.sh/schemas/native/tint-entry-inventory/v1/response.schema.json",
+  "title": "vGPU Native Tint Entry Inventory Response v1",
+  "oneOf": [
+    { "$ref": "#/$defs/successResponse" },
+    { "$ref": "#/$defs/errorResponse" }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "requestIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domain", "sha256"],
+      "properties": {
+        "domain": {
+          "const": "vgpu-native-tint-entry-inventory-request-bytes/v1"
+        },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "entryPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "wgsl"],
+      "properties": {
+        "stage": { "enum": ["vertex", "fragment", "compute"] },
+        "wgsl": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "maxLength": 256
+        }
+      }
+    },
+    "base": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "contractId",
+        "ok",
+        "requestIdentity",
+        "compiler",
+        "diagnostics"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "contractId": { "const": "vgpu-native-tint-entry-inventory/v1" },
+        "ok": { "type": "boolean" },
+        "requestIdentity": { "$ref": "#/$defs/requestIdentity" },
+        "compiler": {
+          "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/response.schema.json#/$defs/compiler"
+        },
+        "diagnostics": { "type": "array" }
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entryPoints"],
+      "properties": {
+        "entryPoints": {
+          "type": "array",
+          "maxItems": 65536,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/entryPoint" }
+        }
+      }
+    },
+    "successResponse": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schemaVersion",
+            "contractId",
+            "ok",
+            "requestIdentity",
+            "compiler",
+            "diagnostics",
+            "result"
+          ],
+          "properties": {
+            "schemaVersion": true,
+            "contractId": true,
+            "ok": { "const": true },
+            "requestIdentity": true,
+            "compiler": true,
+            "diagnostics": {
+              "type": "array",
+              "items": {
+                "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/response.schema.json#/$defs/nonErrorDiagnostic"
+              }
+            },
+            "result": { "$ref": "#/$defs/result" }
+          }
+        }
+      ]
+    },
+    "errorResponse": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schemaVersion",
+            "contractId",
+            "ok",
+            "requestIdentity",
+            "compiler",
+            "diagnostics"
+          ],
+          "properties": {
+            "schemaVersion": true,
+            "contractId": true,
+            "ok": { "const": false },
+            "requestIdentity": true,
+            "compiler": true,
+            "diagnostics": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/response.schema.json#/$defs/diagnostic"
+              },
+              "contains": {
+                "type": "object",
+                "required": ["severity"],
+                "properties": { "severity": { "const": "error" } }
+              },
+              "minContains": 1
+            }
+          }
+        }
+      ]
+    }
+  }
+}

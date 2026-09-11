@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vgpu.sh/schemas/native/tint-compiler/v1/origin-map.schema.json",
+  "title": "vGPU Native Compiler Origin Map v1",
+  "description": "Module-level provenance for one resolved WGSL source. It deliberately does not claim authored line or column spans.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "contractId",
+    "generatedSource",
+    "sources",
+    "segments"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "contractId": {
+      "const": "vgpu-native-origin-map/v1"
+    },
+    "generatedSource": {
+      "$ref": "#/$defs/generatedSource"
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/source"
+      }
+    },
+    "segments": {
+      "description": "Canonical generated-byte order. Each segment MUST be non-empty and non-overlapping; the array may be empty when all generated text has no authored provenance. Gaps represent generated text with no authored provenance.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/segment"
+      }
+    }
+  },
+  "$defs": {
+    "logicalInputId": {
+      "description": "NFC-normalized logical source identity, never an absolute host path.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?![A-Za-z][A-Za-z0-9+.-]*:)(?!.*\\\\)(?!.*[\\u0000-\\u001f\\u007f]).+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "relativePath": {
+      "description": "NFC-normalized, configuration-relative POSIX virtual path.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?![A-Za-z][A-Za-z0-9+.-]*:)(?!.*\\\\)(?!.*[\\u0000-\\u001f\\u007f])(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*//).+$"
+    },
+    "byteOffset": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "generatedSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["virtualPath", "sha256"],
+      "properties": {
+        "virtualPath": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input", "sha256"],
+      "properties": {
+        "input": {
+          "$ref": "#/$defs/logicalInputId"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "generatedRange": {
+      "description": "Half-open UTF-8 byte interval in generatedSource: startByte is inclusive and endByte is exclusive.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startByte", "endByte"],
+      "properties": {
+        "startByte": {
+          "$ref": "#/$defs/byteOffset"
+        },
+        "endByte": {
+          "$ref": "#/$defs/byteOffset"
+        }
+      }
+    },
+    "origin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input"],
+      "properties": {
+        "input": {
+          "$ref": "#/$defs/logicalInputId"
+        }
+      }
+    },
+    "segment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generated", "origin", "precision"],
+      "properties": {
+        "generated": {
+          "$ref": "#/$defs/generatedRange"
+        },
+        "origin": {
+          "$ref": "#/$defs/origin"
+        },
+        "precision": {
+          "const": "module"
+        }
+      }
+    }
+  }
+}

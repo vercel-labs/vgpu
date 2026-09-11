@@ -6,7 +6,8 @@ test("docs service returns ranked structured search results", () => {
 
   const result = docs.execute({ operation: "search", query: "Buffer" });
 
-  expect(result).toMatchObject({ operation: "search", truncated: false });
+  expect(result).toMatchObject({ operation: "search", truncated: true });
+  expect(result.results).toHaveLength(20);
   expect(result.results[0]).toEqual({
     kind: "symbol",
     symbol: "Buffer",

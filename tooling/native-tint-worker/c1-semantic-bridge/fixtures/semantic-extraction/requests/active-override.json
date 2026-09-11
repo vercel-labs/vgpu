@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-semantic-extraction/v1",
+  "source": {
+    "virtualPath": "resolved/semantic-active-override.wgsl",
+    "sha256": "750f6bd70d33db15475027b2b8b5064139e179c9ceb3010c3d8d3dae4d47768a",
+    "text": "override REQUIRED: u32;\noverride DEP: u32 = REQUIRED + 1u;\noverride FIRST: u32 = 2u;\noverride SECOND: u32 = 3u;\n\n@compute @workgroup_size(DEP)\nfn needs_required() {}\n\n@compute @workgroup_size(FIRST)\nfn first() {}\n\n@compute @workgroup_size(SECOND)\nfn second() {}\n"
+  },
+  "originMap": {
+    "schemaVersion": 1,
+    "contractId": "vgpu-native-origin-map/v1",
+    "generatedSource": {
+      "virtualPath": "resolved/semantic-active-override.wgsl",
+      "sha256": "750f6bd70d33db15475027b2b8b5064139e179c9ceb3010c3d8d3dae4d47768a"
+    },
+    "sources": [
+      {
+        "input": "semantic-active-override-wgsl",
+        "sha256": "750f6bd70d33db15475027b2b8b5064139e179c9ceb3010c3d8d3dae4d47768a"
+      }
+    ],
+    "segments": [
+      {
+        "generated": {
+          "startByte": 0,
+          "endByte": 262
+        },
+        "origin": {
+          "input": "semantic-active-override-wgsl"
+        },
+        "precision": "module"
+      }
+    ]
+  },
+  "originMapSha256": "c04b94e5a89aa30a8a326e4c32087a2e107eb4b6ad719d4e0a226f54be7dd860",
+  "entryPoints": [
+    {
+      "stage": "compute",
+      "wgsl": "first"
+    }
+  ],
+  "overrideConfiguration": [],
+  "languageFeatures": []
+}

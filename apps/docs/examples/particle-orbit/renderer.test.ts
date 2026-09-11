@@ -347,3 +347,25 @@ test('thumbnail destroys its target graph when prewarm fails', async () => {
     expect(target.destroy).toHaveBeenCalledOnce();
   }
 });
+
+test('thumbnail drains pending work and destroys targets when effect construction fails', async () => {
+  const env = setup();
+  const failure = new Error('effect construction failed');
+  env.gpu.fns.effect.mockImplementationOnce(() => { throw failure; });
+  const output = { size: [160, 90], format: 'rgba8unorm' };
+  const drainPending = deferred<void>();
+  const settledPending = deferred<void>();
+  env.gpu.gpu.queue.onSubmittedWorkDone.mockReturnValueOnce(drainPending.promise);
+  env.gpu.settled.mockReturnValueOnce(settledPending.promise);
+  const rendering = renderThumbnail(env.gpu as never, output as never);
+  await vi.waitFor(() => {
+    expect(env.gpu.gpu.queue.onSubmittedWorkDone).toHaveBeenCalledOnce();
+    expect(env.gpu.settled).toHaveBeenCalledOnce();
+  });
+  expect(env.targetObjects).toHaveLength(BASE_TARGETS);
+  for (const target of env.targetObjects) expect(target.destroy).not.toHaveBeenCalled();
+  drainPending.resolve();
+  settledPending.resolve();
+  await expect(rendering).rejects.toBe(failure);
+  for (const target of env.targetObjects) expect(target.destroy).toHaveBeenCalledOnce();
+});

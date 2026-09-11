@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-entry-inventory/v1",
+  "source": {
+    "virtualPath": "Intermediate/inventory-library.wgsl",
+    "sha256": "68533b4089451232393856303fea32886733bdb71e06d946e18cc14b171f6466",
+    "text": "fn helper(value: f32) -> f32 { return value * 2.0; }\n"
+  },
+  "originMap": {
+    "schemaVersion": 1,
+    "contractId": "vgpu-native-origin-map/v1",
+    "generatedSource": {
+      "virtualPath": "Intermediate/inventory-library.wgsl",
+      "sha256": "68533b4089451232393856303fea32886733bdb71e06d946e18cc14b171f6466"
+    },
+    "sources": [
+      {
+        "input": "inventory-library-wgsl",
+        "sha256": "68533b4089451232393856303fea32886733bdb71e06d946e18cc14b171f6466"
+      }
+    ],
+    "segments": [
+      {
+        "generated": { "startByte": 0, "endByte": 53 },
+        "origin": { "input": "inventory-library-wgsl" },
+        "precision": "module"
+      }
+    ]
+  },
+  "originMapSha256": "ee0f0f2785612904d594d7234fafe008530640964a2eb4f64eca159864821d85",
+  "languageFeatures": []
+}

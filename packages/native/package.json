@@ -1,0 +1,30 @@
+{
+  "name": "@vgpu/native",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.tsbuildinfo"
+  ],
+  "scripts": {
+    "build": "tsc -b && node scripts/copy-assets.mjs",
+    "prepack": "node scripts/prepare-distribution.mjs",
+    "test": "vitest run",
+    "test:native": "vitest run --config vitest.native.config.ts"
+  },
+  "dependencies": {
+    "@vgpu/wgsl": "workspace:*",
+    "ajv": "^8.20.0"
+  }
+}

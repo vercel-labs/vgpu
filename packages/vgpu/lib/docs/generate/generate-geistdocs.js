@@ -320,15 +320,49 @@ function sectionItemSlugs(section, prefix) {
   const slugs = [];
   const groups = Array.isArray(section?.groups) ? section.groups : [];
   for (const group of groups) {
-    if (isCatchAll(group)) continue;
-    for (const item of group.items ?? []) {
-      if (typeof item?.href !== "string") continue;
-      if (item.href === prefix) continue; // the section landing page (index.mdx), not a child slug
-      if (!item.href.startsWith(`${prefix}/`)) continue;
-      slugs.push(item.href.slice(prefix.length + 1));
-    }
+    slugs.push(...groupItemSlugs(group, prefix));
   }
   return slugs;
+}
+
+function groupItemSlugs(group, prefix) {
+  if (isCatchAll(group)) return [];
+  const slugs = [];
+  for (const item of group?.items ?? []) {
+    if (typeof item?.href !== "string") continue;
+    if (item.href === prefix) continue; // the directory landing page, not a child slug
+    if (!item.href.startsWith(`${prefix}/`)) continue;
+    slugs.push(item.href.slice(prefix.length + 1));
+  }
+  return slugs;
+}
+
+// A section can curate a nested subtree (Native → macOS today). Parent meta files list only their
+// immediate child directory; that directory gets its own ordered meta file below. Keep first-seen
+// order and collapse repeated descendants into one child.
+function sectionDirectChildSlugs(section, prefix) {
+  const direct = [];
+  for (const slug of sectionItemSlugs(section, prefix)) {
+    const child = slug.split("/")[0];
+    if (!direct.includes(child)) direct.push(child);
+  }
+  return direct;
+}
+
+function appendNestedMetaFiles(files, directory, title, slugs) {
+  const children = new Map();
+  for (const slug of slugs) {
+    const [child, ...remaining] = slug.split("/");
+    assertSafeSegment(child, `navigation below ${directory}`);
+    if (!children.has(child)) children.set(child, []);
+    if (remaining.length > 0) children.get(child).push(remaining.join("/"));
+  }
+  files.set(`${directory}/meta.json`, serializeJson({ title, pages: [...children.keys(), "..."] }));
+  for (const [child, descendants] of children) {
+    if (descendants.length > 0) {
+      appendNestedMetaFiles(files, `${directory}/${child}`, titleFromSlug(child), descendants);
+    }
+  }
 }
 
 /**
@@ -413,6 +447,39 @@ export function buildMetaFiles(nav, pages) {
   const mlSection = findSection(nav, "ML");
   if (mlSection) {
     files.set("ml/meta.json", serializeJson({ title: mlSection.title, pages: [...sectionItemSlugs(mlSection, "/ml"), "..."] }));
+  }
+
+  // -- native: literal order with platform groups and nested topic folders ---
+  const nativeSection = findSection(nav, "Native");
+  if (nativeSection) {
+    files.set(
+      "native/meta.json",
+      serializeJson({ title: nativeSection.title, pages: [...sectionDirectChildSlugs(nativeSection, "/native"), "..."] }),
+    );
+    const nestedPlatformGroups = new Set();
+    for (const group of Array.isArray(nativeSection.groups) ? nativeSection.groups : []) {
+      if (isCatchAll(group)) continue;
+      const nestedHrefs = (group.items ?? [])
+        .map((item) => item?.href)
+        .filter((href) => typeof href === "string" && href.startsWith("/native/"));
+      if (nestedHrefs.length === 0) continue;
+      const children = [...new Set(nestedHrefs.map((href) => href.slice("/native/".length).split("/")[0]))];
+      if (children.length !== 1) {
+        throw new Error(`Native navigation group "${group.title ?? ""}" spans multiple platform directories: ${children.join(", ")}`);
+      }
+      const child = assertSafeSegment(children[0], `Native navigation group ${group.title ?? children[0]}`);
+      if (nestedPlatformGroups.has(child)) {
+        throw new Error(`Native navigation has multiple groups for platform directory "${child}"`);
+      }
+      nestedPlatformGroups.add(child);
+      const prefix = `/native/${child}`;
+      appendNestedMetaFiles(
+        files,
+        `native/${child}`,
+        group.title || titleFromSlug(child),
+        groupItemSlugs(group, prefix),
+      );
+    }
   }
 
   // -- guides: guideGroups → separators + slugs ------------------------------

@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-entry-inventory/v1",
+  "source": {
+    "virtualPath": "Intermediate/inventory-multi-stage.wgsl",
+    "sha256": "3eb014b6c7e3c7ae09fe40b6db363488075db21777d110edcb40aa9707e01074",
+    "text": "@compute @workgroup_size(1) fn zed() {}\n@fragment fn beta() -> @location(0) vec4f { return vec4f(1); }\n@vertex fn zebra() -> @builtin(position) vec4f { return vec4f(0); }\n@fragment fn gamma() -> @location(0) vec4f { return vec4f(0); }\n@vertex fn alpha() -> @builtin(position) vec4f { return vec4f(1); }\n"
+  },
+  "originMap": {
+    "schemaVersion": 1,
+    "contractId": "vgpu-native-origin-map/v1",
+    "generatedSource": {
+      "virtualPath": "Intermediate/inventory-multi-stage.wgsl",
+      "sha256": "3eb014b6c7e3c7ae09fe40b6db363488075db21777d110edcb40aa9707e01074"
+    },
+    "sources": [
+      {
+        "input": "inventory-multi-stage-wgsl",
+        "sha256": "3eb014b6c7e3c7ae09fe40b6db363488075db21777d110edcb40aa9707e01074"
+      }
+    ],
+    "segments": [
+      {
+        "generated": { "startByte": 0, "endByte": 303 },
+        "origin": { "input": "inventory-multi-stage-wgsl" },
+        "precision": "module"
+      }
+    ]
+  },
+  "originMapSha256": "df758576393666b043753b849e2f54182d33e5d83756ef53fcb294b5a4791f0a",
+  "languageFeatures": []
+}

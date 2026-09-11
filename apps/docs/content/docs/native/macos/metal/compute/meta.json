@@ -1,0 +1,10 @@
+{
+  "title": "Compute",
+  "pages": [
+    "dispatch",
+    "prepared-bindings",
+    "indirect-dispatch",
+    "rendering",
+    "..."
+  ]
+}

@@ -1,0 +1,484 @@
+{
+  "schemaVersion": 1,
+  "profile": "vgpu-c1-tint-direct-build-v1",
+  "sourcePolicy": "pre-materialized-pinned-git-checkouts-with-exact-input-closures",
+  "fixture": {
+    "cmake": {
+      "path": "CMakeLists.txt",
+      "bytes": 7295,
+      "sha256": "1db1d90ed6834414b8f2deadc1703b10d569cc9956b405d146a5ab2e940dacf4"
+    },
+    "configurationInputs": {
+      "path": "provenance/configuration-inputs.json",
+      "bytes": 7098,
+      "sha256": "734ea2117558304face4ebddf039bf953b70d46d6d01f756c49e343b2b43e4fa"
+    }
+  },
+  "dawn": {
+    "repository": "https://dawn.googlesource.com/dawn",
+    "commit": "8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca",
+    "tree": "705c128d699cbf9137ce0bd89698cad7d5c51efb",
+    "commitTimestamp": "2026-09-01T03:50:16Z",
+    "deps": {
+      "path": "DEPS",
+      "bytes": 38282,
+      "sha256": "f1ac6588bff21e61c31986db9c9b9a321808caddedb14c7747151098735dde8d"
+    },
+    "license": {
+      "spdx": "NOASSERTION",
+      "linkedClosureSpdx": "BSD-3-Clause",
+      "sourcePath": "LICENSE",
+      "trackedPath": "dawn-LICENSE.txt",
+      "bytes": 11829,
+      "sha256": "0493f897193af1796d5054659f45ec7d4c5af648fa67a99f01d30e55cc805abc"
+    }
+  },
+  "dependencies": {
+    "abseil": {
+      "role": "linked-static-closure",
+      "pathWithinDawn": "third_party/abseil-cpp",
+      "repository": "https://chromium.googlesource.com/chromium/src/third_party/abseil-cpp",
+      "chromiumCheckoutCommit": "435e7d977fb36fb47854a4c552c0706dad0bd7cf",
+      "upstreamRevision": "1c84143fb79e6041f3e0596df51c3ae7d7e46a8a",
+      "tree": "1d0cd81adfb26856e44bb5ed6d3131e98f516480",
+      "authorTimestamp": "2026-08-26T07:04:04Z",
+      "commitTimestamp": "2026-08-26T07:08:51Z",
+      "license": {
+        "spdx": "Apache-2.0",
+        "sourcePath": "LICENSE",
+        "trackedPath": "abseil-LICENSE.txt",
+        "bytes": 11361,
+        "sha256": "c79a7fea0e3cac04cd43f20e7b648e5a0ff8fa5344e644b0ee09ca1162b62747"
+      }
+    },
+    "spirvHeaders": {
+      "role": "configure-only-no-linked-objects",
+      "pathWithinDawn": "third_party/spirv-headers/src",
+      "repository": "https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers",
+      "commit": "496543121ce6419f23d6fa5d7194ba66c36212d2",
+      "tree": "edf8b7ffce761b7d1d17330d81bc5bbc2b7f6ddb",
+      "commitTimestamp": "2026-08-26T18:41:22Z",
+      "license": {
+        "spdx": "NOASSERTION",
+        "sourcePath": "LICENSE",
+        "trackedPath": "spirv-headers-LICENSE.txt",
+        "bytes": 23503,
+        "sha256": "ea43b1de38a6f90c488800d66dec1ed671e68cda530266bc96951fb5b6307613"
+      }
+    },
+    "spirvTools": {
+      "role": "excluded-by-profile",
+      "depsCommit": "b40380bfa431d028fb7ca8eb375e4d21ea98a70e",
+      "reason": "SPIR-V validation, reader, writer, and built DXC are disabled"
+    },
+    "jsoncpp": {
+      "role": "linked-worker-codec",
+      "commit": "8519b8381f3c741ad1421f88237b1deda0b11412",
+      "tree": "b2b54358d63493c3ea3d3e3c32719e8172c7035a",
+      "sharedProvenance": "../c1-compiler-protocol/provenance/jsoncpp-1.9.8.json"
+    }
+  },
+  "worker": {
+    "role": "neighboring-real-compiler-worker",
+    "defaultRoot": "../c1-compiler-protocol/prototype",
+    "closure": {
+      "algorithm": "relative-path-nul-file-sha256-lines-v1",
+      "files": 6,
+      "sha256": "443f6e5f771eb1040eafced11d5645c4697a0b93a5e0af477305cb866b802035",
+      "paths": [
+        "json-codec.cc",
+        "json-codec.h",
+        "main.cc",
+        "override-materializer.cc",
+        "override-materializer.h",
+        "request.h"
+      ]
+    }
+  },
+  "oracle": {
+    "inputs": {
+      "releasesManifest": {
+        "path": "../c1-tint-standalone/provenance/releases.json",
+        "bytes": 3501,
+        "sha256": "4954de258a869a2b48d7a7d845b35e398ddb60d60f6eb00d9390e8e794220d56"
+      },
+      "jsoncppProvenance": {
+        "path": "../c1-compiler-protocol/provenance/jsoncpp-1.9.8.json",
+        "bytes": 1461,
+        "sha256": "a25cbee5212b7437a12cdd8c15b16d53f271d23a3be66d230618cc07568cc33c"
+      },
+      "nativeCompiler": {
+        "path": "../c1-compiler-protocol/lib/native-compiler.mjs",
+        "bytes": 15489,
+        "sha256": "06838fe0da48f9047f3d2a3f262a00ef1d977a292329ef3d5f76cf05199ddcc6"
+      },
+      "protocol": {
+        "path": "../c1-compiler-protocol/lib/protocol.mjs",
+        "bytes": 24392,
+        "sha256": "52a02dd3fab8344d8929739c8b7c69347aab7fedb8622267ddab33603b119c0f"
+      },
+      "originMapProtocol": {
+        "path": "../c1-compiler-protocol/lib/origin-map.mjs",
+        "bytes": 6873,
+        "sha256": "83582dd65ac2844e8517ee06fedab382548fc52e17d7051e9c777552922ad990"
+      },
+      "originSchema": {
+        "path": "../c1-compiler-protocol/contracts/origin-map-v1.schema.json",
+        "bytes": 3705,
+        "sha256": "dc39f1cfc1baabca7e71d87ea0f401a83f9548a17ed7860d5a1421e5c6c07169"
+      },
+      "requestSchema": {
+        "path": "../c1-compiler-protocol/contracts/request-v1.schema.json",
+        "bytes": 21824,
+        "sha256": "57a3543571c19547b73398a5973f634f6c987eb5f632f20f7f7a4d24c2fa08fd"
+      },
+      "responseSchema": {
+        "path": "../c1-compiler-protocol/contracts/response-v1.schema.json",
+        "bytes": 17970,
+        "sha256": "9bdd4544ad2fda885bb7d4338d043610a26a30d196aa1fdb12a55bfa5c9de8a5"
+      },
+      "inventoryProtocol": {
+        "path": "../c1-semantic-bridge/lib/protocol.mjs",
+        "bytes": 12797,
+        "sha256": "720598ac423e4bbbd63396b2f61542fc9d39a9ad2d57e9dc9bb863ff634f1d2c"
+      },
+      "inventoryRequestSchema": {
+        "path": "../c1-semantic-bridge/contracts/inventory-request-v1.schema.json",
+        "bytes": 1844,
+        "sha256": "c6b690b543201860193913261a01231f8dc786903ea52e0a34679b1e70777365"
+      },
+      "inventoryResponseSchema": {
+        "path": "../c1-semantic-bridge/contracts/inventory-response-v1.schema.json",
+        "bytes": 3979,
+        "sha256": "2e37070009a9b555ce92938231af84c593664155330a4a8fd34ea3b0326e6c48"
+      },
+      "semanticExtractionProtocol": {
+        "path": "../c1-semantic-bridge/lib/semantic-extraction-protocol.mjs",
+        "bytes": 14212,
+        "sha256": "4d3e5b236fc6c5f6a6a9b8964cae3144bc16035faacd9f7eceda13b100591d7d"
+      },
+      "semanticOverrideGraph": {
+        "path": "../c1-semantic-bridge/lib/semantic-override-graph.mjs",
+        "bytes": 6291,
+        "sha256": "7fcf67616da5c47fdfab0d14e6e81de9267f41c9c9af6582daa2c0c7fafb5dfc"
+      },
+      "semanticResourceGraph": {
+        "path": "../c1-semantic-bridge/lib/semantic-resource-graph.mjs",
+        "bytes": 15073,
+        "sha256": "ccf08dbdf27b5847e313cc1515fc14ed8f95c416c44a448ffb408e83dd4ffe15"
+      },
+      "semanticExtractionRequestSchema": {
+        "path": "../c1-semantic-bridge/contracts/semantic-extraction-request-v1.schema.json",
+        "bytes": 3743,
+        "sha256": "72c961fe8240a932c37ace977ffdc219f66841b7b87449241c50e7f386606d73"
+      },
+      "semanticExtractionResponseSchema": {
+        "path": "../c1-semantic-bridge/contracts/semantic-extraction-response-v1.schema.json",
+        "bytes": 22235,
+        "sha256": "85eb4b3daf79afce26446969bcc2acdfbb48ce9f33aa8d37443c3610385d1339"
+      },
+      "semanticActiveOverrideResponse": {
+        "path": "../c1-semantic-bridge/fixtures/semantic-extraction/responses/active-override.json",
+        "bytes": 1220,
+        "sha256": "dad3bd5a9cb04d1b4be0641e7b6d00535ac1aa4de0dba27fd1b7c1c6fb2a8bc1"
+      },
+      "semanticActiveResourceResponse": {
+        "path": "../c1-semantic-bridge/fixtures/semantic-extraction/responses/active-resource.json",
+        "bytes": 8393,
+        "sha256": "7427e674c48894994da4fc075d516e91cce47aed6b14b21abe0fefdca4a93a20"
+      },
+      "semanticOverrideAllScalarsResponse": {
+        "path": "../c1-semantic-bridge/fixtures/semantic-extraction/responses/override-all-scalars.json",
+        "bytes": 2184,
+        "sha256": "4cfe60cf6279648153e345b2f3d11358eb1e5b5d4929c0289e60e619c2854957"
+      },
+      "semanticOverrideConfiguredBypassResponse": {
+        "path": "../c1-semantic-bridge/fixtures/semantic-extraction/responses/override-configured-bypass.json",
+        "bytes": 1327,
+        "sha256": "0469712e384df146237c651d72c15a4c632f0198925429a4873c9df9be40f949"
+      },
+      "semanticOverrideConfiguredDependentResponse": {
+        "path": "../c1-semantic-bridge/fixtures/semantic-extraction/responses/override-configured-dependent.json",
+        "bytes": 1327,
+        "sha256": "f939551b86fa50dbc1211bad32fe4159769b2655b1e91b1df0aaacc72a8d44a6"
+      },
+      "semanticOverrideRenderUnionResponse": {
+        "path": "../c1-semantic-bridge/fixtures/semantic-extraction/responses/override-render-union.json",
+        "bytes": 2357,
+        "sha256": "40f31944db3247e37c4d1874bde7ab3d54482a36083ec36267b4194a1da79d44"
+      },
+      "semanticRuntimeSizedStorageResponse": {
+        "path": "../c1-semantic-bridge/fixtures/semantic-extraction/responses/runtime-sized-storage.json",
+        "bytes": 5433,
+        "sha256": "98a7104e2ce444e7e97b6ded6cfa18e158068f96427c751732336161e00bff4f"
+      }
+    },
+    "requests": {
+      "root": "..",
+      "algorithm": "relative-path-nul-file-sha256-lines-v1",
+      "files": 23,
+      "bytes": 48771,
+      "sha256": "d36f46da6120b642079dad0dfcf4e8ebb33ca8174c07e445d5182473049702a3",
+      "paths": [
+        "c1-compiler-protocol/fixtures/requests/generate-failure.json",
+        "c1-compiler-protocol/fixtures/requests/noop.json",
+        "c1-compiler-protocol/fixtures/requests/runtime-array.json",
+        "c1-compiler-protocol/fixtures/requests/wgsl-error.json",
+        "c1-semantic-bridge/fixtures/requests/empty-module.json",
+        "c1-semantic-bridge/fixtures/requests/invalid-wgsl.json",
+        "c1-semantic-bridge/fixtures/requests/library-only.json",
+        "c1-semantic-bridge/fixtures/requests/multi-stage.json",
+        "c1-semantic-bridge/fixtures/semantic-extraction/requests/active-override.json",
+        "c1-semantic-bridge/fixtures/semantic-extraction/requests/active-resource.json",
+        "c1-semantic-bridge/fixtures/semantic-extraction/requests/compute-interface.json",
+        "c1-semantic-bridge/fixtures/semantic-extraction/requests/override-all-scalars.json",
+        "c1-semantic-bridge/fixtures/semantic-extraction/requests/override-configured-bypass.json",
+        "c1-semantic-bridge/fixtures/semantic-extraction/requests/override-configured-dependent.json",
+        "c1-semantic-bridge/fixtures/semantic-extraction/requests/override-render-union.json",
+        "c1-semantic-bridge/fixtures/semantic-extraction/requests/render-interface.json",
+        "c1-semantic-bridge/fixtures/semantic-extraction/requests/runtime-sized-storage.json",
+        "c1-tint-direct-build/fixtures/requests/compute-builtins.json",
+        "c1-tint-direct-build/fixtures/requests/dual-source.json",
+        "c1-tint-direct-build/fixtures/requests/fragment-sparse.json",
+        "c1-tint-direct-build/fixtures/requests/interface-mismatch.json",
+        "c1-tint-direct-build/fixtures/requests/scalar-fragment.json",
+        "c1-tint-direct-build/fixtures/requests/vertex-sparse.json"
+      ]
+    },
+    "canaries": {
+      "generate-failure": {
+        "requestSha256": "b41cde15bb634565d4810bf41f487ae9864f3e738f9f3a5374a79f8b5b420206",
+        "responseBytes": 727,
+        "responseSha256": "5a0806780795409fa41af770c97ee66165482c5104c07a4d8ce1d9bc61c4c163",
+        "ok": true
+      },
+      "noop": {
+        "requestSha256": "48c1454388a0fd4d1cd7260698d547dd5a12b9bd758c9a10025d57278f62c615",
+        "responseBytes": 697,
+        "responseSha256": "a1cd2c1a58ef9ad3099c55c9c11096931d7603e3403d3d9e768cae778d4b82bb",
+        "ok": true
+      },
+      "runtime-array": {
+        "requestSha256": "b983b534982b455370298051d6365ab2149255c956df69071a219ca4caca44a7",
+        "responseBytes": 2600,
+        "responseSha256": "198f4e322a4a30a25a512df3ee1386a05a864e820cd82351de903f0c6e20cd50",
+        "ok": true
+      },
+      "wgsl-error": {
+        "requestSha256": "8d677774a96aad1877e56700415ccfe3f67527ae038b9fa26ea90adab4f7b8e7",
+        "responseBytes": 594,
+        "responseSha256": "43832f679fad7f320b70ef39ca1fc5ebacb7bc190ab1b89f131bf1973b8ad756",
+        "ok": false
+      },
+      "inventory-empty-module": {
+        "requestSha256": "8257c198bb736ba9d1f6d4dc041e27cc6f9f986f1ec1f68541aa8b8f5953ba2c",
+        "responseBytes": 488,
+        "responseSha256": "567abcbce3dbe30761a793bb85d976809c21fe83e6d495a30ad6e1f8e81d1e60",
+        "ok": true
+      },
+      "inventory-invalid-wgsl": {
+        "requestSha256": "34c164e6abbac479273628514e79caa2c74fca5195ece4b9c249cf4dd1feeb58",
+        "responseBytes": 772,
+        "responseSha256": "41b20ee390b708f33e5895405c3716977861d9d53517f9cd244fc41db323a9ac",
+        "ok": false
+      },
+      "inventory-library-only": {
+        "requestSha256": "bf1f9d9446c728986b88c69bf0f75a50d0f478e55d441ef6937aa6beb391dfdc",
+        "responseBytes": 488,
+        "responseSha256": "2a643ce7f6bf640d0540cd9347dcdff363fb7fdcb64318e419797694d7149a9e",
+        "ok": true
+      },
+      "inventory-multi-stage": {
+        "requestSha256": "f4099224a88d7acc51608b853335421ce41714996077368ad133f3d4cf6b2a4b",
+        "responseBytes": 700,
+        "responseSha256": "a1ecac6d1ae9dcb99acfddad70e34770324fd1a1baecd301bab3be4678b5ce78",
+        "ok": true
+      },
+      "semantic-active-override": {
+        "requestSha256": "b85ff9868f9ba540725326f41bff7b7b801657c8be7da12ae302bd7bd217c93b",
+        "responseBytes": 915,
+        "responseSha256": "e8d936190911d93e460d98bb33e48b41211e87a30fd89c3f8d405864f9b8553c",
+        "ok": true
+      },
+      "semantic-active-resource": {
+        "requestSha256": "c8ec843bf783512dcfe6ff789d2ac5ffb8c4801a0623243b557327267e992e25",
+        "responseBytes": 5944,
+        "responseSha256": "f800e18647e7afa9002f1a4c985d561677f0dd12f570ebab4ea57b5725155300",
+        "ok": true
+      },
+      "semantic-compute-interface": {
+        "requestSha256": "ee6da4eb9153eeefbda37ab9ad5a5d883f392065d358048d7733170fbe18082e",
+        "responseBytes": 1272,
+        "responseSha256": "072fe886fa65aaf935b0228ccf0c7aa61584f74a405532d152cc924e4507a3c8",
+        "ok": true
+      },
+      "semantic-override-all-scalars": {
+        "requestSha256": "63eda3647953fee9e8ce6d1950989e716b5c4ac02e9dc7049d169f5c12b448b3",
+        "responseBytes": 1427,
+        "responseSha256": "3b47e3eb90f9b8cca54b781ff1a742d2a96f70e8164a4080bff1cc0c887b5d03",
+        "ok": true
+      },
+      "semantic-override-configured-bypass": {
+        "requestSha256": "d999c186e82a17f99f6dd672e037bba25c61a091aa70f1235a187ff297f0a9a4",
+        "responseBytes": 985,
+        "responseSha256": "542dfa1acadd3e19206fb9cedded34c8c32e2e5c0bb3bc698559dc36745191f4",
+        "ok": true
+      },
+      "semantic-override-configured-dependent": {
+        "requestSha256": "e8d2584a00b41914df7753de7f890cfe349b2cbc28488458c70ab43d8713c868",
+        "responseBytes": 985,
+        "responseSha256": "6d6d4088f992f19d956f8749094f1eb2a076fa0df585f622fd6fa445877edc00",
+        "ok": true
+      },
+      "semantic-override-render-union": {
+        "requestSha256": "9db8d7a9299729a9012ee1bcc9c7350073afe8b38a113cc66a8af26d6ec83204",
+        "responseBytes": 1522,
+        "responseSha256": "af2a1e7dca199bca64ebe8d907025576e4d6a4bf3b84abe51c32005200af7132",
+        "ok": true
+      },
+      "semantic-render-interface": {
+        "requestSha256": "0208d7a7733a99d34917dbe5025d5e057ba154a70b32c176b335affe425d0be3",
+        "responseBytes": 2833,
+        "responseSha256": "d7642766faa953b8b02129e61fc599b4f53b624010ea0c2c589591dad5b54dd7",
+        "ok": true
+      },
+      "semantic-runtime-sized-storage": {
+        "requestSha256": "f0dfa84c4258f467ba719bdac62f99f409a92d0d09c0ae486b96d4d30b79fe00",
+        "responseBytes": 3980,
+        "responseSha256": "4345d42687984587a4c134a191d7c82027eac43ec4007b2873aaac94bfe9dfe3",
+        "ok": true
+      },
+      "compute-builtins": {
+        "requestSha256": "9ce8b6193bece6fd136644364fdc05992ddd083b57ebb187b091a5393515aea3",
+        "responseBytes": 1348,
+        "responseSha256": "42b361e3d45273987c43ab76f0b6017a5e7168f831d6e9439f553671c3e91306",
+        "ok": true
+      },
+      "dual-source": {
+        "requestSha256": "a6404bf1d1f197ee2bb95d7d38f95402ffcfbd9ed38bd61140ce6ed01d343403",
+        "responseBytes": 1404,
+        "responseSha256": "c19dc495fa14723def7631bd0a286963f412892f5667a5b6fd20a5d040240c94",
+        "ok": true
+      },
+      "fragment-sparse": {
+        "requestSha256": "b6d74d821a8aec65721b8fa944d5da5b4669c280475dbeecb94401edf937d51a",
+        "responseBytes": 2680,
+        "responseSha256": "1533b89635b7847acac3117b30669bdd61a5f25d97bc42eb900201a67238a06b",
+        "ok": true
+      },
+      "interface-mismatch": {
+        "requestSha256": "565796cb0846afa4fec10d70ea89046a84813d6e14b0319824cb9c5d86002eba",
+        "responseBytes": 445,
+        "responseSha256": "5e9309a88aaf82dff9e7d67d41b5446ac6df65f334fbeb29ac4750252d637128",
+        "ok": false
+      },
+      "scalar-fragment": {
+        "requestSha256": "159fae57fd23ced3aa7d3e377057dd13d88529aa20402bc3a813be3d515515f2",
+        "responseBytes": 1080,
+        "responseSha256": "81e567fafe0e643e5e6bb25af5878368d341d0c9a9fd88daa24f88b92aed9776",
+        "ok": true
+      },
+      "vertex-sparse": {
+        "requestSha256": "35ced991a4f0116a63f79dc92981ea007ba90029ca07018c883332995d6f9ce7",
+        "responseBytes": 2322,
+        "responseSha256": "a23e8061afdae31dca9cc87388c6f4eda08cba5fae4397ea6f3b29f7f7482d6e",
+        "ok": true
+      }
+    }
+  },
+  "closures": {
+    "configuration": {
+      "algorithm": "repository-nul-relative-path-nul-file-sha256-lines-v1",
+      "files": 156,
+      "bytes": 815569,
+      "sha256": "de479a9b77bd1a386ba39734cd40842c95ed1e7965aa4feda0c2e7b4bcb98ed5",
+      "repositories": {
+        "dawn": {
+          "files": 128,
+          "bytes": 584264,
+          "sha256": "39c8e22269b4f08456b6829d5de9f6eca2a78b9e8305a797fcdce7dac9c1262c"
+        },
+        "abseil": {
+          "files": 27,
+          "bytes": 228952,
+          "sha256": "bfde6466d4e203bcb94860106cc484439d116e973c0540f9018eff13f9be09da"
+        },
+        "spirvHeaders": {
+          "files": 1,
+          "bytes": 2353,
+          "sha256": "023ec1dcaceadbc9f151c905478736703c1738308e06e0b0c3bf9a5db8fbe335"
+        }
+      }
+    },
+    "compiled": {
+      "algorithm": "repository-nul-relative-path-nul-file-sha256-lines-v1",
+      "objects": 408,
+      "files": 922,
+      "bytes": 8857905,
+      "sha256": "006519c464657ecc7b984c7a90f4f5870eb69f95196b3eee9fcafb1b62a731b5",
+      "repositories": {
+        "dawn": {
+          "files": 804,
+          "bytes": 7378710,
+          "sha256": "21f1d05c5d8aef7bc24983bee7c49eabe1f5784c8dc3b0e0aeab28fea0a539ac"
+        },
+        "abseil": {
+          "files": 97,
+          "bytes": 994677,
+          "sha256": "52ca45acae4852ca00435593ad6f6204e955409b01bdc9e2c6b733001148e7fb"
+        },
+        "spirvHeaders": {
+          "files": 0,
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "jsoncpp": {
+          "files": 15,
+          "bytes": 237576,
+          "sha256": "06d06c5919c219af43813049af0585b743f60518ab806e315babe0150bd245c0"
+        },
+        "worker": {
+          "files": 6,
+          "bytes": 246942,
+          "sha256": "443f6e5f771eb1040eafced11d5645c4697a0b93a5e0af477305cb866b802035"
+        }
+      }
+    }
+  },
+  "build": {
+    "cmake": "3.31.6",
+    "ninja": "1.13.2",
+    "appleClangFirstLine": "Apple clang version 17.0.0 (clang-1700.6.3.2)",
+    "pythonFirstLine": "Python 3.9.6",
+    "configuration": "Release",
+    "cxxStandard": 20,
+    "sdk": "macosx14.5",
+    "minimumMacOS": "14.0",
+    "minimumHostMacOS": 26,
+    "compileCommands": 549,
+    "directWorkerObjects": 6,
+    "linkArchives": {
+      "algorithm": "ordered-ninja-path-lines-v1",
+      "files": 54,
+      "sha256": "1519af2f027707882851149dc594f9a8fee1940afe94d4559bf0947110eb84a8"
+    },
+    "outputs": {
+      "arm64": {
+        "bytes": 6105504,
+        "sha256": "140be4d7a517a5de1d9dcaa188d7a2c71975de5d3fa354e58375ec31af191e7b"
+      },
+      "x86_64": {
+        "bytes": 7203664,
+        "sha256": "066a37e056bca72dd75697fdf36e5a3053bf7a055f8f2af6600d17efc907d2df"
+      },
+      "universal": {
+        "bytes": 13314464,
+        "sha256": "448af648d70941a278d627809c9ab65b8ce52e8cb09c9c9fca13d592978cc8eb"
+      }
+    },
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ]
+  }
+}

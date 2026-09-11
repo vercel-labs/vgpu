@@ -111,7 +111,7 @@ function setup() {
   return { effects, fail, gpu, targets };
 }
 
-test("partial effect or target construction never allocates later targets and preserves identity", () => {
+test("partial effect or target construction releases owned targets and preserves identity", () => {
   const effectEnv = setup();
   const effectFailure = new Error("effect failed");
   effectEnv.fail.effectAt = 3;
@@ -120,7 +120,9 @@ test("partial effect or target construction never allocates later targets and pr
     effectFailure
   );
   expect(effectEnv.effects).toHaveLength(2);
-  expect(effectEnv.targets).toHaveLength(0);
+  expect(effectEnv.targets).toHaveLength(3);
+  for (const target of effectEnv.targets)
+    expect(target.color.destroy).toHaveBeenCalledOnce();
 
   const targetEnv = setup();
   const allocationFailure = new Error("target failed");

@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-semantic-extraction/v1",
+  "source": {
+    "virtualPath": "resolved/override-all-scalars.wgsl",
+    "sha256": "498b3950f22a4a868956ff26fa4f1428b87c9b82a6eae5c3f3434387900fdeb7",
+    "text": "enable f16;\n\noverride A_BOOL: bool = true;\noverride B_I32: i32 = -2;\noverride C_U32: u32 = 3u;\noverride D_F16: f16 = 1.5h;\noverride E_F32: f32 = -0.0f;\n\n@compute @workgroup_size(C_U32)\nfn all_scalars() {\n  let scalar_sum = f32(B_I32) + f32(C_U32) + f32(D_F16) + E_F32;\n  if A_BOOL {\n    _ = scalar_sum;\n  }\n}\n"
+  },
+  "originMap": {
+    "schemaVersion": 1,
+    "contractId": "vgpu-native-origin-map/v1",
+    "generatedSource": {
+      "virtualPath": "resolved/override-all-scalars.wgsl",
+      "sha256": "498b3950f22a4a868956ff26fa4f1428b87c9b82a6eae5c3f3434387900fdeb7"
+    },
+    "sources": [
+      {
+        "input": "override-all-scalars-wgsl",
+        "sha256": "498b3950f22a4a868956ff26fa4f1428b87c9b82a6eae5c3f3434387900fdeb7"
+      }
+    ],
+    "segments": [
+      {
+        "generated": {
+          "startByte": 0,
+          "endByte": 309
+        },
+        "origin": {
+          "input": "override-all-scalars-wgsl"
+        },
+        "precision": "module"
+      }
+    ]
+  },
+  "originMapSha256": "21aa47c1e79c050121fff94cbf527040b5e2bb830f31f0e4ea8209e1ae5ae282",
+  "entryPoints": [
+    {
+      "stage": "compute",
+      "wgsl": "all_scalars"
+    }
+  ],
+  "overrideConfiguration": [
+    {
+      "identifier": "A_BOOL",
+      "value": false
+    },
+    {
+      "identifier": "B_I32",
+      "value": -7
+    },
+    {
+      "identifier": "C_U32",
+      "value": 4
+    },
+    {
+      "identifier": "D_F16",
+      "value": 0.5
+    },
+    {
+      "identifier": "E_F32",
+      "value": 2.25
+    }
+  ],
+  "languageFeatures": ["f16"]
+}

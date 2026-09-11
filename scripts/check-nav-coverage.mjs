@@ -155,13 +155,13 @@ async function main() {
   if (websitePathsNotFound.length > 0) {
     fail(`sections: websitePath-backed guide records missing from the nav href tree: ${websitePathsNotFound.join(', ')}`);
   }
-  // Reverse-check only inside websitePath-owned namespaces (/cli, /ml*, /migrations*) —
+  // Reverse-check only inside websitePath-owned namespaces (/cli, /ml*, /native*, /migrations*) —
   // other hrefs (Get started, Concepts, Examples) are literal routes with no
   // manifest-record backing by design and are out of scope (see file header).
-  const websitePathLikeHrefs = [...hrefsInSections].filter((href) => /^\/(cli|ml|migrations)(\/|$)/.test(href));
+  const websitePathLikeHrefs = [...hrefsInSections].filter((href) => /^\/(cli|ml|native|migrations)(\/|$)/.test(href));
   const staleWebsitePathHrefs = websitePathLikeHrefs.filter((href) => !websitePaths.has(href));
   if (staleWebsitePathHrefs.length > 0) {
-    fail(`sections: /cli, /ml* or /migrations* hrefs do not resolve to any websitePath in the manifest: ${staleWebsitePathHrefs.join(', ')}`);
+    fail(`sections: websitePath-owned hrefs do not resolve to any manifest record: ${staleWebsitePathHrefs.join(', ')}`);
   }
 
   if (errors.length > 0) {

@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-semantic-extraction/v1",
+  "ok": true,
+  "requestIdentity": {
+    "domain": "vgpu-native-tint-semantic-extraction-request-bytes/v1",
+    "sha256": "7d2af23919b3483e272afdab4a2b6819bab67cc7dd842c06b958c860e2072410"
+  },
+  "compiler": {
+    "name": "vgpu-tint-compiler",
+    "version": "0.1.0",
+    "protocol": 1,
+    "upstream": {
+      "name": "dawn/tint",
+      "revision": "8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca"
+    }
+  },
+  "diagnostics": [],
+  "result": {
+    "entryPoints": [
+      {
+        "stage": "vertex",
+        "wgsl": "vs_main",
+        "semanticInterface": {
+          "kind": "vertex",
+          "inputs": [],
+          "outputs": [
+            {
+              "type": {
+                "scalar": "f32",
+                "width": 4
+              },
+              "invariant": false,
+              "builtin": "position"
+            }
+          ]
+        },
+        "bindings": [],
+        "samplingPairs": [],
+        "overrides": ["SHARED", "VERTEX_ONLY"]
+      },
+      {
+        "stage": "fragment",
+        "wgsl": "fs_main",
+        "semanticInterface": {
+          "kind": "fragment",
+          "inputs": [],
+          "outputs": [
+            {
+              "type": {
+                "scalar": "f32",
+                "width": 4
+              },
+              "invariant": false,
+              "location": 0
+            }
+          ]
+        },
+        "bindings": [],
+        "samplingPairs": [],
+        "overrides": ["FRAGMENT_ONLY", "SHARED"]
+      }
+    ],
+    "bindings": [],
+    "overrides": [
+      {
+        "name": "FRAGMENT_ONLY",
+        "type": "f32",
+        "default": {
+          "type": "f32",
+          "bits": "3f400000"
+        },
+        "selected": {
+          "type": "f32",
+          "bits": "3e000000"
+        }
+      },
+      {
+        "name": "SHARED",
+        "type": "f32",
+        "default": {
+          "type": "f32",
+          "bits": "3e800000"
+        },
+        "selected": {
+          "type": "f32",
+          "bits": "3ec00000"
+        }
+      },
+      {
+        "name": "VERTEX_ONLY",
+        "type": "f32",
+        "default": {
+          "type": "f32",
+          "bits": "3f000000"
+        },
+        "selected": {
+          "type": "f32",
+          "bits": "3f200000"
+        }
+      }
+    ],
+    "types": {},
+    "layouts": {}
+  }
+}

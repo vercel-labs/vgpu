@@ -92,28 +92,32 @@ export function createSetCore(options: SetCoreOptions): SetCore {
   function setBinding(state: MutableBindingState, name: string, value: unknown): readonly BindingIdentityChange[] {
     ensureGroupSettable(state.info.group);
     const ownership = ownershipFor(state.info, value);
-    latchBindingOwnership(state, name, ownership);
+    assertBindingOwnership(state, name, ownership);
     const before = identityString(state.identity);
     if (ownership === "lib") setLibOwned(state, mergeLibValue(state.libValue, value));
     else setUserOwned(state, value);
+    state.ownership ??= ownership;
     return bindingIsActive(state) ? identityChangeFor(state, before) : [];
   }
 
   function setBindingMember(state: MutableBindingState, memberName: string, value: unknown): readonly BindingIdentityChange[] {
     ensureGroupSettable(state.info.group);
     const ownership = ownershipFor(state.info, value);
-    latchBindingOwnership(state, memberName, ownership);
-    latchMemberOwnership(state, memberName, ownership);
+    assertBindingOwnership(state, memberName, ownership);
+    assertMemberOwnership(state, memberName, ownership);
     if (ownership !== "lib") throw unsupportedError(`${options.label}.set`, `Member '${memberName}' needs a JS value; set resource '${state.info.name}' instead.`);
     const before = identityString(state.identity);
-    setLibOwned(state, { ...objectValue(state.libValue), [memberName]: value });
+    const base = state.libValue ?? zeroLayoutValue(requiredLibLayout(state));
+    setLibOwned(state, { ...objectValue(base), [memberName]: value });
+    state.ownership ??= ownership;
+    state.memberOwnership.set(memberName, ownership);
     return bindingIsActive(state) ? identityChangeFor(state, before) : [];
   }
 
   function setLibOwned(state: MutableBindingState, value: unknown): void {
     const layout = requiredLibLayout(state);
-    state.libValue = value;
     const bytes = writeLayoutValue(layout, value);
+    state.libValue = value;
     if (!state.buffer) createLibBuffer(state, layout.size);
     state.bytes = bytes;
     state.buffer!.write(bytes, 0);
@@ -290,15 +294,13 @@ function ownershipFor(binding: BindingInfo, value: unknown): BindingOwnership {
   return binding.bindingLayout?.kind === "buffer" && isPlainValue(value) ? "lib" : "user";
 }
 
-function latchBindingOwnership(state: MutableBindingState, name: string, ownership: BindingOwnership): void {
+function assertBindingOwnership(state: MutableBindingState, name: string, ownership: BindingOwnership): void {
   if (state.ownership && state.ownership !== ownership) throw ownershipFlipError(name, state.ownership);
-  state.ownership ??= ownership;
 }
 
-function latchMemberOwnership(state: MutableBindingState, memberName: string, ownership: BindingOwnership): void {
+function assertMemberOwnership(state: MutableBindingState, memberName: string, ownership: BindingOwnership): void {
   const previous = state.memberOwnership.get(memberName);
   if (previous && previous !== ownership) throw ownershipFlipError(memberName, previous);
-  state.memberOwnership.set(memberName, ownership);
 }
 
 function validateClaimedGroup(label: string, group: number, bindGroup: GPUBindGroup, expectedLayout: GPUBindGroupLayout): void {
@@ -361,6 +363,26 @@ function mergeLibValue(previous: unknown, value: unknown): unknown {
 
 function objectValue(value: unknown): Record<string, unknown> {
   return isPlainObject(value) ? value : {};
+}
+
+function zeroLayoutValue(layout: NonNullable<BindingInfo["layout"]>): unknown {
+  if (layout.members) return Object.fromEntries(layout.members.map((member) => [member.name, zeroLayoutValue(member.layout)]));
+  switch (layout.type.kind) {
+    case "scalar":
+    case "atomic":
+      return 0;
+    case "vector":
+      return Array.from({ length: layout.type.width }, () => 0);
+    case "matrix":
+      return Array.from({ length: layout.type.columns * layout.type.rows }, () => 0);
+    case "array": {
+      const element = layout.element;
+      if (layout.type.count === undefined || !element) return [];
+      return Array.from({ length: layout.type.count }, () => zeroLayoutValue(element));
+    }
+    default:
+      return undefined;
+  }
 }
 
 export { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, pipelineLayoutFor } from "./set-layouts.ts";

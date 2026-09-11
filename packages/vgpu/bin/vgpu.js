@@ -65,6 +65,9 @@ the same code running in the browser, headless Node, and your test suite.
 
 ## Node rendering environment
   npx vgpu doctor
+
+## Native Metal tooling
+  npx vgpu native --help
 `;
 
 const comingSoon = (command) => `vgpu ${command} is coming soon.
@@ -80,6 +83,9 @@ export function runCli(args) {
   if (command === "check") return runCheck(rest);
   if (command === "docs") return runDocs(rest);
   if (command === "examples") return runExamples(rest, { version: VERSION });
+  if (command === "native") {
+    return import("../lib/native/run.js").then(({ runNative }) => runNative(rest));
+  }
   if (command === "mcp") {
     return import("../lib/mcp/stdio.js").then(({ runMcpStdio }) => runMcpStdio(rest, { version: VERSION }));
   }

@@ -1,0 +1,148 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-compiler/v1",
+  "source": {
+    "virtualPath": "resolved/direct-vertex-sparse.wgsl",
+    "sha256": "b548ef36ecdb5e66747cf949cda0f03c9ffda27405ea75bf911ef4643d7dfe59",
+    "text": "struct VertexInputs {\n  @location(3) position: vec2f,\n  @location(7) tint: vec4f,\n  @builtin(vertex_index) vertex_index: u32,\n  @builtin(instance_index) instance_index: u32,\n}\n\nstruct VertexOutputs {\n  @builtin(position) @invariant position: vec4f,\n  @location(2) @interpolate(linear, centroid) uv: vec2f,\n  @location(5) @interpolate(flat) tag: u32,\n  @location(6) weight: f32,\n}\n\n@vertex\nfn main(input: VertexInputs) -> VertexOutputs {\n  return VertexOutputs(\n    vec4f(input.position, 0.0, 1.0),\n    input.tint.xy,\n    input.vertex_index + input.instance_index,\n    input.tint.w,\n  );\n}\n"
+  },
+  "originMap": {
+    "schemaVersion": 1,
+    "contractId": "vgpu-native-origin-map/v1",
+    "generatedSource": {
+      "virtualPath": "resolved/direct-vertex-sparse.wgsl",
+      "sha256": "b548ef36ecdb5e66747cf949cda0f03c9ffda27405ea75bf911ef4643d7dfe59"
+    },
+    "sources": [
+      {
+        "input": "direct-vertex-sparse-wgsl",
+        "sha256": "b548ef36ecdb5e66747cf949cda0f03c9ffda27405ea75bf911ef4643d7dfe59"
+      }
+    ],
+    "segments": [
+      {
+        "generated": {
+          "startByte": 0,
+          "endByte": 589
+        },
+        "origin": {
+          "input": "direct-vertex-sparse-wgsl"
+        },
+        "precision": "module"
+      }
+    ]
+  },
+  "entryPoint": {
+    "stage": "vertex",
+    "wgsl": "main",
+    "metal": "vgpu_direct_vertex_sparse"
+  },
+  "semanticInterface": {
+    "kind": "vertex",
+    "inputs": [
+      {
+        "type": {
+          "scalar": "f32",
+          "width": 2
+        },
+        "invariant": false,
+        "location": 3
+      },
+      {
+        "type": {
+          "scalar": "f32",
+          "width": 4
+        },
+        "invariant": false,
+        "location": 7
+      },
+      {
+        "type": {
+          "scalar": "u32",
+          "width": 1
+        },
+        "invariant": false,
+        "builtin": "instance_index"
+      },
+      {
+        "type": {
+          "scalar": "u32",
+          "width": 1
+        },
+        "invariant": false,
+        "builtin": "vertex_index"
+      }
+    ],
+    "outputs": [
+      {
+        "type": {
+          "scalar": "f32",
+          "width": 2
+        },
+        "invariant": false,
+        "location": 2,
+        "interpolation": {
+          "type": "linear",
+          "sampling": "centroid"
+        }
+      },
+      {
+        "type": {
+          "scalar": "u32",
+          "width": 1
+        },
+        "invariant": false,
+        "location": 5,
+        "interpolation": {
+          "type": "flat",
+          "sampling": "first"
+        }
+      },
+      {
+        "type": {
+          "scalar": "f32",
+          "width": 1
+        },
+        "invariant": false,
+        "location": 6,
+        "interpolation": {
+          "type": "perspective",
+          "sampling": "center"
+        }
+      },
+      {
+        "type": {
+          "scalar": "f32",
+          "width": 4
+        },
+        "invariant": true,
+        "builtin": "position"
+      }
+    ]
+  },
+  "overrides": [],
+  "languageFeatures": [],
+  "metal": {
+    "bindingModel": "vgpu-metal-binding-slots-v1",
+    "immediateDataLayoutModel": "vgpu-metal-immediate-data-layout-v1",
+    "bindings": [],
+    "internalReservations": [
+      {
+        "role": "immediate-data",
+        "slots": [
+          {
+            "mode": "direct",
+            "resourceClass": "buffer",
+            "component": "buffer",
+            "index": 30,
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "storageBufferSizes": {
+      "model": "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1",
+      "immediateDataByteOffset": 4
+    }
+  }
+}

@@ -374,7 +374,8 @@ export async function renderStill(gpu: Gpu, output: Target, state: AtmosphereSta
 
 export async function createGraph(gpu: Gpu, output: Output, label: string): Promise<AtmosphereGraph> {
   const sampler = createSampler(gpu, { minFilter: 'linear', magFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge', addressModeW: 'clamp-to-edge' });
-  const atmosphere = createUniforms<AtmosphereUniformValues>(gpu, { ...ATMOSPHERE_PHYSICS, sunDirection: [0, 1, 0] });
+  const { sunAngularRadius: _cameraOnly, ...atmospherePhysics } = ATMOSPHERE_PHYSICS;
+  const atmosphere = createUniforms<AtmosphereUniformValues>(gpu, { ...atmospherePhysics, sunDirection: [0, 1, 0] });
   const camera = createUniforms<CameraUniformValues>(gpu, cameraUniforms(PRESETS[DEFAULT_PRESET], output.size));
   const clouds = createUniforms<CloudUniformValues>(gpu, cloudUniforms(PRESETS[DEFAULT_PRESET]));
   const terrainMesh = createUniforms<TerrainMeshUniformValues>(gpu, { columnOffset: 0, columns: 0 });

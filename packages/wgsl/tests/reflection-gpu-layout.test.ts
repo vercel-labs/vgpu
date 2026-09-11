@@ -43,20 +43,21 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("reflection layouts agains
 async function runGpuCase(item: GpuCase): Promise<void> {
   const source = `${item.declarations}\n@group(0) @binding(0) ${item.binding}\n@group(0) @binding(1) var<storage, read_write> out: array<f32>;\n@compute @workgroup_size(1) fn main() {\n${item.reads.map((expr, i) => `  out[${i}] = ${expr};`).join("\n")}\n}`;
   const reflected = await resolveShader({ entry: `/${item.name}.wgsl`, validate: true, modules: { [`/${item.name}.wgsl`]: source } });
-  const layout = reflected.reflection.bindings.find((binding) => binding.name === "params")?.layout;
-  if (!layout) throw new Error(`No layout reflected for ${item.name}`);
+  const binding = reflected.reflection.bindings.find((candidate) => candidate.name === "params");
+  const layout = binding?.layout;
+  if (!binding || !layout) throw new Error(`No layout reflected for ${item.name}`);
   const inputBytes = writeLayoutValue(layout, item.value);
 
   const device = await createNodeAdapter().requestDevice();
   try {
-    const input = device.gpu.createBuffer({ size: inputBytes.byteLength, usage: (layout.addressSpace === "uniform" ? GPU_BUFFER_USAGE.UNIFORM : GPU_BUFFER_USAGE.STORAGE) | GPU_BUFFER_USAGE.COPY_DST });
+    const input = device.gpu.createBuffer({ size: inputBytes.byteLength, usage: (binding.addressSpace === "uniform" ? GPU_BUFFER_USAGE.UNIFORM : GPU_BUFFER_USAGE.STORAGE) | GPU_BUFFER_USAGE.COPY_DST });
     device.gpu.queue.writeBuffer(input, 0, inputBytes);
     const outputSize = item.expected.length * 4;
     const output = device.gpu.createBuffer({ size: outputSize, usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_SRC });
     const readback = device.gpu.createBuffer({ size: outputSize, usage: GPU_BUFFER_USAGE.MAP_READ | GPU_BUFFER_USAGE.COPY_DST });
     const module = device.gpu.createShaderModule({ code: reflected.wgsl });
     const bindGroupLayout = device.gpu.createBindGroupLayout({ entries: [
-      { binding: 0, visibility: GPU_SHADER_STAGE.COMPUTE, buffer: { type: layout.addressSpace === "uniform" ? "uniform" : "read-only-storage" } },
+      { binding: 0, visibility: GPU_SHADER_STAGE.COMPUTE, buffer: { type: binding.addressSpace === "uniform" ? "uniform" : "read-only-storage" } },
       { binding: 1, visibility: GPU_SHADER_STAGE.COMPUTE, buffer: { type: "storage" } },
     ] });
     const pipeline = device.gpu.createComputePipeline({ layout: device.gpu.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }), compute: { module, entryPoint: "main" } });

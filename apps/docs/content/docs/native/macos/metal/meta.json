@@ -1,0 +1,13 @@
+{
+  "title": "Metal",
+  "pages": [
+    "functions",
+    "rendering",
+    "uniforms",
+    "bindings",
+    "render",
+    "compute",
+    "tooling",
+    "..."
+  ]
+}

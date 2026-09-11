@@ -12,7 +12,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, relative, resolve, sep } from "node:path";
 import { createManifest, serializeManifest } from "./manifest.js";
 import { buildSkill } from "./skill.js";
 
@@ -51,14 +51,8 @@ function prune(dir, expected) {
 
 export function loadManifest(root) {
   const allowlistPath = resolve(root, "docs/allowlist.txt");
-  const topicsDir = resolve(root, "docs/topics");
   // Guide docs (conceptual topics) are auto-discovered from docs/topics — no allowlist entry needed.
-  const guides = existsSync(topicsDir)
-    ? readdirSync(topicsDir)
-        .filter((file) => file.endsWith(".docs.md"))
-        .sort()
-        .map((file) => `docs/topics/${file}`)
-    : [];
+  const guides = discoverGuidePaths(root);
 
   return createManifest(readFileSync(allowlistPath, "utf8"), {
     exists: (path) => existsSync(resolve(root, path)),
@@ -68,6 +62,31 @@ export function loadManifest(root) {
       ? readdirSync(resolve(root, "docs/migrations")).filter(file => file.endsWith(".docs.md")).sort().map(file => `docs/migrations/${file}`)
       : [],
   });
+}
+
+/**
+ * Finds guide sources recursively while keeping their repository-relative paths stable and
+ * platform-independent. Guide symbols and virtual paths continue to come from the basename in
+ * manifest.js; nesting is only an authoring aid and does not change the CLI or generated skill.
+ */
+export function discoverGuidePaths(root) {
+  const topicsDir = resolve(root, "docs/topics");
+  if (!existsSync(topicsDir)) return [];
+
+  const guides = [];
+  const visit = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = resolve(directory, entry.name);
+      if (entry.isDirectory()) {
+        visit(path);
+      } else if (entry.isFile() && entry.name.endsWith(".docs.md")) {
+        guides.push(relative(root, path).split(sep).join("/"));
+      }
+    }
+  };
+
+  visit(topicsDir);
+  return guides.sort();
 }
 
 /**

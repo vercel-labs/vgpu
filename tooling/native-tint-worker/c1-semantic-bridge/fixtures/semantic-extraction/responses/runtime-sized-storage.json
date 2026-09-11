@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-semantic-extraction/v1",
+  "ok": true,
+  "requestIdentity": {
+    "domain": "vgpu-native-tint-semantic-extraction-request-bytes/v1",
+    "sha256": "9b8b12324dec9b2603294dd13d35547fa16197610394373d18272559ed4b9b04"
+  },
+  "compiler": {
+    "name": "vgpu-tint-compiler",
+    "version": "0.1.0",
+    "protocol": 1,
+    "upstream": {
+      "name": "dawn/tint",
+      "revision": "8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca"
+    }
+  },
+  "diagnostics": [],
+  "result": {
+    "entryPoints": [
+      {
+        "stage": "compute",
+        "wgsl": "compute_main",
+        "semanticInterface": {
+          "kind": "compute",
+          "inputs": [],
+          "outputs": []
+        },
+        "bindings": ["g0b0"],
+        "samplingPairs": [],
+        "overrides": [],
+        "workgroupSize": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        }
+      }
+    ],
+    "bindings": [
+      {
+        "binding": 0,
+        "group": 0,
+        "id": "g0b0",
+        "kind": "buffer",
+        "name": "values",
+        "addressSpace": "storage",
+        "access": "read",
+        "layout": "l_7af02e959944cbd8c111f6620c864c73cf3ab0376b76ce8f070fe67b260343f2",
+        "minimumBindingSize": 16,
+        "type": "t_20f7cd19fbf7eb7254f4b90a87f15de995abb8ec6fb036d22dbe4ebfb6ab9429"
+      }
+    ],
+    "overrides": [],
+    "types": {
+      "t_20f7cd19fbf7eb7254f4b90a87f15de995abb8ec6fb036d22dbe4ebfb6ab9429": {
+        "kind": "struct",
+        "members": [
+          {
+            "name": "prefix",
+            "type": "t_e2b30c4ffc210195391025b3a8f019e81864b1a6439f192150f442b660ce4155"
+          },
+          {
+            "name": "particles",
+            "type": "t_e44b7c7495a56f81c3d2cd480a1f09e7488c91f483b25f89c82459f6d3b7dba1"
+          }
+        ],
+        "wgslName": "Values"
+      },
+      "t_a7fb356bc04f712de243cacbf8c7c5897770e9197ffcadabc47e12402e2649b4": {
+        "kind": "struct",
+        "members": [
+          {
+            "name": "mass",
+            "type": "t_e2b30c4ffc210195391025b3a8f019e81864b1a6439f192150f442b660ce4155"
+          },
+          {
+            "name": "id",
+            "type": "t_e2b30c4ffc210195391025b3a8f019e81864b1a6439f192150f442b660ce4155"
+          }
+        ],
+        "wgslName": "Particle"
+      },
+      "t_e2b30c4ffc210195391025b3a8f019e81864b1a6439f192150f442b660ce4155": {
+        "kind": "scalar",
+        "scalar": "u32"
+      },
+      "t_e44b7c7495a56f81c3d2cd480a1f09e7488c91f483b25f89c82459f6d3b7dba1": {
+        "element": "t_a7fb356bc04f712de243cacbf8c7c5897770e9197ffcadabc47e12402e2649b4",
+        "kind": "array"
+      }
+    },
+    "layouts": {
+      "l_7af02e959944cbd8c111f6620c864c73cf3ab0376b76ce8f070fe67b260343f2": {
+        "alignment": 4,
+        "members": [
+          {
+            "alignment": 4,
+            "layout": "l_c71674e3619e618e2d10a85c41145db68a3c01b29fec6be8815676b8295ed7f0",
+            "minimumSize": 4,
+            "name": "prefix",
+            "offset": 0,
+            "runtimeSized": false,
+            "size": 4,
+            "type": "t_e2b30c4ffc210195391025b3a8f019e81864b1a6439f192150f442b660ce4155"
+          },
+          {
+            "alignment": 4,
+            "layout": "l_c63e6f930345f691190f83849f2b48c0ab038c42b6b38aa5dd6d8e1a29422dfa",
+            "minimumSize": 0,
+            "name": "particles",
+            "offset": 4,
+            "runtimeSized": true,
+            "type": "t_e44b7c7495a56f81c3d2cd480a1f09e7488c91f483b25f89c82459f6d3b7dba1"
+          }
+        ],
+        "minimumSize": 4,
+        "runtimeSized": true,
+        "type": "t_20f7cd19fbf7eb7254f4b90a87f15de995abb8ec6fb036d22dbe4ebfb6ab9429"
+      },
+      "l_ae587f8451767fd10f6679f98dd05784908a7535ce0fa2e7ec4e9d0c53ccf96f": {
+        "alignment": 4,
+        "members": [
+          {
+            "alignment": 4,
+            "layout": "l_c71674e3619e618e2d10a85c41145db68a3c01b29fec6be8815676b8295ed7f0",
+            "minimumSize": 8,
+            "name": "mass",
+            "offset": 0,
+            "runtimeSized": false,
+            "size": 8,
+            "type": "t_e2b30c4ffc210195391025b3a8f019e81864b1a6439f192150f442b660ce4155"
+          },
+          {
+            "alignment": 4,
+            "layout": "l_c71674e3619e618e2d10a85c41145db68a3c01b29fec6be8815676b8295ed7f0",
+            "minimumSize": 4,
+            "name": "id",
+            "offset": 8,
+            "runtimeSized": false,
+            "size": 4,
+            "type": "t_e2b30c4ffc210195391025b3a8f019e81864b1a6439f192150f442b660ce4155"
+          }
+        ],
+        "minimumSize": 12,
+        "runtimeSized": false,
+        "size": 12,
+        "type": "t_a7fb356bc04f712de243cacbf8c7c5897770e9197ffcadabc47e12402e2649b4"
+      },
+      "l_c63e6f930345f691190f83849f2b48c0ab038c42b6b38aa5dd6d8e1a29422dfa": {
+        "alignment": 4,
+        "arrayStride": 12,
+        "elementLayout": "l_ae587f8451767fd10f6679f98dd05784908a7535ce0fa2e7ec4e9d0c53ccf96f",
+        "members": [],
+        "minimumSize": 0,
+        "runtimeSized": true,
+        "type": "t_e44b7c7495a56f81c3d2cd480a1f09e7488c91f483b25f89c82459f6d3b7dba1"
+      },
+      "l_c71674e3619e618e2d10a85c41145db68a3c01b29fec6be8815676b8295ed7f0": {
+        "alignment": 4,
+        "members": [],
+        "minimumSize": 4,
+        "runtimeSized": false,
+        "size": 4,
+        "type": "t_e2b30c4ffc210195391025b3a8f019e81864b1a6439f192150f442b660ce4155"
+      }
+    }
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-compiler/v1",
+  "source": {
+    "virtualPath": "resolved/runtime-array.wgsl",
+    "sha256": "65dcc609bacd7f7fdc46122cf00612137eba43f5f356aaabe185d65dc84be683",
+    "text": "struct RuntimeValues {\n  prefix: u32,\n  values: array<u32>,\n}\n\n@group(0) @binding(0) var<storage, read> values: RuntimeValues;\n\n@compute @workgroup_size(1)\nfn main() {\n  let count = arrayLength(&values.values);\n  _ = values.values[count - 1u];\n}\n"
+  },
+  "originMap": {
+    "schemaVersion": 1,
+    "contractId": "vgpu-native-origin-map/v1",
+    "generatedSource": {
+      "virtualPath": "resolved/runtime-array.wgsl",
+      "sha256": "65dcc609bacd7f7fdc46122cf00612137eba43f5f356aaabe185d65dc84be683"
+    },
+    "sources": [
+      {
+        "input": "runtime-array-wgsl",
+        "sha256": "65dcc609bacd7f7fdc46122cf00612137eba43f5f356aaabe185d65dc84be683"
+      }
+    ],
+    "segments": [
+      {
+        "generated": {
+          "startByte": 0,
+          "endByte": 246
+        },
+        "origin": {
+          "input": "runtime-array-wgsl"
+        },
+        "precision": "module"
+      }
+    ]
+  },
+  "entryPoint": {
+    "stage": "compute",
+    "wgsl": "main",
+    "metal": "vgpu_runtime_array"
+  },
+  "semanticInterface": {
+    "kind": "compute",
+    "inputs": [],
+    "outputs": []
+  },
+  "overrides": [],
+  "languageFeatures": [],
+  "metal": {
+    "bindingModel": "vgpu-metal-binding-slots-v1",
+    "immediateDataLayoutModel": "vgpu-metal-immediate-data-layout-v1",
+    "bindings": [
+      {
+        "group": 0,
+        "binding": 0,
+        "slots": [
+          {
+            "mode": "direct",
+            "resourceClass": "buffer",
+            "component": "buffer",
+            "index": 0,
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "internalReservations": [
+      {
+        "role": "immediate-data",
+        "slots": [
+          {
+            "mode": "direct",
+            "resourceClass": "buffer",
+            "component": "buffer",
+            "index": 30,
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "storageBufferSizes": {
+      "model": "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1",
+      "immediateDataByteOffset": 4
+    }
+  }
+}

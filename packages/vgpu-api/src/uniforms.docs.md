@@ -25,7 +25,7 @@ interface SharedUniforms<T extends Record<string, unknown> = Record<string, unkn
 
 **Returns:** `uniforms(gpu)` returns `SharedUniforms<T>`; `shared.set()` returns `void`.
 
-**Throws:** `VGPU-R1-SHARED-UNIFORMS-LAYOUT-MISMATCH` when a later shader declares a structurally different layout for the same shared object; `VGPU-RING1-UNSUPPORTED` when address spaces differ, the binding is not a buffer, the binding has no host-shareable layout, or the layout is runtime-sized; packing may throw core validation errors for values that do not match the adopted WGSL layout.
+**Throws:** `VGPU-R1-SHARED-UNIFORMS-LAYOUT-MISMATCH` when a later shader declares a structurally different layout for the same shared object; `VGPU-RING1-UNSUPPORTED` when address spaces differ, the binding is not a buffer, the binding has no host-shareable layout, or the layout is runtime-sized; `VGPU-SET-VALUE-INVALID` when the merged value has the wrong reflected shape or an out-of-range integer. Its structured detail includes the failure `reason` and complete value `path`.
 
 ## Examples
 
@@ -58,6 +58,8 @@ globals.set({ exposure: 1.25 });
 ## Notes
 
 - The first shader to bind the object chooses the WGSL layout. Keep struct member names/types/order aligned for every later shader that reuses it.
+- Values must contain only members of that reflected struct. When spreading a shared settings object, select the fields for this binding; unrelated settings are rejected, not ignored. Validation of initial values happens when the first binding adopts its layout.
 - Use shared uniforms for values like time, mouse, camera, exposure, and viewport data consumed by many passes.
 - If one shader needs a different layout, create a second `uniforms(gpu)` object rather than mutating the first layout.
+- `set()` clones and merges into a candidate, packs that candidate into temporary bytes, and commits only after validation succeeds. A rejected update leaves both the retained values and GPU bytes unchanged.
 - **See also:** `uniforms`, `Effect.set`, `Draw.set`, `Uniform`, `StructuredUniform`.

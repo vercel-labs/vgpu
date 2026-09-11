@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-compiler/v1",
+  "source": {
+    "virtualPath": "resolved/generate-failure.wgsl",
+    "sha256": "fffb348887bb85de17f1dae931a7845f9a330e13b499450d46cd0fd83e4c1d40",
+    "text": "@compute @workgroup_size(1)\nfn writer_failure() {}\n"
+  },
+  "originMap": {
+    "schemaVersion": 1,
+    "contractId": "vgpu-native-origin-map/v1",
+    "generatedSource": {
+      "virtualPath": "resolved/generate-failure.wgsl",
+      "sha256": "fffb348887bb85de17f1dae931a7845f9a330e13b499450d46cd0fd83e4c1d40"
+    },
+    "sources": [
+      {
+        "input": "generate-failure-wgsl",
+        "sha256": "fffb348887bb85de17f1dae931a7845f9a330e13b499450d46cd0fd83e4c1d40"
+      }
+    ],
+    "segments": [
+      {
+        "generated": {
+          "startByte": 0,
+          "endByte": 51
+        },
+        "origin": {
+          "input": "generate-failure-wgsl"
+        },
+        "precision": "module"
+      }
+    ]
+  },
+  "entryPoint": {
+    "stage": "compute",
+    "wgsl": "writer_failure",
+    "metal": "vgpu_writer_failure"
+  },
+  "semanticInterface": {
+    "kind": "compute",
+    "inputs": [],
+    "outputs": []
+  },
+  "overrides": [],
+  "languageFeatures": [],
+  "metal": {
+    "bindingModel": "vgpu-metal-binding-slots-v1",
+    "immediateDataLayoutModel": "vgpu-metal-immediate-data-layout-v1",
+    "bindings": [],
+    "internalReservations": [
+      {
+        "role": "immediate-data",
+        "slots": [
+          {
+            "mode": "direct",
+            "resourceClass": "buffer",
+            "component": "buffer",
+            "index": 30,
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "storageBufferSizes": {
+      "model": "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1",
+      "immediateDataByteOffset": 4
+    }
+  }
+}

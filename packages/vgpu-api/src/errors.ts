@@ -640,6 +640,22 @@ export function unsupportedError(where: string, message: string, fix?: string): 
   return new VGPUError({ code: "VGPU-RING1-UNSUPPORTED", message, fix, where });
 }
 
+export function setValueInvalidError(detail: {
+  readonly reason: string;
+  readonly path: string;
+  readonly expected?: string | number;
+  readonly actual?: string | number;
+  readonly type?: string;
+}, message: string): VGPUError {
+  return new VGPUError({
+    code: "VGPU-SET-VALUE-INVALID",
+    message: `Invalid WGSL value at '${detail.path}': ${message}.`,
+    fix: "Pass the exact reflected structure, vector, matrix, and array shapes; use integral in-range values for i32/u32.",
+    where: "set",
+    detail,
+  });
+}
+
 export function malformedShaderSourceError(input: unknown): VGPUError {
   if (hasVersion(input) && input.version !== 1) {
     return new VGPUError({

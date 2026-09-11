@@ -1,7 +1,7 @@
 {
   "root": {
     "title": "Documentation",
-    "description": "Build WebGPU applications for browsers, Node.js, and automated workflows."
+    "description": "Build WebGPU applications for browsers and Node.js, and integrate WGSL with native Metal code."
   },
   "packageOrder": [
     "vgpu",
@@ -220,6 +220,38 @@
             { "title": "Quickstart: Browser", "href": "/ml/browser" },
             { "title": "Quickstart: Node", "href": "/ml/node" },
             { "title": "Buffers & ownership", "href": "/ml/buffers" }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Native",
+      "href": "/native",
+      "groups": [
+        {
+          "title": "",
+          "items": [
+            { "title": "Overview", "href": "/native" }
+          ]
+        },
+        {
+          "title": "macOS",
+          "items": [
+            { "title": "Get started", "href": "/native/macos" },
+            { "title": "Load Metal functions", "href": "/native/macos/metal/functions" },
+            { "title": "Render WGSL with Metal", "href": "/native/macos/metal/rendering" },
+            { "title": "Pack uniforms for Metal", "href": "/native/macos/metal/uniforms" },
+            { "title": "Bind Metal buffers", "href": "/native/macos/metal/bindings" },
+            { "title": "Render to multiple textures", "href": "/native/macos/metal/render/targets" },
+            { "title": "Dispatch WGSL compute", "href": "/native/macos/metal/compute/dispatch" },
+            { "title": "Use prepared compute bindings", "href": "/native/macos/metal/compute/prepared-bindings" },
+            { "title": "Encode native indirect dispatch", "href": "/native/macos/metal/compute/indirect-dispatch" },
+            { "title": "Render computed data", "href": "/native/macos/metal/compute/rendering" },
+            { "title": "Configure a Metal package", "href": "/native/macos/metal/tooling/configuration" },
+            { "title": "Resolve shader inputs", "href": "/native/macos/metal/tooling/sources" },
+            { "title": "Check the native toolchain", "href": "/native/macos/metal/tooling/doctor" },
+            { "title": "Build and verify a Metal package", "href": "/native/macos/metal/tooling/build" },
+            { "title": "Publish generated packages", "href": "/native/macos/metal/tooling/publication" }
           ]
         }
       ]

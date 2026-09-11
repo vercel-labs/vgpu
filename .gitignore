@@ -20,4 +20,5 @@ coverage/
 .*.swo
 .tmp-doc-snippets-*/
 .codex/runtime/
+/experiments/native-metal-spikes/
 .vercel

@@ -43,7 +43,9 @@ export function createManifest(allowlistText, options = {}) {
     content: load(entry.repoPath),
   }));
 
-  const guideRecords = (options.guides ?? []).map((repoPath) => enrichRecord({
+  const guides = options.guides ?? [];
+  assertUniqueGuideBasenames(guides);
+  const guideRecords = guides.map((repoPath) => enrichRecord({
     ...guideEntryFor(repoPath),
     kind: "guide",
     virtualPath: guideVirtualPathFor(repoPath),
@@ -59,6 +61,21 @@ export function createManifest(allowlistText, options = {}) {
   });
   const records = withUniqueAnchors([...apiRecords, ...guideRecords, ...migrationRecords].sort(compareRecord));
   return { schemaVersion: MANIFEST_VERSION, generatedFrom: "docs/allowlist.txt + docs/topics + docs/migrations", records };
+}
+
+function assertUniqueGuideBasenames(repoPaths) {
+  const seen = new Map();
+  for (const repoPath of repoPaths) {
+    const basename = repoPath.split("/").at(-1);
+    const previous = seen.get(basename);
+    if (previous !== undefined) {
+      throw new Error(
+        `Duplicate guide basename "${basename}": ${previous} and ${repoPath}. ` +
+        "Guide symbols and virtual paths are basename-based; rename one source file.",
+      );
+    }
+    seen.set(basename, repoPath);
+  }
 }
 
 export function serializeManifest(manifest) {

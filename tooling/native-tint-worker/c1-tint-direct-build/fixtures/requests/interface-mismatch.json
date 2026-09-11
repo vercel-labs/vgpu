@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-compiler/v1",
+  "source": {
+    "virtualPath": "resolved/direct-interface-mismatch.wgsl",
+    "sha256": "bb3e36c7e83d2dd4c36fb7f51020e5450cb15ceedf6904129d9e654812284cfa",
+    "text": "@fragment\nfn main(@location(2) amount: f32) -> @location(1) vec4f {\n  return vec4f(amount);\n}\n"
+  },
+  "originMap": {
+    "schemaVersion": 1,
+    "contractId": "vgpu-native-origin-map/v1",
+    "generatedSource": {
+      "virtualPath": "resolved/direct-interface-mismatch.wgsl",
+      "sha256": "bb3e36c7e83d2dd4c36fb7f51020e5450cb15ceedf6904129d9e654812284cfa"
+    },
+    "sources": [
+      {
+        "input": "direct-interface-mismatch-wgsl",
+        "sha256": "bb3e36c7e83d2dd4c36fb7f51020e5450cb15ceedf6904129d9e654812284cfa"
+      }
+    ],
+    "segments": [
+      {
+        "generated": {
+          "startByte": 0,
+          "endByte": 94
+        },
+        "origin": {
+          "input": "direct-interface-mismatch-wgsl"
+        },
+        "precision": "module"
+      }
+    ]
+  },
+  "entryPoint": {
+    "stage": "fragment",
+    "wgsl": "main",
+    "metal": "vgpu_direct_interface_mismatch"
+  },
+  "semanticInterface": {
+    "kind": "fragment",
+    "inputs": [
+      {
+        "type": {
+          "scalar": "f32",
+          "width": 1
+        },
+        "invariant": false,
+        "location": 3,
+        "interpolation": {
+          "type": "perspective",
+          "sampling": "center"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "type": {
+          "scalar": "f32",
+          "width": 4
+        },
+        "invariant": false,
+        "location": 1
+      }
+    ]
+  },
+  "overrides": [],
+  "languageFeatures": [],
+  "metal": {
+    "bindingModel": "vgpu-metal-binding-slots-v1",
+    "immediateDataLayoutModel": "vgpu-metal-immediate-data-layout-v1",
+    "bindings": [],
+    "internalReservations": [
+      {
+        "role": "immediate-data",
+        "slots": [
+          {
+            "mode": "direct",
+            "resourceClass": "buffer",
+            "component": "buffer",
+            "index": 30,
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "storageBufferSizes": {
+      "model": "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1",
+      "immediateDataByteOffset": 12
+    }
+  }
+}

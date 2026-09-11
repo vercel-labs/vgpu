@@ -23,9 +23,9 @@ export async function renderThumbnail(
   colorTarget: Target,
   opts: ThumbOptions = {},
 ): Promise<void> {
-  const effects = createEffects(gpu);
   const targets = createTargets(gpu, colorTarget.size);
   try {
+    const effects = createEffects(gpu, targets);
     const time = opts.time ?? 8.5;
     setBindings(effects, targets);
     await prewarm(effects, targets, colorTarget);

@@ -85,12 +85,13 @@ export function buildOcean(gpu: Gpu, size: Size) {
       amplitude: params.amplitude,
       patchSize: params.patchSize,
       time,
+      _pad: [0, 0],
     });
     const skyUniform = (
       viewProj: Float32Array,
       camPos: readonly [number, number, number],
       sun = sunDir()
-    ) => ({ viewProj, camPos, radius: SKY_RADIUS, sunDir: sun });
+    ) => ({ viewProj, camPos, radius: SKY_RADIUS, sunDir: sun, _pad: 0 });
 
     let h0 = own(storage(gpu, VEC4_BYTES, "read-write"));
     const specX = own(storage(gpu, COMPLEX_BYTES, "read-write"));
@@ -257,6 +258,7 @@ export function buildOcean(gpu: Gpu, size: Size) {
         heightScale: params.heightScale,
         choppyScale: params.choppyScale,
         foamScale: params.foamScale,
+        _pad: 0,
       };
     }
   } catch (error) {
