@@ -17,6 +17,7 @@ export const exampleComponentLoaders = {
   earth: () => import('../examples/earth/index'),
   atmosphere: () => import('../examples/atmosphere/index'),
   fluid: () => import('../examples/fluid/index'),
+  'liquid-geo': () => import('../examples/liquid-geo/index'),
   'instanced-rendering': () => import('../examples/instanced-rendering/index'),
   'batch-rendering': () => import('../examples/batch-rendering/index'),
   'fft-ocean': () => import('../examples/fft-ocean/index'),
