@@ -28,3 +28,23 @@ It does not give Vackrooms control over arbitrary websites. Destinations such as
 GitHub can refuse embedding through their own frame policy; they still require the
 host's external-tab fallback. Navigating to a site without an adapter also makes the
 cooperative history controls unavailable.
+
+## CRT curvature
+
+The independent CRT adapter receives `{ type: "vackrooms-crt", version: 1,
+requestId, curvature, scale }` from the same approved parent origins. `curvature`
+must be a base64 PNG data URL, at most 300,000 characters, with both a declared
+and decoded size of 256 × 192. `scale` is a finite value from 0 to 24 CSS pixels.
+The host generates the RG displacement map with vgpu; this site never captures,
+reads back, or sends any of its own pixels.
+
+The site sends `{ type: "vackrooms-crt-ready", version: 1 }` when mounted and
+`{ type: "vackrooms-crt-applied", version: 1, requestId }` after applying a valid
+decoded map. The host should resend its map on iframe load or this ready signal,
+and validate the source, origin and request ID of acknowledgments.
+
+The SVG displacement filter applies to the site's own document root. Its map
+tracks the visible viewport during scrolling and resizing, preserving fixed and
+sticky controls. Existing root filtering is composed with the map and restored
+on cleanup. Color grading and scanlines remain in the host's monitor glass so
+they are not applied twice.
