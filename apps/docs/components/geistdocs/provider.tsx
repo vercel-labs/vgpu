@@ -4,6 +4,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { GeistdocsProvider as PackageProvider } from "@vercel/geistdocs/layout";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import type { ComponentProps } from "react";
+import { VackroomsBrowser } from "@/components/vackrooms-browser";
 import { config } from "@/lib/geistdocs/config";
 
 type GeistdocsProviderProps = Omit<
@@ -24,6 +25,7 @@ export const GeistdocsProvider = ({
   return (
     <>
       <PackageProvider config={config} lang={lang} {...props} />
+      <VackroomsBrowser />
       <Analytics />
       <SpeedInsights />
     </>
