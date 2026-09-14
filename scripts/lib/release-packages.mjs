@@ -14,12 +14,24 @@ export const RELEASE_PACKAGES = Object.freeze([
   Object.freeze({ name: "@vgpu/render", directory: "packages/render" }),
 ]);
 
+// A reviewed opt-in for the first native release, not automatic discovery of public packages.
+// Keep the seven existing packages mandatory while the companion remains private.
+export function releasePackagesFor(configuredFixedPackageNames) {
+  return configuredFixedPackageNames.includes("@vgpu/native")
+    ? [
+        ...RELEASE_PACKAGES,
+        { name: "@vgpu/native", directory: "packages/native" },
+      ]
+    : RELEASE_PACKAGES;
+}
+
 export function validateReleasePackages({
   configuredFixedPackageNames,
   manifests,
   expectedVersion,
 }) {
-  const expectedNames = new Set(RELEASE_PACKAGES.map(({ name }) => name));
+  const releasePackages = releasePackagesFor(configuredFixedPackageNames);
+  const expectedNames = new Set(releasePackages.map(({ name }) => name));
   const configuredNameCounts = new Map();
   const manifestsByPath = new Map();
   const manifestPathsByName = new Map();
@@ -47,7 +59,7 @@ export function validateReleasePackages({
     }
   }
 
-  for (const { name, directory } of RELEASE_PACKAGES) {
+  for (const { name, directory } of releasePackages) {
     const fixedCount = configuredNameCounts.get(name) ?? 0;
     if (fixedCount === 0) {
       errors.push(`${name}: missing from the Changesets fixed group`);

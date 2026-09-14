@@ -19,7 +19,8 @@ Compatibility mode is not auto-detected inside `cubeView`. The same boolean sele
 import { cubeView } from "@vgpu/core";
 
 const cubemap = device.createTexture({
-  size: [1024, 1024, 6],
+  kind: "2d-array",
+  size: [1024, 1024], layers: 6,
   format: "rgba8unorm",
   usage: ["texture_binding", "render_attachment"],
 });

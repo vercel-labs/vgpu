@@ -150,6 +150,29 @@ describe("uniforms(gpu) shared uniforms", () => {
     gpu.dispose();
   });
 
+  test("a rejected update leaves GPU bytes and the previous partial-update base unchanged", async () => {
+    const gpu = await init();
+    const globals = uniforms(gpu, { time: 1, mouse: [2, 3] });
+    const wave = effect(gpu, WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
+    const resource = drawBindingState(effectDraw(wave), "globals")?.resource as GPUBufferBinding;
+    if (!("__vgpuMockBytes" in resource.buffer)) throw new Error("fixture did not expose mock buffer bytes");
+    const before = resource.buffer.__vgpuMockBytes.slice();
+
+    try {
+      globals.set({ mouse: [9] });
+      throw new Error("expected packing to fail");
+    } catch (error) {
+      expect(error).toMatchObject({ code: "VGPU-SET-VALUE-INVALID", detail: { reason: "shape", path: "$.mouse" } });
+    }
+    expect(resource.buffer.__vgpuMockBytes).toEqual(before);
+
+    globals.set({ time: 4 });
+    const bytes = resource.buffer.__vgpuMockBytes;
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    expect([view.getFloat32(0, true), view.getFloat32(8, true), view.getFloat32(12, true)]).toEqual([4, 2, 3]);
+    gpu.dispose();
+  });
+
   test("ignores unsafe keys from parsed updates without polluting Object.prototype", async () => {
     const gpu = await init();
     const globals = uniforms<Record<string, unknown>>(gpu, { time: 0, mouse: [0, 0] });

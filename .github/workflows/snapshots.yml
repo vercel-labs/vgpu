@@ -1,0 +1,51 @@
+name: Visual snapshots
+run-name: ${{ github.event_name == 'workflow_dispatch' && format('Snapshots {0} / {1}', inputs.mode, inputs.request) || 'Visual snapshots' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Compare references or generate unapproved candidates
+        type: choice
+        options: [check, update]
+        default: check
+      request:
+        description: Correlation ID used by pnpm snapshots commands
+        type: string
+        required: true
+  workflow_call:
+    inputs:
+      mode:
+        type: string
+        default: check
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    name: ${{ inputs.mode == 'update' && 'Generate candidates (not approval)' || 'Verify visual snapshots' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned x64 Vulkan environment
+        run: docker build --platform linux/amd64 -t vgpu-snapshots:ci -f infra/snapshots/Dockerfile .
+      - name: Render and compare (or generate review candidates)
+        env:
+          SNAPSHOT_MODE: ${{ inputs.mode }}
+        run: |
+          docker run --rm --platform linux/amd64 \
+            -v "$PWD:/workspace" -w /workspace \
+            -e CI=true -e GITHUB_SHA -e GITHUB_ACTIONS \
+            -e VGPU_SNAPSHOT_MODE="$SNAPSHOT_MODE" \
+            vgpu-snapshots:ci \
+            sh -lc 'pnpm install --frozen-lockfile && pnpm build && node scripts/run-visual-snapshots.mjs'
+      - name: Upload before, actual, diff and unapproved candidates
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-snapshots
+          path: artifacts/visual-snapshots
+          if-no-files-found: error
+          retention-days: 14

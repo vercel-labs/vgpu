@@ -57,10 +57,6 @@ export interface Target {
   clearColor: ClearColor;
   readonly resourceIdentity: ResourceIdentity;
   resize(size: readonly [number, number]): void;
-  /** Raw unpadded bytes of `color` in the target's own format (`bgra*` swizzled to RGBA). */
-  read(): Promise<Uint8Array>;
-  /** Components of `color` decoded to f32 — the HDR-friendly readback for `rgba16float`/`rgba32float` targets. */
-  readFloats(): Promise<Float32Array>;
   onDestroy(cb: ResourceDestroyCallback<Target>): UnsubscribeResourceDestroy;
   renderPassDescriptor(opts?: RenderPassDescriptorOptions): GPURenderPassDescriptor;
 }

@@ -2,7 +2,7 @@ import { bindGroupLayoutMetadata, bindGroupMetadataFor, type Buffer, type Device
 import type { BindingInfo, Reflection } from "@vgpu/wgsl/reflect-source";
 import { identityKey, type BindGroupCache, type BindGroupIdentityPart } from "./bind-cache.ts";
 import { entryMetadata } from "./entry-metadata.ts";
-import { claimedGroupIncompatibleError, claimedGroupSetError, neverSetError, ownershipFlipError, unsupportedError } from "./errors.ts";
+import { claimedGroupIncompatibleError, claimedGroupSetError, destroyedBindingError, neverSetError, ownershipFlipError, unsupportedError } from "./errors.ts";
 import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, pipelineLayoutFor } from "./set-layouts.ts";
 import { isPlainObject, isPlainValue, normalizeResource } from "./set-resources.ts";
 import { writeLayoutValue } from "./set-packing.ts";
@@ -13,7 +13,7 @@ export type BindingOwnership = "lib" | "user";
 export interface SetCoreOptions {
   readonly device: Device;
   readonly label: string;
-  readonly drawId: number;
+  readonly drawId: number | string;
   readonly reflection: Reflection;
   readonly bindGroupLayouts: ReadonlyMap<number, GPUBindGroupLayout>;
   readonly cache: BindGroupCache;
@@ -31,6 +31,8 @@ export interface BindingIdentityChange {
 
 /** Ring-1 set() engine: latches ownership, validates completeness, and returns cached bind groups. */
 export interface SetCore {
+  assertUsable(): void;
+  watchResources(onDestroyed: (change: BindingIdentityChange) => void): () => void;
   readonly groups: readonly number[];
   set(values: SetBag): readonly BindingIdentityChange[];
   claimGroup(group: number, bindGroup: GPUBindGroup, expectedLayout: GPUBindGroupLayout): string | undefined;
@@ -57,6 +59,9 @@ type MutableBindingState = {
   identity?: BindGroupIdentityPart;
   unsubscribe?: UnsubscribeResourceDestroy;
   unsubscribeRecreate?: () => void;
+  destroyed?: boolean;
+  resourceLabel?: string;
+  subscribeDestroy?: (cb: () => void) => UnsubscribeResourceDestroy;
 };
 
 /** Creates the per-Draw binding state machine used by Effect/Draw.set(). */
@@ -87,28 +92,32 @@ export function createSetCore(options: SetCoreOptions): SetCore {
   function setBinding(state: MutableBindingState, name: string, value: unknown): readonly BindingIdentityChange[] {
     ensureGroupSettable(state.info.group);
     const ownership = ownershipFor(state.info, value);
-    latchBindingOwnership(state, name, ownership);
+    assertBindingOwnership(state, name, ownership);
     const before = identityString(state.identity);
     if (ownership === "lib") setLibOwned(state, mergeLibValue(state.libValue, value));
     else setUserOwned(state, value);
+    state.ownership ??= ownership;
     return bindingIsActive(state) ? identityChangeFor(state, before) : [];
   }
 
   function setBindingMember(state: MutableBindingState, memberName: string, value: unknown): readonly BindingIdentityChange[] {
     ensureGroupSettable(state.info.group);
     const ownership = ownershipFor(state.info, value);
-    latchBindingOwnership(state, memberName, ownership);
-    latchMemberOwnership(state, memberName, ownership);
+    assertBindingOwnership(state, memberName, ownership);
+    assertMemberOwnership(state, memberName, ownership);
     if (ownership !== "lib") throw unsupportedError(`${options.label}.set`, `Member '${memberName}' needs a JS value; set resource '${state.info.name}' instead.`);
     const before = identityString(state.identity);
-    setLibOwned(state, { ...objectValue(state.libValue), [memberName]: value });
+    const base = state.libValue ?? zeroLayoutValue(requiredLibLayout(state));
+    setLibOwned(state, { ...objectValue(base), [memberName]: value });
+    state.ownership ??= ownership;
+    state.memberOwnership.set(memberName, ownership);
     return bindingIsActive(state) ? identityChangeFor(state, before) : [];
   }
 
   function setLibOwned(state: MutableBindingState, value: unknown): void {
     const layout = requiredLibLayout(state);
-    state.libValue = value;
     const bytes = writeLayoutValue(layout, value);
+    state.libValue = value;
     if (!state.buffer) createLibBuffer(state, layout.size);
     state.bytes = bytes;
     state.buffer!.write(bytes, 0);
@@ -127,22 +136,17 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     state.unsubscribeRecreate?.();
     state.resource = normalized.resource;
     state.identity = normalized.identity;
-    state.unsubscribe = normalized.unsubscribe?.(() => { if (state.identity) options.cache.evictIdentity(state.identity); });
+    state.destroyed = false;
+    state.resourceLabel = normalized.resourceLabel;
+    state.subscribeDestroy = normalized.unsubscribe;
+    state.unsubscribe = normalized.unsubscribe?.(() => invalidateResource(state));
     state.unsubscribeRecreate = normalized.onRecreate?.(() => rebindRecreatedResource(state, value));
   }
 
   function rebindRecreatedResource(state: MutableBindingState, value: unknown): void {
     const beforeIdentity = identityString(state.identity);
     if (state.identity) options.cache.evictIdentity(state.identity);
-    const normalized = normalizeResource(state.info, value, resourceContext(state.info));
-    state.unsubscribe?.();
-    state.unsubscribeRecreate?.();
-    state.resource = normalized.resource;
-    state.identity = normalized.identity;
-    state.unsubscribe = normalized.unsubscribe?.(() => { if (state.identity) options.cache.evictIdentity(state.identity); });
-    // Refresh the recreation subscription on every re-normalization so the lifecycle
-    // stays explicit even if a future target signal implementation becomes one-shot.
-    state.unsubscribeRecreate = normalized.onRecreate?.(() => rebindRecreatedResource(state, value));
+    setUserOwned(state, value);
     if (bindingIsActive(state)) for (const change of identityChangeFor(state, beforeIdentity)) options.onIdentityChange?.(change);
   }
 
@@ -154,6 +158,41 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     return previousIdentity;
   }
 
+  function invalidateResource(state: MutableBindingState): void {
+    if (state.destroyed) return;
+    state.destroyed = true;
+    if (state.identity) options.cache.evictIdentity(state.identity);
+    if (bindingIsActive(state) && !claimedGroups.has(state.info.group)) options.onIdentityChange?.({
+      group: state.info.group, binding: state.info.binding, bindingName: state.info.name,
+      bindingKind: state.info.kind, previousIdentity: identityString(state.identity),
+      newIdentity: `destroyed:${identityString(state.identity)}`,
+    });
+  }
+
+  function assertUsable(): void {
+    for (const state of bindings.values()) {
+      if (state.destroyed && bindingIsActive(state) && !claimedGroups.has(state.info.group)) {
+        throw destroyedBindingError(options.label, state.info, state.resourceLabel);
+      }
+    }
+  }
+
+  function watchResources(onDestroyed: (change: BindingIdentityChange) => void): () => void {
+    assertUsable();
+    const unsubscribe: (() => void)[] = [];
+    for (const state of bindings.values()) {
+      if (!bindingIsActive(state) || claimedGroups.has(state.info.group) || !state.subscribeDestroy) continue;
+      // Capture this exact resource, independently of subsequent Draw.set() calls.
+      const previousIdentity = identityString(state.identity);
+      const { group, binding, name, kind } = state.info;
+      unsubscribe.push(state.subscribeDestroy(() => onDestroyed({
+        group, binding, bindingName: name, bindingKind: kind, previousIdentity,
+        newIdentity: `destroyed:${previousIdentity}`,
+      })));
+    }
+    return () => { for (const off of unsubscribe.splice(0)) off(); };
+  }
+
   function layout(group: number): GPUBindGroupLayout {
     const bgl = options.bindGroupLayouts.get(group);
     if (!bgl) throw unsupportedError(`${options.label}.layout`, `@group(${group}) does not exist in '${options.label}'.`);
@@ -161,6 +200,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
   }
 
   function bindGroups(): readonly { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimValidation?: { readonly label: string; readonly group: number } }[] {
+    assertUsable();
     return groups.map(bindGroupFor);
   }
 
@@ -217,6 +257,8 @@ export function createSetCore(options: SetCoreOptions): SetCore {
   }
 
   return {
+    assertUsable,
+    watchResources,
     get groups() { return groups; },
     set,
     claimGroup,
@@ -252,15 +294,13 @@ function ownershipFor(binding: BindingInfo, value: unknown): BindingOwnership {
   return binding.bindingLayout?.kind === "buffer" && isPlainValue(value) ? "lib" : "user";
 }
 
-function latchBindingOwnership(state: MutableBindingState, name: string, ownership: BindingOwnership): void {
+function assertBindingOwnership(state: MutableBindingState, name: string, ownership: BindingOwnership): void {
   if (state.ownership && state.ownership !== ownership) throw ownershipFlipError(name, state.ownership);
-  state.ownership ??= ownership;
 }
 
-function latchMemberOwnership(state: MutableBindingState, memberName: string, ownership: BindingOwnership): void {
+function assertMemberOwnership(state: MutableBindingState, memberName: string, ownership: BindingOwnership): void {
   const previous = state.memberOwnership.get(memberName);
   if (previous && previous !== ownership) throw ownershipFlipError(memberName, previous);
-  state.memberOwnership.set(memberName, ownership);
 }
 
 function validateClaimedGroup(label: string, group: number, bindGroup: GPUBindGroup, expectedLayout: GPUBindGroupLayout): void {
@@ -323,6 +363,26 @@ function mergeLibValue(previous: unknown, value: unknown): unknown {
 
 function objectValue(value: unknown): Record<string, unknown> {
   return isPlainObject(value) ? value : {};
+}
+
+function zeroLayoutValue(layout: NonNullable<BindingInfo["layout"]>): unknown {
+  if (layout.members) return Object.fromEntries(layout.members.map((member) => [member.name, zeroLayoutValue(member.layout)]));
+  switch (layout.type.kind) {
+    case "scalar":
+    case "atomic":
+      return 0;
+    case "vector":
+      return Array.from({ length: layout.type.width }, () => 0);
+    case "matrix":
+      return Array.from({ length: layout.type.columns * layout.type.rows }, () => 0);
+    case "array": {
+      const element = layout.element;
+      if (layout.type.count === undefined || !element) return [];
+      return Array.from({ length: layout.type.count }, () => zeroLayoutValue(element));
+    }
+    default:
+      return undefined;
+  }
 }
 
 export { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, pipelineLayoutFor } from "./set-layouts.ts";

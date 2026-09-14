@@ -16,6 +16,7 @@ describe("dark pipeline debug targets", () => {
     const pipeline = createDarkPipeline(runtime);
     runtime.studioEnvironment = {
       texture: gpu.device.createTexture({
+        kind: "2d",
         size: [2, 1],
         format: "rgba16float",
         usage: ["texture_binding", "copy_dst"],
@@ -42,6 +43,7 @@ describe("dark pipeline debug targets", () => {
     const pipeline = createDarkPipeline(runtime, { quality: "low" });
     runtime.studioEnvironment = {
       texture: gpu.device.createTexture({
+        kind: "2d",
         size: [2, 1],
         format: "rgba16float",
         usage: ["texture_binding", "copy_dst"],
@@ -96,6 +98,7 @@ describe("dark pipeline debug targets", () => {
     const environment = () =>
       ({
         texture: gpu.device.createTexture({
+          kind: "2d",
           size: [2, 1],
           format: "rgba16float",
           usage: ["texture_binding", "copy_dst"],
@@ -190,6 +193,7 @@ describe("dark pipeline debug targets", () => {
     const runtime = createPrismRuntime(gpu, [24, 16], "dark-retained-test");
     runtime.studioEnvironment = {
       texture: gpu.device.createTexture({
+        kind: "2d",
         size: [2, 1],
         format: "rgba16float",
         usage: ["texture_binding", "copy_dst"],

@@ -24,7 +24,7 @@ interface SharedUniformLayoutState {
  * the first shader that binds this object, keeping the backing buffer identity stable.
  */
 export class SharedUniformsImpl<T extends Record<string, unknown>> implements SharedUniforms<T>, BindingResourceProvider {
-  readonly #values: Record<string, unknown>;
+  #values: Record<string, unknown>;
   #state?: SharedUniformLayoutState;
   #bufferRef?: Buffer;
 
@@ -37,8 +37,13 @@ export class SharedUniformsImpl<T extends Record<string, unknown>> implements Sh
   get size(): number | undefined { return this.#state?.layout.size; }
 
   set(values: Partial<T>): void {
-    mergeInto(this.#values, values as Record<string, unknown>);
-    this.#writeCurrentValues();
+    const next = cloneRecord(this.#values);
+    mergeInto(next, values as Record<string, unknown>);
+    if (this.#state && this.#bufferRef) {
+      const bytes = writeLayoutValue(this.#state.layout, next);
+      this.#bufferRef.write(bytes, 0);
+    }
+    this.#values = next;
   }
 
   /**
@@ -68,7 +73,8 @@ export class SharedUniformsImpl<T extends Record<string, unknown>> implements Sh
   }
 
   #adoptLayout(binding: BindingInfo, layout: HostShareableLayout & { readonly size: number }, addressSpace: "uniform" | "storage", sourceHint: string): SharedUniformLayoutState {
-    this.#state = {
+    const bytes = writeLayoutValue(layout, this.#values);
+    const state: SharedUniformLayoutState = {
       layout,
       layoutSignature: sharedUniformLayoutSignature(layout),
       layoutText: formatSharedUniformLayout(layout),
@@ -76,13 +82,20 @@ export class SharedUniformsImpl<T extends Record<string, unknown>> implements Sh
       bindingName: binding.name,
       addressSpace,
     };
-    this.#bufferRef = this.device.createBuffer({
+    const buffer = this.device.createBuffer({
       size: layout.size,
       usage: addressSpace === "storage" ? ["storage", "copy_dst"] : ["uniform", "copy_dst"],
       label: `${binding.name}.sharedUniform`,
     });
-    this.#writeCurrentValues();
-    return this.#state;
+    try {
+      buffer.write(bytes, 0);
+    } catch (error) {
+      buffer.destroy();
+      throw error;
+    }
+    this.#state = state;
+    this.#bufferRef = buffer;
+    return state;
   }
 
   #assertCompatibleLayout(binding: BindingInfo, layout: HostShareableLayout, addressSpace: "uniform" | "storage", sourceHint: string): void {
@@ -98,11 +111,6 @@ export class SharedUniformsImpl<T extends Record<string, unknown>> implements Sh
       incomingLayout: formatSharedUniformLayout(layout, { abbreviated: true }),
       incomingSource: sourceHint,
     });
-  }
-
-  #writeCurrentValues(): void {
-    if (!this.#state || !this.#bufferRef) return;
-    this.#bufferRef.write(writeLayoutValue(this.#state.layout, this.#values), 0);
   }
 
   #requiredBuffer(): Buffer {

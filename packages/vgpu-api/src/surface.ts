@@ -136,6 +136,7 @@ export class CanvasSurface implements Surface {
   get color(): Texture {
     this.#assertLive();
     return new Texture(this.device, this.context.getCurrentTexture(), {
+      kind: "2d",
       size: this.size,
       format: this.format,
       usage: ["render_attachment", "texture_binding", "copy_src"],
@@ -174,8 +175,6 @@ export class CanvasSurface implements Surface {
     return () => { this.#callbacks.delete(cb); };
   }
 
-  async read(): Promise<Uint8Array> { this.#assertLive(); return this.color.read(); }
-  async readFloats(): Promise<Float32Array> { this.#assertLive(); return this.color.readFloats(); }
   onDestroy(cb: ResourceDestroyCallback<Target>): UnsubscribeResourceDestroy { this.#assertLive(); return this.#destroySignal.onDestroy(this, cb); }
   onTexturesRecreated(cb: () => void): () => void { this.#assertLive(); this.#texturesRecreatedCallbacks.add(cb); return () => { this.#texturesRecreatedCallbacks.delete(cb); }; }
 

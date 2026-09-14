@@ -540,6 +540,7 @@ test("renders the deterministic light once and idles until something changes", a
   for (const environmentTexture of live.textures) {
     expect(environmentTexture.options).toEqual(
       expect.objectContaining({
+        kind: "2d",
         size: [1024, 512],
         format: "rgba16float",
         mipLevelCount: 8,
@@ -939,7 +940,11 @@ test("an explicit preference cancels a stale Auto import", async () => {
   const env = browser();
   const live = gpu();
   const pendingAuto = deferred<{
-    createPrismAutoQualityController: ReturnType<typeof vi.fn>;
+    createPrismAutoQualityController: ReturnType<
+      typeof vi.fn<
+        typeof import("./performance/auto-quality").createPrismAutoQualityController
+      >
+    >;
   }>();
   const createAuto = vi.fn();
   const loadAutoQuality = vi.fn(() => pendingAuto.promise);

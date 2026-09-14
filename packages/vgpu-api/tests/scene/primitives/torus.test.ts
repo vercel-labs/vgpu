@@ -31,7 +31,7 @@ test("Mesh.torus validates params and overflow", async () => {
   device.destroy();
 });
 
-test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("torus primitive snapshot battery matches", async () => {
+test.skipIf(!process.env.VGPU_SNAPSHOT_MODE)("torus primitive snapshot battery matches", async () => {
   const { device } = await initNode();
   try { await snapshots("torus", (material, angle) => renderPrimitiveFrame({ device, mesh: Mesh.torus({ device, radius: 0.5, tube: 0.18, radialSegments: 12, tubularSegments: 24 }), camera: primitiveCamera(angle), material, baseColor: [0.7, 0.45, 0.85] })); }
   finally { device.destroy(); }

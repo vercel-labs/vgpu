@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { Device, pingPong } from "../src/index.ts";
 
 function createDevice(): Device {
@@ -68,7 +68,7 @@ function createMockBaseGPUDevice(): GPUDevice {
 test("pingPong creates texture read/write halves and swaps parity", () => {
   const device = createDevice();
 
-  const pair = pingPong(device, { label: "state", size: [16, 8], format: "rgba8unorm", usage: ["texture_binding", "render_attachment"] });
+  const pair = pingPong(device, { kind: "2d", label: "state", size: [16, 8], format: "rgba8unorm", usage: ["texture_binding", "render_attachment"] });
   const ping = pair.read;
   const pong = pair.write;
 
@@ -89,7 +89,7 @@ test("pingPong creates texture read/write halves and swaps parity", () => {
 
 test("pingPong texture resize reallocates both halves, resets parity, and preserves 3D size", () => {
   const device = createDevice();
-  const pair = pingPong(device, { label: "volume", size: [8, 8, 2], format: "rgba16float", usage: ["texture_binding", "storage_binding"] });
+  const pair = pingPong(device, { kind: "3d", label: "volume", size: [8, 8, 2], format: "rgba16float", usage: ["texture_binding", "storage_binding"] });
   const originalRead = pair.read;
   const originalWrite = pair.write;
 
@@ -110,19 +110,19 @@ test("pingPong texture resize reallocates both halves, resets parity, and preser
 
 test("pingPong texture size snapshots are not affected by caller tuple mutation", () => {
   const device = createDevice();
-  const initialSize: [number, number, number?] = [8, 8, 1];
-  const pair = pingPong(device, { size: initialSize, format: "rgba8unorm", usage: ["copy_src"] });
+  const initialSize: [number, number, number] = [8, 8, 1];
+  const pair = pingPong(device, { kind: "3d", size: initialSize, format: "rgba8unorm", usage: ["copy_src"] });
 
   initialSize[0] = 99;
   expect(pair.size).toEqual([8, 8, 1]);
   expect(pair.read.size).toEqual([8, 8, 1]);
   expect(pair.write.size).toEqual([8, 8, 1]);
 
-  const reportedSize = pair.size as [number, number, number?];
+  const reportedSize = pair.size as [number, number, number];
   reportedSize[1] = 99;
   expect(pair.size).toEqual([8, 8, 1]);
 
-  const resizedSize: [number, number, number?] = [4, 5, 6];
+  const resizedSize: [number, number, number] = [4, 5, 6];
   expect(pair.resize(resizedSize)).toBe(true);
   resizedSize[2] = 99;
   expect(pair.size).toEqual([4, 5, 6]);
@@ -152,6 +152,78 @@ test("pingPong creates buffer read/write halves and swaps parity", () => {
   expect(pair.write).toBe(pong);
 });
 
+test("pingPong snapshots array metadata and resizes only spatial dimensions", () => {
+  const device = createDevice();
+  const options = { kind: "2d-array", size: [8, 4], layers: 6, format: "rgba8unorm", usage: ["texture_binding"] } satisfies import("../src/types.ts").TextureOptions;
+  const pair = pingPong(device, options);
+  options.layers = 2;
+  options.usage.splice(0);
+  pair.swap();
+  const previous = pair.read;
+  expect(() => pair.resize([16, 8, 2])).toThrow();
+  expect(pair.read).toBe(previous);
+  expect(pair.read.view).toBeDefined();
+  expect(pair.resize([16, 8])).toBe(true);
+  expect(pair.size).toEqual([16, 8]);
+  expect(pair.read.layers).toBe(6);
+  expect(pair.write.layers).toBe(6);
+  expect(pair.read.usage).toEqual(["texture_binding"]);
+  pair.destroy();
+  device.destroy();
+});
+
+test("pingPong preserves 1D size across creation and resize", () => {
+  const device = createDevice();
+  const pair = pingPong(device, { kind: "1d", size: [8], format: "rgba8unorm", usage: ["texture_binding"] });
+  expect(pair.size).toEqual([8]);
+  expect(pair.resize([16])).toBe(true);
+  expect(pair.read.size).toEqual([16]);
+  expect(pair.write.size).toEqual([16]);
+  expect(pair.read.kind).toBe("1d");
+  pair.destroy();
+  device.destroy();
+});
+
+test.each([1, 2])("texture pair preserves both halves and parity when allocation %i fails", (failure) => {
+  const device = createDevice();
+  const pair = pingPong(device, { kind: "2d", size: [8, 4], format: "rgba8unorm", usage: ["texture_binding"] });
+  pair.swap();
+  const previous = [pair.read, pair.write];
+  const allocated: import("../src/texture.ts").Texture[] = [];
+  const create = device.createTexture.bind(device);
+  let calls = 0;
+  const spy = vi.spyOn(device, "createTexture").mockImplementation(opts => {
+    if (++calls === failure) throw new Error("allocation failed");
+    const texture = create(opts);
+    allocated.push(texture);
+    return texture;
+  });
+  expect(() => pair.resize([16, 8])).toThrow("allocation failed");
+  expect([pair.read, pair.write]).toEqual(previous);
+  expect(pair.size).toEqual([8, 4]);
+  for (const texture of previous) expect(() => texture.view).not.toThrow();
+  for (const texture of allocated) expect(() => texture.view).toThrow(/destroyed/);
+  spy.mockRestore();
+  pair.resize([16, 8]);
+  expect(pair.size).toEqual([16, 8]);
+  for (const texture of previous) expect(() => texture.view).toThrow(/destroyed/);
+  pair.destroy();
+  device.destroy();
+});
+
+test("texture pair constructor releases the first half when the second fails", () => {
+  const device = createDevice();
+  const create = device.createTexture.bind(device);
+  let first: import("../src/texture.ts").Texture | undefined;
+  vi.spyOn(device, "createTexture").mockImplementation(opts => {
+    if (first) throw new Error("second allocation failed");
+    return first = create(opts);
+  });
+  expect(() => pingPong(device, { kind: "2d", size: [8, 4], format: "rgba8unorm", usage: ["texture_binding"] })).toThrow("second allocation failed");
+  expect(() => first!.view).toThrow(/destroyed/);
+  device.destroy();
+});
+
 test("pingPong buffer resize reallocates both halves and resets parity", () => {
   const device = createDevice();
   const pair = pingPong(device, { label: "particles", size: 128, usage: ["storage", "copy_dst"] });
@@ -176,7 +248,7 @@ test("pingPong buffer resize reallocates both halves and resets parity", () => {
 test("pingPong preserves undefined labels", () => {
   const device = createDevice();
 
-  const textures = pingPong(device, { size: [1, 1], format: "rgba8unorm", usage: ["copy_src"] });
+  const textures = pingPong(device, { kind: "2d", size: [1, 1], format: "rgba8unorm", usage: ["copy_src"] });
   const buffers = pingPong(device, { size: 64, usage: ["copy_src"] });
 
   expect(textures.read.label).toBeUndefined();
@@ -188,7 +260,7 @@ test("pingPong preserves undefined labels", () => {
 test("pingPong destroy tears down both current halves and is idempotent", () => {
   const device = createDevice();
   const counts = (device.gpu as GPUDevice & { __destroyCounts: { buffer: number; texture: number } }).__destroyCounts;
-  const textures = pingPong(device, { size: [1, 1], format: "rgba8unorm", usage: ["copy_src"] });
+  const textures = pingPong(device, { kind: "2d", size: [1, 1], format: "rgba8unorm", usage: ["copy_src"] });
   const buffers = pingPong(device, { size: 64, usage: ["copy_src"] });
 
   const disposeTextures = textures[Symbol.dispose];

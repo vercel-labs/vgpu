@@ -215,6 +215,7 @@ async function bakeEnvironment(
   };
   const env = own(
     gpu.device.createTexture({
+      kind: "2d",
       size: [...ENV_SIZE],
       format: HDR_FORMAT,
       mipLevelCount: ENV_LEVELS,
@@ -312,6 +313,7 @@ export function createTargets(
     });
     created.push(hdr);
     const pyramid = gpu.device.createTexture({
+      kind: "2d",
       size: [...full],
       format: HDR_FORMAT,
       mipLevelCount: levels,

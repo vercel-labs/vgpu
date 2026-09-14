@@ -1,7 +1,10 @@
 #!/usr/bin/env node
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { selectDocSnippetFiles } from "./lib/doc-snippet-files.mjs";
+import { stableVersion } from "./lib/migrations.mjs";
+import { pendingSources } from "./migrations.mjs";
 
 const repo = process.cwd();
 const list = spawnSync(
@@ -14,7 +17,14 @@ if (list.status !== 0) {
   process.exit(list.status ?? 1);
 }
 
-const files = list.stdout.trim().split(/\r?\n/u).filter(Boolean);
+const discovered = list.stdout.trim().split(/\r?\n/u).filter(Boolean);
+const packageVersion = JSON.parse(readFileSync(join(repo, "packages/vgpu-api/package.json"), "utf8")).version;
+const recordPath = join(repo, "docs/migrations/records", `${stableVersion(packageVersion)}.json`);
+const record = existsSync(recordPath) ? JSON.parse(readFileSync(recordPath, "utf8")) : null;
+const files = selectDocSnippetFiles(discovered, { packageVersion, record, pending: pendingSources(repo) });
+if (files.length !== discovered.length) {
+  console.log(`Skipping ${discovered.length - files.length} migration guides not aligned with the current prepared API (historical or awaiting source collection).`);
+}
 const out = mkdtempSync(join(repo, ".tmp-doc-snippets-"));
 let snippets = 0;
 

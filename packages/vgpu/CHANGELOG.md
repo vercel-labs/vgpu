@@ -1,5 +1,23 @@
 # @vgpu/cli
 
+## 0.2.3
+
+### Patch Changes
+
+- 5c18170: Bundle versioned consumer migration guides in the local docs CLI and MCP corpus. Discover them with `vgpu docs ls /migrations` and read a guide with `vgpu docs cat /migrations/0.5.0.docs.md`. Collect migration instructions from changesets during release preparation instead of relying on standalone repository files.
+
+## 0.2.3-rc.0
+
+### Patch Changes
+
+- 5c18170: Bundle versioned consumer migration guides in the local docs CLI and MCP corpus. Discover them with `vgpu docs ls /migrations` and read a guide with `vgpu docs cat /migrations/0.5.0.docs.md`. Collect migration instructions from changesets during release preparation instead of relying on standalone repository files.
+
+## 0.2.2
+
+### Patch Changes
+
+- 01470c5: Make the repository skill a version-neutral router that reads documentation from the project's selected `vgpu` package, keeping agent guidance aligned with the installed stable or prerelease version.
+
 ## 0.2.1
 
 ### Patch Changes

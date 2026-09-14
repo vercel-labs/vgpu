@@ -44,6 +44,33 @@ test("FrameRunner.loop caps callbacks to the requested fps", () => {
   expect(callbacks.has(6)).toBe(false);
 });
 
+test("FrameRunner.loop accepts ticks a hair short of the fps interval and still skips half-interval ticks", () => {
+  const callbacks = new Map<number, RafCallback>();
+  let nextId = 1;
+  globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+    const id = nextId++;
+    callbacks.set(id, cb);
+    return id;
+  }) as typeof requestAnimationFrame;
+  globalThis.cancelAnimationFrame = ((id: number) => { callbacks.delete(id); }) as typeof cancelAnimationFrame;
+
+  let calls = 0;
+  const runner = new FrameRunner(() => ({ submit: () => {} }) as never, () => {});
+
+  const handle = runner.loop(() => { calls += 1; }, { fps: 60 });
+  // A 60 Hz display reports ticks of about 16.6 ms: every one of them must run, or the loop drops to 30-48 fps.
+  fire(callbacks, 1, 0);
+  fire(callbacks, 2, 16.6);
+  fire(callbacks, 3, 33.2);
+  fire(callbacks, 4, 49.8);
+  // A 120 Hz display: the 8.3 ms tick is skipped, the next one runs.
+  fire(callbacks, 5, 58.1);
+  fire(callbacks, 6, 66.4);
+  handle.stop();
+
+  expect(calls).toBe(5);
+});
+
 test("FrameRunner.frame cancels the frame when the callback throws and rethrows the callback's own error", () => {
   // A test double for the frame, like the fps test above: the runner must only use the public
   // submit()/cancel() surface here and never let its own bookkeeping throw over the callback.

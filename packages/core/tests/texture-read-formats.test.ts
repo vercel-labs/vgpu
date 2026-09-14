@@ -13,7 +13,7 @@ function mockDevice(): Device {
 }
 
 function createTexture(device: Device, format: GPUTextureFormat, size: readonly [number, number]): Texture {
-  return device.createTexture({ size, format, usage: ["render_attachment", "copy_src", "copy_dst"] });
+  return device.createTexture({ kind: "2d", size, format, usage: ["render_attachment", "copy_src", "copy_dst"] });
 }
 
 function writeTexture(device: Device, texture: Texture, data: BufferSource, bytesPerRow: number, size: readonly [number, number]): void {
@@ -37,12 +37,12 @@ test("rgba8unorm read() keeps returning the exact bytes (unchanged behavior)", a
   const bytes = new Uint8Array(2 * 2 * 4).map((_, i) => i * 3);
 
   writeTexture(device, texture, bytes, 2 * 4, [2, 2]);
-  const read = await texture.read();
+  const read = await texture.read({ mipLevel: 0, region: "all" });
 
   expect(read.byteLength).toBe(2 * 2 * 4);
   expect([...read]).toEqual([...bytes]);
   // readFloats() normalizes the same bytes to [0, 1].
-  expect([...(await texture.readFloats())]).toEqual([...bytes].map((b) => Math.fround(b / 255)));
+  expect([...(await texture.readFloats({ mipLevel: 0, region: "all" }))]).toEqual([...bytes].map((b) => Math.fround(b / 255)));
   device.destroy();
 });
 
@@ -54,8 +54,8 @@ test("rgba32float round-trips HDR values through readFloats()", async () => {
   writeTexture(device, texture, values, 2 * 16, [2, 1]);
 
   // read() stays raw bytes: 16 bytes per texel, no clamping to 0..255.
-  expect((await texture.read()).byteLength).toBe(2 * 1 * 16);
-  expect([...(await texture.readFloats())]).toEqual([...values]);
+  expect((await texture.read({ mipLevel: 0, region: "all" })).byteLength).toBe(2 * 1 * 16);
+  expect([...(await texture.readFloats({ mipLevel: 0, region: "all" }))]).toEqual([...values]);
   device.destroy();
 });
 
@@ -67,8 +67,8 @@ test("rgba16float round-trips half-float values through readFloats()", async () 
 
   writeTexture(device, texture, halves, 2 * 8, [2, 1]);
 
-  expect((await texture.read()).byteLength).toBe(2 * 1 * 8);
-  expect([...(await texture.readFloats())]).toEqual(values);
+  expect((await texture.read({ mipLevel: 0, region: "all" })).byteLength).toBe(2 * 1 * 8);
+  expect([...(await texture.readFloats({ mipLevel: 0, region: "all" }))]).toEqual(values);
   device.destroy();
 });
 
@@ -77,16 +77,16 @@ test("single-channel formats read back one component per texel", async () => {
 
   const r32 = createTexture(device, "r32float", [3, 1]);
   writeTexture(device, r32, new Float32Array([0.5, -2, 1024]), 3 * 4, [3, 1]);
-  expect([...(await r32.readFloats())]).toEqual([0.5, -2, 1024]);
+  expect([...(await r32.readFloats({ mipLevel: 0, region: "all" }))]).toEqual([0.5, -2, 1024]);
 
   const r16 = createTexture(device, "r16float", [3, 1]);
   writeTexture(device, r16, Uint16Array.from([0.5, -2, 1024], halfBits), 3 * 2, [3, 1]);
-  expect([...(await r16.readFloats())]).toEqual([0.5, -2, 1024]);
+  expect([...(await r16.readFloats({ mipLevel: 0, region: "all" }))]).toEqual([0.5, -2, 1024]);
 
   const r8 = createTexture(device, "r8unorm", [3, 1]);
   writeTexture(device, r8, new Uint8Array([0, 128, 255]), 3, [3, 1]);
-  expect((await r8.read()).byteLength).toBe(3);
-  expect([...(await r8.readFloats())]).toEqual([0, Math.fround(128 / 255), 1]);
+  expect((await r8.read({ mipLevel: 0, region: "all" })).byteLength).toBe(3);
+  expect([...(await r8.readFloats({ mipLevel: 0, region: "all" }))]).toEqual([0, Math.fround(128 / 255), 1]);
 
   device.destroy();
 });
@@ -96,11 +96,11 @@ test("rg formats read back two components per texel", async () => {
 
   const rg32 = createTexture(device, "rg32float", [2, 1]);
   writeTexture(device, rg32, new Float32Array([1.5, -1.5, 3, 4]), 2 * 8, [2, 1]);
-  expect([...(await rg32.readFloats())]).toEqual([1.5, -1.5, 3, 4]);
+  expect([...(await rg32.readFloats({ mipLevel: 0, region: "all" }))]).toEqual([1.5, -1.5, 3, 4]);
 
   const rg16 = createTexture(device, "rg16float", [2, 1]);
   writeTexture(device, rg16, Uint16Array.from([1.5, -1.5, 3, 4], halfBits), 2 * 4, [2, 1]);
-  expect([...(await rg16.readFloats())]).toEqual([1.5, -1.5, 3, 4]);
+  expect([...(await rg16.readFloats({ mipLevel: 0, region: "all" }))]).toEqual([1.5, -1.5, 3, 4]);
 
   device.destroy();
 });
@@ -110,7 +110,7 @@ test("read() rejects formats that have no readback layout, exactly like a real d
   const depth = createTexture(device, "depth24plus", [1, 1]);
 
   // The mock must not resolve raw stored bytes where Readback.readTexture would throw.
-  await expect(depth.read()).rejects.toMatchObject({ code: "VGPU-CORE-UNSUPPORTED-FORMAT" });
+  await expect(depth.read({ mipLevel: 0, region: "all" })).rejects.toMatchObject({ code: "VGPU-CORE-UNSUPPORTED-FORMAT" });
   device.destroy();
 });
 
@@ -118,7 +118,7 @@ test("readFloats() rejects formats that have no readback layout", async () => {
   const device = mockDevice();
   const depth = createTexture(device, "depth24plus", [1, 1]);
 
-  await expect(depth.readFloats()).rejects.toMatchObject({ code: "VGPU-CORE-UNSUPPORTED-FORMAT" });
+  await expect(depth.readFloats({ mipLevel: 0, region: "all" })).rejects.toMatchObject({ code: "VGPU-CORE-UNSUPPORTED-FORMAT" });
   device.destroy();
 });
 
@@ -127,7 +127,7 @@ test("readFloats() throws on a destroyed texture instead of decoding stale bytes
   const texture = createTexture(device, "rgba16float", [1, 1]);
   texture.destroy();
 
-  await expect(texture.readFloats()).rejects.toMatchObject({ code: "VGPU-CORE-TEXTURE-DESTROYED" });
+  await expect(texture.readFloats({ mipLevel: 0, region: "all" })).rejects.toMatchObject({ code: "VGPU-CORE-TEXTURE-DESTROYED" });
   device.destroy();
 });
 
@@ -182,14 +182,14 @@ test.each(allFormats)("$format round-trips writeTexture -> read()/readFloats() w
   const written = new Uint8Array(width * height * bytesPerPixel).map((_, i) => (i * 7 + 1) % 256);
 
   writeTexture(device, texture, written, width * bytesPerPixel, [width, height]);
-  const read = await texture.read();
+  const read = await texture.read({ mipLevel: 0, region: "all" });
 
   expect(read.byteLength).toBe(width * height * bytesPerPixel);
   const expected = new Uint8Array(written);
   // read() delivers RGBA order: bgra* stored bytes come back with R and B exchanged.
   if (swizzled) for (let i = 0; i < expected.length; i += 4) [expected[i], expected[i + 2]] = [expected[i + 2]!, expected[i]!];
   expect([...read]).toEqual([...expected]);
-  expect(await texture.readFloats()).toHaveLength(width * height * components);
+  expect(await texture.readFloats({ mipLevel: 0, region: "all" })).toHaveLength(width * height * components);
   device.destroy();
 });
 
@@ -200,8 +200,8 @@ test("bgra8unorm read()/readFloats() swizzle stored BGRA into RGBA order", async
   // Stored as B,G,R,A — the real readback returns R,G,B,A, and the mock must agree.
   writeTexture(device, texture, new Uint8Array([1, 2, 3, 4]), 4, [1, 1]);
 
-  expect([...(await texture.read())]).toEqual([3, 2, 1, 4]);
-  expect([...(await texture.readFloats())]).toEqual([3, 2, 1, 4].map((b) => Math.fround(b / 255)));
+  expect([...(await texture.read({ mipLevel: 0, region: "all" }))]).toEqual([3, 2, 1, 4]);
+  expect([...(await texture.readFloats({ mipLevel: 0, region: "all" }))]).toEqual([3, 2, 1, 4].map((b) => Math.fround(b / 255)));
   device.destroy();
 });
 
@@ -211,8 +211,8 @@ test("bgra8unorm-srgb swizzles too, without any gamma conversion", async () => {
 
   writeTexture(device, texture, new Uint8Array([10, 20, 30, 40]), 4, [1, 1]);
 
-  expect([...(await texture.read())]).toEqual([30, 20, 10, 40]);
-  expect([...(await texture.readFloats())]).toEqual([30, 20, 10, 40].map((b) => Math.fround(b / 255)));
+  expect([...(await texture.read({ mipLevel: 0, region: "all" }))]).toEqual([30, 20, 10, 40]);
+  expect([...(await texture.readFloats({ mipLevel: 0, region: "all" }))]).toEqual([30, 20, 10, 40].map((b) => Math.fround(b / 255)));
   device.destroy();
 });
 
@@ -222,8 +222,8 @@ test("rgba8unorm-srgb keeps its encoded bytes (srgb is not decoded to linear)", 
 
   writeTexture(device, texture, new Uint8Array([188, 128, 0, 255]), 4, [1, 1]);
 
-  expect([...(await texture.read())]).toEqual([188, 128, 0, 255]);
-  expect([...(await texture.readFloats())]).toEqual([188, 128, 0, 255].map((b) => Math.fround(b / 255)));
+  expect([...(await texture.read({ mipLevel: 0, region: "all" }))]).toEqual([188, 128, 0, 255]);
+  expect([...(await texture.readFloats({ mipLevel: 0, region: "all" }))]).toEqual([188, 128, 0, 255].map((b) => Math.fround(b / 255)));
   device.destroy();
 });
 
@@ -237,25 +237,25 @@ test("mock writeTexture honors offset and padded bytesPerRow", async () => {
 
   device.gpu.queue.writeTexture({ texture: texture.gpu }, padded, { offset: 4, bytesPerRow: 12 }, { width: 2, height: 2 });
 
-  expect([...(await texture.read())]).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+  expect([...(await texture.read({ mipLevel: 0, region: "all" }))]).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
   device.destroy();
 });
 
-test("mock writeTexture to an array layer leaves layer 0 intact, and read() returns layer 0", async () => {
+test("mock writeTexture to an array layer leaves layer 0 intact, and all reads both layers", async () => {
   const device = mockDevice();
-  const texture = createTexture(device, "rgba8unorm", [1, 1, 2]);
+  const texture = device.createTexture({ kind: "2d-array", size: [1, 1], layers: 2, format: "rgba8unorm", usage: ["copy_src", "copy_dst"] });
 
   device.gpu.queue.writeTexture({ texture: texture.gpu }, new Uint8Array([1, 2, 3, 4]), { bytesPerRow: 4 }, { width: 1, height: 1 });
   device.gpu.queue.writeTexture({ texture: texture.gpu, origin: { x: 0, y: 0, z: 1 } }, new Uint8Array([9, 9, 9, 9]), { bytesPerRow: 4 }, { width: 1, height: 1 });
 
-  // read() copies layer 0 only, exactly like copyTextureToBuffer with a [width, height] extent.
-  expect([...(await texture.read())]).toEqual([1, 2, 3, 4]);
+  expect([...(await texture.read({ mipLevel: 0, region: "all" }))]).toEqual([1, 2, 3, 4, 9, 9, 9, 9]);
+  expect([...(await texture.read({ mipLevel: 0, region: { origin: [0, 0, 0], size: [1, 1, 1] } }))]).toEqual([1, 2, 3, 4]);
   device.destroy();
 });
 
 test("mock writeTexture uploads multiple layers using rowsPerImage", async () => {
   const device = mockDevice();
-  const texture = createTexture(device, "r8unorm", [2, 2, 2]);
+  const texture = device.createTexture({ kind: "2d-array", size: [2, 2], layers: 2, format: "r8unorm", usage: ["copy_src", "copy_dst"] });
   // 2 layers x (2 rows of 2 texels), rows padded to 4 bytes and images padded to 3 rows.
   const data = new Uint8Array(2 * 3 * 4);
   data.set([1, 2], 0);
@@ -265,16 +265,16 @@ test("mock writeTexture uploads multiple layers using rowsPerImage", async () =>
 
   device.gpu.queue.writeTexture({ texture: texture.gpu }, data, { bytesPerRow: 4, rowsPerImage: 3 }, { width: 2, height: 2, depthOrArrayLayers: 2 });
 
-  expect([...(await texture.read())]).toEqual([1, 2, 3, 4]);
-  expect([...texture.gpu.__vgpuMockBytes.subarray(4)]).toEqual([5, 6, 7, 8]);
+  expect([...(await texture.read({ mipLevel: 0, region: "all" }))]).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
   device.destroy();
 });
 
-test("mock writeTexture rejects mipLevel > 0 instead of corrupting mip 0", () => {
+test("mock writeTexture writes a nonzero mip without corrupting mip 0", async () => {
   const device = mockDevice();
-  const texture = device.createTexture({ size: [2, 2], format: "rgba8unorm", usage: ["copy_dst"], mipLevelCount: 2 });
+  const texture = device.createTexture({ kind: "2d", size: [2, 2], format: "rgba8unorm", usage: ["copy_dst", "copy_src"], mipLevelCount: 2 });
 
-  expect(() => device.gpu.queue.writeTexture({ texture: texture.gpu, mipLevel: 1 }, new Uint8Array(4), { bytesPerRow: 4 }, { width: 1, height: 1 }))
-    .toThrow(/mipLevel 0/);
+  device.gpu.queue.writeTexture({ texture: texture.gpu, mipLevel: 1 }, new Uint8Array([1, 2, 3, 4]), { bytesPerRow: 4 }, { width: 1, height: 1 });
+  expect(await texture.read({ mipLevel: 1, region: "all" })).toEqual(new Uint8Array([1, 2, 3, 4]));
+  expect(await texture.read({ mipLevel: 0, region: "all" })).toEqual(new Uint8Array(16));
   device.destroy();
 });

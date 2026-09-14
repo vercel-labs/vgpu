@@ -16,6 +16,11 @@ export interface VGPUErrorDetail {
   readonly samplerName?: string;
   readonly samplerGroup?: number;
   readonly samplerBinding?: number;
+  readonly reason?: string;
+  readonly path?: string;
+  readonly expected?: string | number;
+  readonly actual?: string | number;
+  readonly type?: string;
 }
 
 export interface VGPUErrorData {

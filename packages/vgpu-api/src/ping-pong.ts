@@ -35,8 +35,13 @@ export function createPingPongTargets(device: Device, width: number, height: num
   const size: readonly [number, number] = [clampDimension(width), clampDimension(height)];
   const baseOptions: TargetOptions = { ...opts, size };
   const ping = own(new OffscreenTarget(device, labelOption(baseOptions, opts.label, "ping")));
-  const pong = own(new OffscreenTarget(device, labelOption(baseOptions, opts.label, "pong")));
-  return new TargetPingPong([ping, pong]);
+  try {
+    const pong = own(new OffscreenTarget(device, labelOption(baseOptions, opts.label, "pong")));
+    return new TargetPingPong([ping, pong]);
+  } catch (error) {
+    try { ping.destroy(); } catch { /* Preserve the preparation error. */ }
+    throw error;
+  }
 }
 
 /** @internal See {@link createPingPongTargets} for `own`. */

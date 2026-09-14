@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "repository": { "id": 1230165564, "owner": "vercel-labs", "name": "vgpu" },
+  "issue": {
+    "number": 9905,
+    "url": "https://github.com/vercel-labs/vgpu/issues/9905",
+    "sourceId": "issue:9905",
+    "title": "Second frame call steadily increases GPU memory",
+    "body": "On vgpu 0.2.0, repeatedly rendering a second frame with the same device increases GPU memory by about 20 MB each time. Reusing the target does not help. Node 22 on Ubuntu 24.04. The process is eventually killed. Expected memory to stabilize after the first frame.",
+    "author": "fixture-reporter",
+    "createdAt": "2026-08-24T08:20:00Z",
+    "labels": []
+  },
+  "duplicateCandidates": [
+    {
+      "number": 9810,
+      "url": "https://github.com/vercel-labs/vgpu/issues/9810",
+      "sourceId": "duplicate:9810",
+      "title": "GPU memory leak when rendering repeated frames on one device",
+      "bodyExcerpt": "With vgpu 0.2.0 on Node 22 and Ubuntu, each call after the initial frame retains roughly 20 MB of GPU memory even when the render target is reused. A loop eventually reaches the runner memory limit. Expected allocation to stabilize after the first render.",
+      "state": "open"
+    }
+  ],
+  "availableLabels": [
+    { "name": "bug", "description": "Something is not working" },
+    { "name": "duplicate", "description": "This issue already exists" },
+    {
+      "name": "needs-information",
+      "description": "More reporter context is required"
+    }
+  ],
+  "availableSourceIds": ["issue:9905", "duplicate:9810"],
+  "contextWarnings": [],
+  "capabilities": { "labelsAvailable": true, "duplicateSearchAvailable": true }
+}

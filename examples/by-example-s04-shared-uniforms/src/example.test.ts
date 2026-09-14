@@ -11,7 +11,7 @@ test("by-example §4 has two consumers wired for the same shared uniform layout"
 test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("by-example §4 shared uniforms feed multiple consumers", async () => {
   const { gpu, target } = await runSharedUniformsExample();
   try {
-    const pixels = await target.read();
+    const pixels = await target.color.read({ mipLevel: 0, region: "all" });
     expect(pixels[0]).toBeGreaterThan(150);
   } finally {
     gpu.dispose();

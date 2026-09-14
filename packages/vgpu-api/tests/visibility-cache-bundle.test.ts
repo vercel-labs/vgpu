@@ -113,7 +113,7 @@ test("ordinary sampling promotes f32 texture layouts while loads remain unfilter
 test("known unfilterable float textures fail with an actionable structured error", async () => {
   const gpu = await init();
   const drawable = draw(gpu, { shader: sampledTextureShader(true), label: "filterability" });
-  const hdr = gpu.device.createTexture({ size: [1, 1], format: "rgba32float", usage: ["texture_binding"], label: "hdr-color" });
+  const hdr = gpu.device.createTexture({ kind: "2d", size: [1, 1], format: "rgba32float", usage: ["texture_binding"], label: "hdr-color" });
   expect(() => drawable.set({ image: hdr })).toThrow(expect.objectContaining({
     code: "VGPU-SET-TEXTURE-FILTERABILITY",
     where: "filterability.set",
@@ -133,7 +133,7 @@ test("requested float32-filterable permits promoted rgba32float facade textures"
   const requestDevice = vi.fn(async () => new Device(device));
   const gpu = await init({ adapter: { requestDevice }, requiredFeatures: ["float32-filterable"] });
   const drawable = draw(gpu, { shader: sampledTextureShader(true), label: "feature-enabled" });
-  const hdr = gpu.device.createTexture({ size: [1, 1], format: "rgba32float", usage: ["texture_binding"], label: "filterable-hdr" });
+  const hdr = gpu.device.createTexture({ kind: "2d", size: [1, 1], format: "rgba32float", usage: ["texture_binding"], label: "filterable-hdr" });
   expect(bindGroupLayoutMetadata(drawable.layout(0))?.entries.find((entry) => entry.binding === 0)?.texture?.sampleType).toBe("float");
   expect(() => drawable.set({ image: hdr, imageSampler: sampler(gpu, { minFilter: "linear" }) })).not.toThrow();
   expect(requestDevice).toHaveBeenCalledWith(expect.objectContaining({ requiredFeatures: ["float32-filterable"] }));

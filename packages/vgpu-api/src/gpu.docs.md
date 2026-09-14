@@ -12,7 +12,7 @@ import { init } from "vgpu/mock";
 ## Signature
 
 ```ts
-import type { Bundle, BundleOptions, BundleRecorder, Clock, Compute, ComputeOptions, Draw, DrawOptions, Effect, EffectOptions, Frame, FrameLoopHandle, FrameLoopOptions, Geometry, GeometryOptions, GeometryRecipe, GpuErrorListener, PingPongStorage, PingPongTargets, SharedUniforms, StorageAccess, StorageBuffer, StorageOptions, Surface, SurfaceOptions, Target, TargetOptions, TargetTextureOptions, Timer, Visibility, VisibilityOptions } from "vgpu";
+import type { Bundle, BundleOptions, BundleRecorder, Clock, Compute, ComputeOptions, Draw, DrawOptions, Effect, EffectOptions, Frame, FrameLoopHandle, FrameLoopOptions, Geometry, GeometryOptions, GeometryRecipe, GpuErrorListener, PingPongStorage, PingPongTargets, SharedUniforms, StorageAccess, StorageBuffer, StorageOptions, Surface, SurfaceOptions, Target, TargetOptions, TargetTextureOptions, Texture, TextureOptions, Timer, Visibility, VisibilityOptions } from "vgpu";
 import type { Device } from "vgpu/core";
 import type { ShaderSource } from "vgpu";
 
@@ -31,6 +31,7 @@ declare function surface(gpu: Gpu, canvas: HTMLCanvasElement | OffscreenCanvas, 
 declare function effect(gpu: Gpu, source: string | ShaderSource, opts?: EffectOptions): Effect;
 declare function draw(gpu: Gpu, opts: DrawOptions): Draw;
 declare function target(gpu: Gpu, opts: TargetOptions): Target;
+declare function texture(gpu: Gpu, opts: TextureOptions): Texture;
 declare function frame(gpu: Gpu, cb?: (frame: Frame) => void): Frame;
 declare function frameLoop(gpu: Gpu, cb: (frame: Frame) => void, opts?: FrameLoopOptions): FrameLoopHandle;
 declare function sampler(gpu: Gpu, desc?: GPUSamplerDescriptor): GPUSampler;
@@ -58,6 +59,7 @@ declare function clock(gpu: Gpu): Clock;
 | effect.opts | `EffectOptions` | ✖ | `{}` | `label` defaults to `"effect"`; `set` defaults to no initial bindings. |
 | draw.opts | `DrawOptions` | ✔ | — | Includes required `shader`; see `DrawOptions`. |
 | target.opts | `TargetOptions` | ✔ | — | Offscreen target options. `size` is required. |
+| texture.opts | `TextureOptions` | ✔ | — | Standalone sampled/storage texture. `size` and `format` are required; usage defaults to sampled, storage, and copy usage. |
 | frame.cb | `(frame: Frame) => void` | ✖ | `undefined` | If provided, submits when the callback returns and cancels (submits nothing) when it throws; if omitted, caller must call `frame.submit()` or `frame.cancel()`. |
 | sampler.desc | `GPUSamplerDescriptor` | ✖ | `undefined` | Cached by descriptor. `sampler(gpu)` is the canonical default sampler. |
 | geometry.input | `GeometryOptions \\| GeometryRecipe` | ✔ | — | A raw buffer descriptor, or a `vgpu/scene` recipe such as `box()` or `plane()`. |
@@ -79,7 +81,7 @@ declare function clock(gpu: Gpu): Clock;
 
 **Returns:** each factory returns the resource named in its signature. `dispose()` and frame/pass callbacks return `void`.
 
-**Throws:** `VGPU-GPU-DISPOSED` when any factory (or `clock(gpu)`) runs after `gpu.dispose()` — the device and everything it owned are gone, so the handle it would return could only fail later; create resources before disposing, or `init()` a new gpu; `VGPU-GPU-FOREIGN` when the first argument was not created by `init()` (a plain object, a `GPUDevice`, a gpu from another library): it carries no vgpu kernel, so pass the object returned by `init()` from `vgpu`, `vgpu/node` or `vgpu/mock`; `VGPU-LIMIT-STORAGE-VERTEX` / `VGPU-LIMIT-STORAGE-FRAGMENT` when a selected render entry exceeds its granted storage-buffer limit. The structured detail reports `stage`, `entryPoint`, `count`, `limit`, and each counted binding's `name`, `group`, and `binding`; request a supported limit or reduce/move the data; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`; `VGPU-SET-TEXTURE-FILTERABILITY` when a known facade texture format cannot satisfy an ordinarily sampled float binding (detail reports format, texture binding/name/label, and paired sampler identity); `VGPU-RING1-UNSUPPORTED` for unsupported effect/compute/target cases; `VGPU-TARGET-REQUIRED` when one-shot drawing needs an explicit target; `VGPU-TARGET-SIZE-REQUIRED` for runtime JS calls to `target(gpu)` without `size`; `VGPU-SURFACE-*` errors from `surface()`, surface resize, surface readback, or using disposed surfaces; plus method-specific `VGPU-R1-*`, `VGPU-R3-*`, and `VGPU-R4-*` errors documented on `Effect`, `Draw`, `Compute`, `Frame`, `Bundle`, `Target`, and `SharedUniforms`.
+**Throws:** `VGPU-GPU-DISPOSED` when any factory (or `clock(gpu)`) runs after `gpu.dispose()` — the device and everything it owned are gone, so the handle it would return could only fail later; create resources before disposing, or `init()` a new gpu; `VGPU-GPU-FOREIGN` when the first argument was not created by `init()` (a plain object, a `GPUDevice`, a gpu from another library): it carries no vgpu kernel, so pass the object returned by `init()` from `vgpu`, `vgpu/node` or `vgpu/mock`; `VGPU-LIMIT-STORAGE-VERTEX` / `VGPU-LIMIT-STORAGE-FRAGMENT` when a selected render entry exceeds its granted storage-buffer limit. The structured detail reports `stage`, `entryPoint`, `count`, `limit`, and each counted binding's `name`, `group`, and `binding`; request a supported limit or reduce/move the data; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`; `VGPU-SET-VALUE-INVALID` when a JS-owned buffer value does not exactly match its reflected WGSL shape, integer range, or runtime extent; `VGPU-SET-TEXTURE-FILTERABILITY` when a known facade texture format cannot satisfy an ordinarily sampled float binding (detail reports format, texture binding/name/label, and paired sampler identity); `VGPU-RING1-UNSUPPORTED` for unsupported effect/compute/target cases; `VGPU-TARGET-REQUIRED` when one-shot drawing needs an explicit target; `VGPU-TARGET-SIZE-REQUIRED` for runtime JS calls to `target(gpu)` without `size`; `VGPU-SURFACE-*` errors from `surface()`, surface resize, surface readback, or using disposed surfaces; plus method-specific `VGPU-R1-*`, `VGPU-R3-*`, and `VGPU-R4-*` errors documented on `Effect`, `Draw`, `Compute`, `Frame`, `Bundle`, `Target`, and `SharedUniforms`.
 
 ## Examples
 

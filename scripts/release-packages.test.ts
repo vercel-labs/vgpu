@@ -2,6 +2,7 @@ import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   RELEASE_PACKAGES,
+  releasePackagesFor,
   validateReleasePackages,
 } from "./lib/release-packages.mjs";
 
@@ -59,10 +60,14 @@ describe("release package validation", () => {
       "@vgpu/adapter-node",
       "@vgpu/adapter-mock",
       "@vgpu/render",
+      "@vgpu/native",
       "vgpu",
     ];
     const packageByName = new Map(
-      RELEASE_PACKAGES.map((entry) => [entry.name, entry])
+      releasePackagesFor([
+        ...RELEASE_PACKAGES.map(({ name }) => name),
+        "@vgpu/native",
+      ]).map((entry) => [entry.name, entry])
     );
     const expectedPairs = expectedOrder.map((name) => {
       const entry = packageByName.get(name);
@@ -76,6 +81,24 @@ describe("release package validation", () => {
     ].map(([, name, directory]) => `${name}|${directory}`);
 
     expect(workflowPairs).toEqual([...expectedPairs, ...expectedPairs]);
+    const publishTarballs = workflow.match(
+      /tarballs=\(([\s\S]*?)\n          \)/
+    )?.[1];
+    expect(publishTarballs?.match(/"([^"\n]+)"/g)).toEqual(
+      expectedOrder.map(
+        (name) =>
+          `"${name.replace(/^@/, "").replace("/", "-")}-\${version}.tgz"`
+      )
+    );
+    expect(workflow).toContain('if [ "$entry_count" != "9" ]');
+    expect(
+      workflow.indexOf("node scripts/fetch-native-worker.mjs")
+    ).toBeGreaterThan(0);
+    expect(
+      workflow.indexOf("node scripts/fetch-native-worker.mjs")
+    ).toBeLessThan(
+      workflow.indexOf("- name: Pack and validate the exact release artifacts")
+    );
     expect(workflow).toContain(
       'EXPECTED_VERSION="$tag_version" node scripts/check-release-packages.mjs'
     );
@@ -123,6 +146,63 @@ describe("release package validation", () => {
 
   it("accepts exactly the seven allowlisted public packages", () => {
     expect(validateReleasePackages(validInput())).toEqual([]);
+  });
+
+  it("accepts native only when explicitly activated in the fixed group with coherent public metadata", () => {
+    const input = validInput();
+    input.configuredFixedPackageNames.push("@vgpu/native");
+    input.manifests.push({
+      manifestPath: "packages/native/package.json",
+      manifest: {
+        name: "@vgpu/native",
+        version,
+        private: false,
+        repository: {
+          type: "git",
+          url: "git+https://github.com/vercel-labs/vgpu.git",
+          directory: "packages/native",
+        },
+        publishConfig: { access: "public" },
+      },
+    });
+    expect(validateReleasePackages(input)).toEqual([]);
+    input.configuredFixedPackageNames.pop();
+    expect(validateReleasePackages(input)).toContain(
+      "@vgpu/native: public workspace package missing from the release allowlist"
+    );
+  });
+
+  it("requires the activated native package to be present, public and version-aligned", () => {
+    const input = validInput();
+    input.configuredFixedPackageNames.push("@vgpu/native");
+    expect(validateReleasePackages(input)).toContain(
+      "@vgpu/native: package.json not found at packages/native/package.json"
+    );
+    input.manifests.push({
+      manifestPath: "packages/native/package.json",
+      manifest: { name: "@vgpu/native", version: "0.0.0", private: true },
+    });
+    expect(validateReleasePackages(input)).toEqual(
+      expect.arrayContaining([
+        "@vgpu/native: package.json must set private to false",
+        `@vgpu/native: 0.0.0 (expected ${version})`,
+        "@vgpu/native: package.json has invalid repository metadata",
+        '@vgpu/native: publishConfig must be exactly { access: "public" }',
+      ])
+    );
+    input.configuredFixedPackageNames.push("@vgpu/native");
+    expect(validateReleasePackages(input)).toContain(
+      "@vgpu/native: duplicated in the Changesets fixed group"
+    );
+  });
+
+  it("preserves the current seven-package release with a private native workspace", () => {
+    const input = validInput();
+    input.manifests.push({
+      manifestPath: "packages/native/package.json",
+      manifest: { name: "@vgpu/native", version: "0.0.0", private: true },
+    });
+    expect(validateReleasePackages(input)).toEqual([]);
   });
 
   it("rejects an allowlisted package removed from Changesets or made private", () => {

@@ -44,11 +44,20 @@ vi.mock("./scene", () => ({
 
 import { createRenderer, installOrbitInput } from "./renderer";
 
+interface FakeSurface {
+  format: GPUTextureFormat;
+  size: [number, number];
+  onResize(callback: () => void): () => void;
+}
+
+type MakeSurface = (canvas: HTMLCanvasElement, options: unknown) => FakeSurface;
+type StartLoop = (callback: (frame: unknown) => void) => { stop(): void };
+
 interface FakeGpu {
   readonly clock: { deltaTime: number; time: number };
   readonly dispose: ReturnType<typeof vi.fn>;
-  readonly makeSurface: ReturnType<typeof vi.fn>;
-  readonly startLoop: ReturnType<typeof vi.fn>;
+  readonly makeSurface: ReturnType<typeof vi.fn<MakeSurface>>;
+  readonly startLoop: ReturnType<typeof vi.fn<StartLoop>>;
 }
 
 function deferred<T>() {
@@ -142,8 +151,8 @@ function setup() {
   const gpu: FakeGpu = {
     clock: { deltaTime: 0.5, time: 2.1 },
     dispose: vi.fn(),
-    makeSurface: vi.fn(() => output),
-    startLoop: vi.fn((callback: (frame: unknown) => void) => {
+    makeSurface: vi.fn<MakeSurface>(() => output),
+    startLoop: vi.fn<StartLoop>((callback) => {
       loopCallback = callback;
       return { stop };
     }),

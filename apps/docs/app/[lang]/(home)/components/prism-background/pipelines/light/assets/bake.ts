@@ -91,6 +91,7 @@ export async function bakeLightAssetTextures(
 function createBakedTexture(gpu: Gpu, spec: LightAssetSpec): BakedTexture {
   return {
     texture: gpu.device.createTexture({
+      kind: "2d",
       size: spec.size,
       format: "rgba8unorm",
       mipLevelCount: mipLevelCount(spec.size),
@@ -145,7 +146,7 @@ function encodeBase(
   );
   pass.dispatchWorkgroups(
     Math.ceil(output.size[0] / WORKGROUP_SIZE),
-    Math.ceil(output.size[1] / WORKGROUP_SIZE)
+    Math.ceil((output.size[1] ?? 1) / WORKGROUP_SIZE)
   );
   pass.end();
 }
@@ -158,7 +159,7 @@ function encodeMipChain(
 ): void {
   for (let level = 1; level < texture.mipLevelCount; level++) {
     const width = Math.max(1, texture.size[0] >> level);
-    const height = Math.max(1, texture.size[1] >> level);
+    const height = Math.max(1, (texture.size[1] ?? 1) >> level);
     const pass = encoder.beginComputePass({
       label: `${texture.label}.mip${level}`,
     });
@@ -230,6 +231,7 @@ async function loadWallMaskTexture(gpu: Gpu): Promise<Texture | undefined> {
         `Wall mask is ${bitmap.width}x${bitmap.height}; expected ${WALL_MASK_SIZE.join("x")}.`
       );
     texture = gpu.device.createTexture({
+      kind: "2d",
       size: WALL_MASK_SIZE,
       format: "rgba8unorm",
       usage: ["texture_binding", "copy_dst", "render_attachment"],

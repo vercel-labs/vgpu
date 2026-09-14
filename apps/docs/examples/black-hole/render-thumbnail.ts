@@ -23,9 +23,9 @@ export async function renderThumbnail(
   colorTarget: Target,
   opts: ThumbOptions = {},
 ): Promise<void> {
-  const effects = createEffects(gpu);
   const targets = createTargets(gpu, colorTarget.size);
   try {
+    const effects = createEffects(gpu, targets);
     const time = opts.time ?? 8.5;
     setBindings(effects, targets);
     await prewarm(effects, targets, colorTarget);
@@ -37,14 +37,14 @@ export async function renderThumbnail(
     await gpu.gpu.queue.onSubmittedWorkDone();
     await opts.onVariantRendered?.(
       'time-delta',
-      await colorTarget.read(),
+      await colorTarget.color.read({ mipLevel: 0, region: "all" }),
       colorTarget.size,
     );
     render(time, [0.72, 0.34]);
     await gpu.gpu.queue.onSubmittedWorkDone();
     await opts.onVariantRendered?.(
       'pointer-orbit',
-      await colorTarget.read(),
+      await colorTarget.color.read({ mipLevel: 0, region: "all" }),
       colorTarget.size,
     );
     render(time, [0, 0.05]);

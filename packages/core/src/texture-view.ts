@@ -78,7 +78,7 @@ function assertTextureDimension2D(texture: TextureLike, where: "cubeView" | "lay
 }
 
 function arrayLayerCount(texture: TextureLike): number {
-  if (texture instanceof Texture) return texture.size[2] ?? 1;
+  if (texture instanceof Texture) return texture.layers;
   return texture.depthOrArrayLayers;
 }
 

@@ -137,6 +137,7 @@ import { createMockAdapter } from "vgpu/mock";
 const device = await createMockAdapter().requestDevice();
 const uniformBuffer = device.createBuffer({ size: 64, usage: ["uniform", "copy_dst"] });
 const texture = device.createTexture({
+  kind: "2d",
   size: [1, 1],
   format: "rgba8unorm",
   usage: ["texture_binding", "copy_src"],

@@ -100,7 +100,7 @@ function setup(options: { failCompile?: boolean } = {}) {
     resize: ReturnType<typeof vi.fn>;
     destroy: ReturnType<typeof vi.fn>;
     format: string;
-    read: ReturnType<typeof vi.fn>;
+    color: { read: ReturnType<typeof vi.fn> };
   }> = [];
   const effects: Array<{ set: ReturnType<typeof vi.fn>; compile: ReturnType<typeof vi.fn> }> = [];
   const surface = { size: [200, 100], format: 'bgra8unorm', dispose: vi.fn() };
@@ -130,7 +130,7 @@ function setup(options: { failCompile?: boolean } = {}) {
           resize: vi.fn(),
           destroy: vi.fn(),
           format: 'rgba16float',
-          read: vi.fn(async () => new Uint8Array()),
+          color: { read: vi.fn(async () => new Uint8Array()) },
         };
         targetObjects.push(target);
         return target;
@@ -240,12 +240,18 @@ test('initialization failure delegates resource teardown to the GPU', async () =
   }
 });
 
-test('thumbnail destroys its target graph when prewarm fails', async () => {
-  const env = setup({ failCompile: true });
+test.each(['effect construction', 'prewarm'])('thumbnail destroys its target graph when %s fails', async (stage) => {
+  const env = setup({ failCompile: stage === 'prewarm' });
+  const message = stage === 'prewarm' ? 'compile failed' : 'effect construction failed';
+  if (stage === 'effect construction') {
+    env.gpu.fns.effect.mockImplementationOnce(() => {
+      throw new Error(message);
+    });
+  }
   const output = {
     size: [160, 90],
     format: 'rgba8unorm',
-    read: vi.fn(async () => new Uint8Array()),
+    color: { read: vi.fn(async () => new Uint8Array()) },
   };
   const drainPending = deferred<void>();
   const settledPending = deferred<void>();
@@ -262,7 +268,7 @@ test('thumbnail destroys its target graph when prewarm fails', async () => {
   }
   drainPending.resolve();
   settledPending.resolve();
-  await expect(rendering).rejects.toThrow('compile failed');
+  await expect(rendering).rejects.toThrow(message);
   for (const target of env.targetObjects) {
     expect(target.destroy).toHaveBeenCalledOnce();
   }

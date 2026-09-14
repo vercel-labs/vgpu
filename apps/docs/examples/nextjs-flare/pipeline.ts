@@ -340,6 +340,7 @@ export class FlarePipeline {
         logoScale: logo.placement.logoScale,
         uvInset: [pad / logo.width, pad / logo.height],
         edge: 1.1,
+        _pad: 0,
       },
     });
   }

@@ -1,7 +1,11 @@
 import { expect, test, vi } from "vitest";
 import { Readback } from "../src/readback.ts";
+import { Device } from "../src/device.ts";
+import { Texture } from "../src/texture.ts";
 
 interface CopyRecord {
+  readonly source: GPUTexelCopyTextureInfo;
+  readonly extent: GPUExtent3DStrict;
   readonly bytesPerRow: number | undefined;
   readonly rowsPerImage: number | undefined;
 }
@@ -12,6 +16,7 @@ interface StagingSpy {
 }
 
 interface StubOptions {
+  readonly failAt?: "encode" | "submit" | "getMappedRange";
   /** Rejects mapAsync, as a lost device does. */
   readonly failMap?: boolean;
   /** Throws from unmap, as a lost/destroyed buffer does. */
@@ -41,6 +46,7 @@ function createStubDevice(options: StubOptions = {}): { device: GPUDevice; stagi
         },
         getMappedRange: () => {
           calls.push("getMappedRange");
+          if (options.failAt === "getMappedRange") throw new Error("getMappedRange failed");
           return bytes.buffer;
         },
         unmap: () => {
@@ -54,18 +60,19 @@ function createStubDevice(options: StubOptions = {}): { device: GPUDevice; stagi
     },
     createCommandEncoder: () => ({
       copyBufferToBuffer: () => undefined,
-      copyTextureToBuffer: (_source: unknown, destination: GPUTexelCopyBufferInfo) => {
-        copies.push({ bytesPerRow: destination.bytesPerRow, rowsPerImage: destination.rowsPerImage });
+      copyTextureToBuffer: (source: GPUTexelCopyTextureInfo, destination: GPUTexelCopyBufferInfo, extent: GPUExtent3DStrict) => {
+        if (options.failAt === "encode") throw new Error("encode failed");
+        copies.push({ source, extent, bytesPerRow: destination.bytesPerRow, rowsPerImage: destination.rowsPerImage });
       },
       finish: () => ({}) as GPUCommandBuffer,
     }) as unknown as GPUCommandEncoder,
-    queue: { submit: () => undefined } as unknown as GPUQueue,
+    queue: { submit: () => { if (options.failAt === "submit") throw new Error("submit failed"); } } as unknown as GPUQueue,
   } as unknown as GPUDevice;
   return { device, staging, copies };
 }
 
 const source = {} as GPUBuffer;
-const texture = {} as GPUTexture;
+const texture = { width: 2, height: 2, depthOrArrayLayers: 1, dimension: "2d", mipLevelCount: 1, sampleCount: 1, usage: 1, format: "rgba8unorm" } as GPUTexture;
 
 test("read() unmaps and destroys the staging buffer on the happy path", async () => {
   const { device, staging } = createStubDevice();
@@ -93,25 +100,24 @@ test("read() treats unmap as best-effort and still returns the copied bytes", as
 });
 
 test("readTexture() destroys the staging buffer on success, on a failed map, and on a failed unmap", async () => {
-  const size = [2, 2] as const;
   const ok = createStubDevice();
-  const pixels = await new Readback(ok.device).readTexture(texture, size, "rgba8unorm");
+  const pixels = await new Readback(ok.device).readTexture(texture, { mipLevel: 0, region: "all" });
   expect(pixels).toHaveLength(2 * 2 * 4);
   expect(ok.staging[0]!.calls).toEqual(["mapAsync", "getMappedRange", "unmap", "destroy"]);
 
   const failedMap = createStubDevice({ failMap: true });
-  await expect(new Readback(failedMap.device).readTexture(texture, size, "rgba8unorm")).rejects.toThrowError(/device lost/);
+  await expect(new Readback(failedMap.device).readTexture(texture, { mipLevel: 0, region: "all" })).rejects.toThrowError(/device lost/);
   expect(failedMap.staging[0]!.calls).toEqual(["mapAsync", "destroy"]);
 
   const failedUnmap = createStubDevice({ failUnmap: true });
-  await expect(new Readback(failedUnmap.device).readTexture(texture, size, "rgba8unorm")).resolves.toHaveLength(2 * 2 * 4);
+  await expect(new Readback(failedUnmap.device).readTexture(texture, { mipLevel: 0, region: "all" })).resolves.toHaveLength(2 * 2 * 4);
   expect(failedUnmap.staging[0]!.calls).toEqual(["mapAsync", "getMappedRange", "unmap", "destroy"]);
 });
 
 test("readTexture() rejects unsupported formats before allocating a staging buffer", async () => {
   const { device, staging } = createStubDevice();
   // Depth/stencil needs aspect selection, so it stays outside the readback format table.
-  await expect(new Readback(device).readTexture(texture, [1, 1], "depth24plus")).rejects.toMatchObject({ code: "VGPU-CORE-UNSUPPORTED-FORMAT" });
+  await expect(new Readback(device).readTexture({ ...texture, width: 1, height: 1, format: "depth24plus" }, { mipLevel: 0, region: "all" })).rejects.toMatchObject({ code: "VGPU-CORE-UNSUPPORTED-FORMAT" });
   expect(staging).toEqual([]);
   vi.restoreAllMocks();
 });
@@ -119,9 +125,9 @@ test("readTexture() rejects unsupported formats before allocating a staging buff
 test("readTexture() sizes the staging copy from the format's bytesPerPixel and strips row padding", async () => {
   // rgba16float is 8 bytes per texel: a 3-wide row is 24 bytes, padded to the 256-byte copy alignment.
   const { device, staging, copies } = createStubDevice({ pattern: true });
-  const pixels = await new Readback(device).readTexture(texture, [3, 2], "rgba16float");
+  const pixels = await new Readback(device).readTexture({ ...texture, width: 3, height: 2, format: "rgba16float" }, { mipLevel: 0, region: "all" });
 
-  expect(copies).toEqual([{ bytesPerRow: 256, rowsPerImage: 2 }]);
+  expect(copies).toEqual([expect.objectContaining({ bytesPerRow: 256, rowsPerImage: 2 })]);
   expect(staging[0]!.buffer.size).toBe(256 * 2);
   expect(pixels).toHaveLength(3 * 2 * 8);
   // Row 0 is bytes 0..23 of the mapped range, row 1 starts at the padded offset 256.
@@ -131,8 +137,40 @@ test("readTexture() sizes the staging copy from the format's bytesPerPixel and s
 
 test("readTexture() returns float bytes verbatim: 16 bytes per rgba32float texel, no clamping", async () => {
   const { device } = createStubDevice({ pattern: true });
-  const pixels = await new Readback(device).readTexture(texture, [2, 1], "rgba32float");
+  const pixels = await new Readback(device).readTexture({ ...texture, width: 2, height: 1, format: "rgba32float" }, { mipLevel: 0, region: "all" });
 
   expect(pixels).toHaveLength(2 * 16);
   expect([...pixels]).toEqual([...Array(32).keys()]);
+});
+
+test.each(["encode", "submit", "getMappedRange"] as const)("readTexture cleans staging when %s throws", async failAt => {
+  const { device, staging } = createStubDevice({ failAt });
+  await expect(new Readback(device).readTexture(texture, { mipLevel: 0, region: "all" })).rejects.toThrow(`${failAt} failed`);
+  expect(staging[0]!.calls.at(-1)).toBe("destroy");
+  expect(staging[0]!.calls.filter(call => call === "destroy")).toHaveLength(1);
+});
+
+test("native copy snapshots mip/origin and strips padding across multiple slices", async () => {
+  const { device, staging, copies } = createStubDevice({ pattern: true });
+  const native = { ...texture, width: 14, height: 10, depthOrArrayLayers: 3, mipLevelCount: 3 };
+  const options = { mipLevel: 1, region: { origin: [1, 1, 1] as [number, number, number], size: [3, 2, 2] as [number, number, number] } };
+  const pending = new Readback(device).readTexture(native, options);
+  options.mipLevel = 0;
+  options.region.origin[0] = 100;
+  options.region.size[2] = 1;
+  const pixels = await pending;
+  expect(copies).toEqual([{ source: { texture: native, mipLevel: 1, origin: [1, 1, 1] }, extent: { width: 3, height: 2, depthOrArrayLayers: 2 }, bytesPerRow: 256, rowsPerImage: 2 }]);
+  expect(staging[0]!.buffer.size).toBe(1024);
+  expect([...pixels]).toEqual(Array.from({ length: 48 }, (_, i) => i % 12));
+});
+
+test("destroying a texture during a native read rejects after releasing staging", async () => {
+  const { device, staging } = createStubDevice();
+  const native = { ...texture, destroy: vi.fn() };
+  const wrapped = new Texture(new Device(device), native, { kind: "2d", size: [2, 2], format: "rgba8unorm", usage: ["copy_src"] });
+  const pending = wrapped.read({ mipLevel: 0, region: "all" });
+  wrapped.destroy();
+  await expect(pending).rejects.toMatchObject({ code: "VGPU-CORE-TEXTURE-DESTROYED" });
+  expect(staging[0]!.calls.at(-1)).toBe("destroy");
+  expect(native.destroy).toHaveBeenCalledOnce();
 });

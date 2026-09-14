@@ -447,6 +447,7 @@ export class InternalDraw implements Draw {
 
   encode(pass: GPURenderPassEncoder, target: Target | TargetSignature, opts: DrawCallOptions = {}, claimValidation?: (result: ClaimedGroupValidationResult) => void): void {
     assertDeviceUsable(drawState(this).device, `${this.label}.encode`);
+    drawState(this).setCore.assertUsable();
     const pipeline = this.pipelineFor(target, true);
     if (!pipeline) return;
     pass.setPipeline(pipeline);
@@ -1059,6 +1060,11 @@ function preview(value: unknown): string {
 export function drawReflection(draw: Draw): Reflection { return drawState(draw).reflection; }
 
 export function drawBindingState(draw: Draw, name: string): BindingState | undefined { return drawState(draw).setCore.bindingState(name); }
+
+/** Internal bundle hook: observes the resources captured by one encoded draw, not future bindings. */
+export function watchDrawResources(draw: InternalDraw, onDestroyed: (event: BundleStaleEvent) => void): () => void {
+  return drawState(draw).setCore.watchResources(change => onDestroyed({ kind: "binding-identity", drawLabel: draw.label, ...change }));
+}
 
 export function registerDrawBundle(draw: Draw, bundle: BundleBackReference): void { drawState(draw).recordedIn.add(bundle); }
 

@@ -1,6 +1,7 @@
 import type { Buffer } from "./buffer.ts";
 import type { Device } from "./device.ts";
 import type { Texture } from "./texture.ts";
+import { snapshotTextureOptions, validateTextureOptions } from "./texture-options.ts";
 import type { BufferOptions, TextureOptions } from "./types.ts";
 
 export interface PingPongCore<T extends { destroy(): void }> {
@@ -35,17 +36,25 @@ function isBufferOptions(opts: TextureOptions | BufferOptions): opts is BufferOp
 }
 
 function createTexturePingPong(device: Device, opts: TextureOptions): TexturePingPong {
+  validateTextureOptions(opts, device.gpu);
+  opts = snapshotTextureOptions(opts);
   let size = cloneTextureSize(opts.size);
   let readIsPing = true;
   let destroyed = false;
-  let ping = device.createTexture(textureOptions(opts, size, "ping"));
-  let pong = device.createTexture(textureOptions(opts, size, "pong"));
+  function allocate(nextSize: TextureOptions["size"]): [Texture, Texture] {
+    const ping = device.createTexture(textureOptions(opts, nextSize, "ping"));
+    try { return [ping, device.createTexture(textureOptions(opts, nextSize, "pong"))]; }
+    catch (error) {
+      try { ping.destroy(); } catch { /* Preserve the preparation error. */ }
+      throw error;
+    }
+  }
+  let [ping, pong] = allocate(size);
 
   const destroy = () => {
     if (destroyed) return;
     destroyed = true;
-    ping.destroy();
-    pong.destroy();
+    try { ping.destroy(); } finally { pong.destroy(); }
   };
 
   return {
@@ -56,13 +65,14 @@ function createTexturePingPong(device: Device, opts: TextureOptions): TexturePin
     reset() { readIsPing = true; },
     resize(nextSize: TextureOptions["size"]): boolean {
       if (destroyed) throw new Error("PingPong is destroyed");
+      validateTextureOptions(textureOptions(opts, nextSize, "ping"), device.gpu);
       if (sameTextureSize(size, nextSize)) return false;
-      ping.destroy();
-      pong.destroy();
+      const next = allocate(nextSize);
+      const previous = [ping, pong];
       size = cloneTextureSize(nextSize);
-      ping = device.createTexture(textureOptions(opts, size, "ping"));
-      pong = device.createTexture(textureOptions(opts, size, "pong"));
+      [ping, pong] = next;
       readIsPing = true;
+      try { previous[0]!.destroy(); } finally { previous[1]!.destroy(); }
       return true;
     },
     destroy,
@@ -107,7 +117,7 @@ function createBufferPingPong(device: Device, opts: BufferOptions): BufferPingPo
 }
 
 function textureOptions(opts: TextureOptions, size: TextureOptions["size"], half: "ping" | "pong"): TextureOptions {
-  return { ...opts, size: cloneTextureSize(size), label: label(opts.label, half) };
+  return { ...opts, size: cloneTextureSize(size), label: label(opts.label, half) } as TextureOptions;
 }
 
 function bufferOptions(opts: BufferOptions, size: number, half: "ping" | "pong"): BufferOptions {
@@ -119,9 +129,9 @@ function label(base: string | undefined, half: "ping" | "pong"): string | undefi
 }
 
 function cloneTextureSize(size: TextureOptions["size"]): TextureOptions["size"] {
-  return size[2] === undefined ? [size[0], size[1]] : [size[0], size[1], size[2]];
+  return [...size] as TextureOptions["size"];
 }
 
 function sameTextureSize(a: TextureOptions["size"], b: TextureOptions["size"]): boolean {
-  return a[0] === b[0] && a[1] === b[1] && (a[2] ?? 1) === (b[2] ?? 1);
+  return a.length === b.length && a.every((value, index) => value === b[index]);
 }

@@ -58,7 +58,7 @@ export async function renderThumbnail(
     presentScene(scene, output, view);
     await gpu.gpu.queue.onSubmittedWorkDone();
     const baseline = wantsStats
-      ? new Uint8Array(await output.read())
+      ? new Uint8Array(await output.color.read({ mipLevel: 0, region: "all" }))
       : undefined;
 
     if (options.scriptedStroke) {
@@ -76,7 +76,7 @@ export async function renderThumbnail(
     await gpu.settled();
 
     if (wantsStats) {
-      const pixels = new Uint8Array(await output.read());
+      const pixels = new Uint8Array(await output.color.read({ mipLevel: 0, region: "all" }));
       const stats: RadianceCascadesStats = {
         ...imageStats(pixels, output.size[0], output.size[1]),
         cascades: scene.cascadeCount,
@@ -111,7 +111,7 @@ async function countEmitterTexels(
 ): Promise<number> {
   presentScene(scene, output, "emitters");
   await gpu.gpu.queue.onSubmittedWorkDone();
-  const pixels = new Uint8Array(await output.read());
+  const pixels = new Uint8Array(await output.color.read({ mipLevel: 0, region: "all" }));
   let count = 0;
   for (let index = 0; index < pixels.length; index += 4) {
     if (pixels[index]! + pixels[index + 1]! + pixels[index + 2]! > 24) {

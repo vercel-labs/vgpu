@@ -1,9 +1,12 @@
 import { expect, test, vi } from "vitest";
 
 const routed = vi.hoisted(() => ({
-  effect: (gpu: FakeGpu, ...args: unknown[]) => gpu.fns.effect(...args),
-  sampler: (gpu: FakeGpu, ...args: unknown[]) => gpu.fns.sampler(...args),
-  target: (gpu: FakeGpu, ...args: unknown[]) => gpu.fns.target(...args),
+  effect: (gpu: FakeGpu, ...args: Parameters<FakeGpu["fns"]["effect"]>) =>
+    gpu.fns.effect(...args),
+  sampler: (gpu: FakeGpu, ...args: Parameters<FakeGpu["fns"]["sampler"]>) =>
+    gpu.fns.sampler(...args),
+  target: (gpu: FakeGpu, ...args: Parameters<FakeGpu["fns"]["target"]>) =>
+    gpu.fns.target(...args),
 }));
 
 vi.mock("vgpu", () => routed);
@@ -33,9 +36,16 @@ interface FakeTarget {
 
 interface FakeGpu {
   fns: {
-    effect: ReturnType<typeof vi.fn>;
-    sampler: ReturnType<typeof vi.fn>;
-    target: ReturnType<typeof vi.fn>;
+    effect: ReturnType<typeof vi.fn<() => FakeEffect>>;
+    sampler: ReturnType<typeof vi.fn<() => object>>;
+    target: ReturnType<
+      typeof vi.fn<
+        (options: {
+          format: GPUTextureFormat;
+          size: [number, number];
+        }) => FakeTarget
+      >
+    >;
   };
 }
 
@@ -101,7 +111,7 @@ function setup() {
   return { effects, fail, gpu, targets };
 }
 
-test("partial effect or target construction never allocates later targets and preserves identity", () => {
+test("partial effect or target construction releases owned targets and preserves identity", () => {
   const effectEnv = setup();
   const effectFailure = new Error("effect failed");
   effectEnv.fail.effectAt = 3;
@@ -110,7 +120,9 @@ test("partial effect or target construction never allocates later targets and pr
     effectFailure
   );
   expect(effectEnv.effects).toHaveLength(2);
-  expect(effectEnv.targets).toHaveLength(0);
+  expect(effectEnv.targets).toHaveLength(3);
+  for (const target of effectEnv.targets)
+    expect(target.color.destroy).toHaveBeenCalledOnce();
 
   const targetEnv = setup();
   const allocationFailure = new Error("target failed");

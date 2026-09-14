@@ -96,7 +96,9 @@ export function createRadiance(gpu: Gpu, screen: readonly [number, number]) {
       irradiance,
       samp,
       effects: {
-        emitter: effect(gpu, rcEmitterWgsl, { set: { samp } }),
+        emitter: effect(gpu, rcEmitterWgsl, {
+          set: { samp, params: { time: 0, aspect: emitter.size[0] / emitter.size[1] } },
+        }),
         jfaInit: effect(gpu, jfaInitWgsl),
         // Uniforms upload immediately, so every encoded pass needs its own effect.
         jfaSteps: jumps.map(() => effect(gpu, jfaPassWgsl)),

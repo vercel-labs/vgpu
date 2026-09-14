@@ -35,8 +35,8 @@ export async function renderThumbnail(
   let dust: Dust | undefined;
   let dustBuffer: { dispose(): void } | undefined;
   try {
-    const effects = createEffects(gpu);
     targets = createTargets(gpu, output.size);
+    const effects = createEffects(gpu, targets);
     radiance = createRadiance(gpu, output.size);
     dust = createDust(gpu.gpu as GPUDevice);
     dustBuffer = gpu.device.wrapBuffer(dust.buffer);

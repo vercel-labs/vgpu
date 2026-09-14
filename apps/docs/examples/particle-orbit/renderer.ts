@@ -138,8 +138,8 @@ export function createRenderer(options: RendererOptions) {
 
     gpu = nextGpu;
     canvasSurface = surface(gpu, options.canvas, { dpr: [1, 1.6] });
-    effects = createEffects(gpu);
     targets = createTargets(gpu, canvasSurface.size);
+    effects = createEffects(gpu, targets);
     radiance = createRadiance(gpu, canvasSurface.size);
     // TypeGPU creates the simulation buffer on vgpu's device; vgpu wraps the
     // same GPUBuffer for zero-copy rendering.

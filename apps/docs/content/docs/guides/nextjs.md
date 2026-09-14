@@ -206,3 +206,4 @@ Then prove the pixels in Node instead of squinting at a browser tab: [Getting st
 - `npx vgpu docs cat /@vgpu/wgsl/runtime/resolve-shader.docs.md` — resolving import graphs without a bundler
 - `npx vgpu docs cat /@vgpu/wgsl-std/noise/index.docs.md` — WGSL modules you can import by package name
 - [Publishing WGSL module packages](publishing-wgsl-packages.docs.md) — ship your own `.wgsl` modules as a package, or share them across a monorepo
+- [Shipping to production](shipping-to-production.docs.md) — the pre-PR checklist: correctness gates, measurements, free performance defaults, and cheaper alternatives to propose

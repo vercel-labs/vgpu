@@ -64,7 +64,7 @@ mkdirSync(OUT_DIR, { recursive: true });
 for (const name of selected) {
   const effect = gpu.effect({ version: 1, wgsl: resolved.wgsl }, { set: { params: { mode: MODES[name]!, t: FRAME_TIME, span, center } } });
   effect.draw(target);
-  const pixels = new Uint8Array(await target.read());
+  const pixels = new Uint8Array(await target.color.read({ mipLevel: 0, region: "all" }));
   const png = new PNG({ width: SIZE, height: SIZE });
   png.data.set(pixels);
   for (let i = 3; i < png.data.length; i += 4) png.data[i] = 255;

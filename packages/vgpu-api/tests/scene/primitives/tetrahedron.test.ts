@@ -8,6 +8,6 @@ test("Mesh.tetrahedron creates flat indexed data", async () => {
   await expectPolyhedronBasics(TETRAHEDRON);
 });
 
-test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("tetrahedron primitive snapshot battery matches", async () => {
+test.skipIf(!process.env.VGPU_SNAPSHOT_MODE)("tetrahedron primitive snapshot battery matches", async () => {
   await expectPolyhedronSnapshots(TETRAHEDRON);
 });

@@ -1,6 +1,7 @@
 import { bufferUsageFlags } from "./gpu-constants.ts";
 import { isMockGPUBuffer, isMockGPUTexture, type MockGPUBuffer, type MockGPUTexture } from "./mock-gpu-storage.ts";
 import { textureReadbackFormat } from "./readback.ts";
+import { textureMipExtent } from "./texture-read-selection.ts";
 
 export interface MockGPUDeviceInstrumentation {
   readonly calls: {
@@ -50,11 +51,13 @@ export function createMockGPUDevice(options: MockGPUDeviceOptions = {}): GPUDevi
     },
     createTexture(desc: GPUTextureDescriptor): MockGPUTexture {
       const size = textureSize(desc.size);
-      // Sized by the real format and layer count (layer-major, mip 0 only) so Texture.read()/readFloats()
-      // see the same byte layout as a real device and a write to layer N cannot clobber layer 0.
-      const bytes = new Uint8Array(size.width * size.height * size.depthOrArrayLayers * mockBytesPerPixel(desc.format));
+      const mips = Array.from({ length: desc.mipLevelCount ?? 1 }, (_, mip) => {
+        const [w, h, d] = textureMipExtent({ ...size, dimension: desc.dimension ?? "2d" }, mip);
+        return new Uint8Array(w * h * d * mockBytesPerPixel(desc.format));
+      });
       return {
-        __vgpuMockBytes: bytes,
+        __vgpuMockBytes: mips[0]!,
+        __vgpuMockMips: mips,
         label: desc.label ?? "",
         width: size.width,
         height: size.height,
@@ -180,8 +183,10 @@ export function createMockGPUDevice(options: MockGPUDeviceOptions = {}): GPUDevi
       writeTexture(destination: GPUTexelCopyTextureInfo, data: BufferSource, dataLayout: GPUTexelCopyBufferLayout, size: GPUExtent3DStrict) {
         const texture = destination.texture;
         if (!isMockGPUTexture(texture)) return;
-        // The mock only stores mip 0; writing another level would silently corrupt it, so say so instead.
-        if (destination.mipLevel) throw new Error("createMockGPUDevice: queue.writeTexture only supports mipLevel 0, the mock stores mip 0 only");
+        const mip = destination.mipLevel ?? 0;
+        if (!Number.isSafeInteger(mip) || mip < 0 || mip >= texture.mipLevelCount) throw new Error("writeTexture: mipLevel is outside the allocated mip chain");
+        const stored = texture.__vgpuMockMips?.[mip] ?? texture.__vgpuMockBytes;
+        const [mipWidth, mipHeight, mipDepth] = textureMipExtent(texture, mip);
         const bytesPerPixel = mockBytesPerPixel(texture.format);
         const extent = textureSize(size);
         const origin = textureOrigin(destination.origin);
@@ -190,12 +195,18 @@ export function createMockGPUDevice(options: MockGPUDeviceOptions = {}): GPUDevi
         const rowBytes = extent.width * bytesPerPixel;
         const bytesPerRow = dataLayout.bytesPerRow ?? rowBytes;
         const rowsPerImage = dataLayout.rowsPerImage ?? extent.height;
-        const layerBytes = texture.width * texture.height * bytesPerPixel;
+        const starts = [origin.x, origin.y, origin.z];
+        const lengths = [extent.width, extent.height, extent.depthOrArrayLayers];
+        const bounds = [mipWidth, mipHeight, mipDepth];
+        if (starts.some((v, i) => !Number.isSafeInteger(v) || v < 0 || !Number.isSafeInteger(lengths[i]) || lengths[i]! <= 0 || lengths[i]! > bounds[i]! - v)) throw new Error("writeTexture: region is outside the selected mip");
+        const required = offset + (extent.depthOrArrayLayers - 1) * rowsPerImage * bytesPerRow + (extent.height - 1) * bytesPerRow + rowBytes;
+        if (![offset, bytesPerRow, rowsPerImage, required].every(Number.isSafeInteger) || offset < 0 || bytesPerRow < rowBytes || rowsPerImage < extent.height || required > source.byteLength) throw new Error("writeTexture: source layout is too small or invalid");
+        const layerBytes = mipWidth * mipHeight * bytesPerPixel;
         for (let z = 0; z < extent.depthOrArrayLayers; z++) {
           for (let y = 0; y < extent.height; y++) {
             const src = offset + (z * rowsPerImage + y) * bytesPerRow;
-            const dst = (origin.z + z) * layerBytes + ((origin.y + y) * texture.width + origin.x) * bytesPerPixel;
-            texture.__vgpuMockBytes.set(source.subarray(src, src + rowBytes), dst);
+            const dst = (origin.z + z) * layerBytes + ((origin.y + y) * mipWidth + origin.x) * bytesPerPixel;
+            stored.set(source.subarray(src, src + rowBytes), dst);
           }
         }
       },

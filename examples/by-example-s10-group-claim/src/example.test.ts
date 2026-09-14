@@ -10,7 +10,7 @@ test("by-example §10 shader exposes a whole claimed bind group layout", () => {
 test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("by-example §10 group claim accepts dynamic offsets at draw time", async () => {
   const { gpu, target } = await runGroupClaimExample();
   try {
-    const pixels = await target.read();
+    const pixels = await target.color.read({ mipLevel: 0, region: "all" });
     expect(pixels[0]).toBeGreaterThan(180);
   } finally {
     gpu.dispose();

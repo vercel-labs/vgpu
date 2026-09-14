@@ -8,6 +8,6 @@ test("Mesh.icosahedron creates flat indexed data", async () => {
   await expectPolyhedronBasics(ICOSAHEDRON);
 });
 
-test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("icosahedron primitive snapshot battery matches", async () => {
+test.skipIf(!process.env.VGPU_SNAPSHOT_MODE)("icosahedron primitive snapshot battery matches", async () => {
   await expectPolyhedronSnapshots(ICOSAHEDRON);
 });

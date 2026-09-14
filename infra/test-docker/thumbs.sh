@@ -63,4 +63,4 @@ docker run \
   --label vgpu-test=1 \
   -v "$ROOT_DIR/apps/docs/public/examples:/workspace/apps/docs/public/examples" \
   "$IMAGE_TAG" \
-  sh -lc "Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & xvfb_pid=\$!; VGPU_DOCKER_TEST=1 pnpm --filter docs ${THUMBS_SCRIPT}${ARGS_QUOTED}; status=\$?; kill \$xvfb_pid; exit \$status"
+  sh -lc "VGPU_DOCKER_TEST=1 pnpm --filter docs ${THUMBS_SCRIPT}${ARGS_QUOTED}"

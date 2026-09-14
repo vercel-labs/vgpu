@@ -50,7 +50,7 @@ async function renderCube(gpu: Awaited<ReturnType<typeof init>>, shader: string,
     [light]: { direction, color: [1, 1, 1], intensity: 1 },
   });
   cube.draw({ target: colorTarget });
-  return colorTarget.read();
+  return colorTarget.color.read({ mipLevel: 0, region: "all" });
 }
 
 function bindingName(drawable: Parameters<typeof drawReflection>[0], binding: number): string {

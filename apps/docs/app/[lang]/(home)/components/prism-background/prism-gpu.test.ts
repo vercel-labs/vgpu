@@ -60,6 +60,46 @@ const ISOLATED_GLASS: PrismControls = {
 const ISOLATED_GLASS_WALL: PrismControls = { ...ISOLATED_GLASS, view: 'wall' };
 
 describe.skipIf(gpuOnly)('prism-rainbow picture', () => {
+  test('reflected studio panels stay continuous near internal face transitions', async () => {
+    const gpu = await init();
+    try {
+      const output = target(gpu, {
+        size: [1600, 900],
+        format: 'rgba8unorm',
+        label: 'prism-reflection-continuity',
+      });
+      await renderComposite(gpu, output, { controls: ISOLATED_GLASS });
+      const pixels = await output.color.read({ mipLevel: 0, region: "all" });
+      const red = (x: number, y: number) => pixels[(y * 1600 + x) * 4]!;
+      // Three smooth interiors of the bottom-left studio reflection. The old
+      // ray-origin bias skipped neighboring faces near edges, leaving isolated
+      // dark pixels here even with environment mip selection corrected.
+      const patches = [
+        [538, 568, 544, 583],
+        [560, 580, 574, 589],
+        [545, 606, 568, 615],
+      ] as const;
+      for (const [x0, y0, x1, y1] of patches) {
+        let deepestDip = 0;
+        let brightness = 0;
+        for (let y = y0; y < y1; y++) {
+          for (let x = x0; x < x1; x++) {
+            brightness += red(x, y);
+            const neighbors = Math.max(
+              Math.min(red(x - 1, y), red(x + 1, y)),
+              Math.min(red(x, y - 1), red(x, y + 1)),
+            );
+            deepestDip = Math.max(deepestDip, neighbors - red(x, y));
+          }
+        }
+        expect(brightness / ((x1 - x0) * (y1 - y0))).toBeGreaterThan(110);
+        expect(deepestDip, `reflection patch at ${x0},${y0}`).toBeLessThanOrEqual(8);
+      }
+    } finally {
+      gpu.dispose();
+    }
+  });
+
   test('the rainbow lands in the prism’s shadow, and the wall stays dark', async () => {
     const gpu = await init();
     try {
@@ -83,7 +123,7 @@ describe.skipIf(gpuOnly)('prism-rainbow picture', () => {
     try {
       const output = target(gpu, { size: SIZE, format: 'rgba8unorm', label: 'prism-order' });
       await renderComposite(gpu, output, { controls: CAUSTIC_ONLY });
-      const pixels = await output.read();
+      const pixels = await output.color.read({ mipLevel: 0, region: "all" });
       let redY = 0;
       let redCount = 0;
       let violetY = 0;
@@ -155,7 +195,7 @@ describe.skipIf(gpuOnly)('prism-rainbow picture', () => {
       const render = async (arc: number): Promise<Uint8Array> => {
         const output = target(gpu, { size: [160, 90], format: 'rgba8unorm', label: `prism-arc-${arc}` });
         await renderComposite(gpu, output, { lampArc: arc });
-        return output.read();
+        return output.color.read({ mipLevel: 0, region: "all" });
       };
       const low = await render(0);
       const high = await render(1);
@@ -178,7 +218,7 @@ describe.skipIf(gpuOnly)('prism-rainbow room', () => {
         // Isolate the wall: the intentionally black glass environment now puts
         // valid near-black pixels inside the prism silhouette.
         await renderComposite(gpu, output, { controls: COVERAGE_WALL });
-        const pixels = await output.read();
+        const pixels = await output.color.read({ mipLevel: 0, region: "all" });
         let darkest = 1;
         for (let index = 0; index < pixels.length; index += 4) {
           const luma = (0.2126 * pixels[index]! + 0.7152 * pixels[index + 1]! + 0.0722 * pixels[index + 2]!) / 255;
@@ -201,7 +241,7 @@ describe.skipIf(gpuOnly)('prism-rainbow room', () => {
       await renderComposite(gpu, wall, { controls: ISOLATED_GLASS_WALL });
 
       const box = prismSilhouette(SIZE[0] / Math.max(1, SIZE[1]));
-      const [withGlass, withoutGlass] = [await glass.read(), await wall.read()];
+      const [withGlass, withoutGlass] = [await glass.color.read({ mipLevel: 0, region: "all" }), await wall.color.read({ mipLevel: 0, region: "all" })];
       let inside = 0;
       let insideChanged = 0;
       let outsideChanged = 0;
@@ -244,7 +284,7 @@ describe.skipIf(gpuOnly)('prism-rainbow room', () => {
       await renderComposite(gpu, wireframe, {
         controls: { ...DEFAULT_PRISM_CONTROLS, wireframe: true },
       });
-      const [withoutLines, withLines] = [await solid.read(), await wireframe.read()];
+      const [withoutLines, withLines] = [await solid.color.read({ mipLevel: 0, region: "all" }), await wireframe.color.read({ mipLevel: 0, region: "all" })];
       expect(changedShare(withoutLines, withLines)).toBeGreaterThan(0.004);
       expect(changedShare(withoutLines, withLines)).toBeLessThan(0.35);
     } finally {
@@ -258,7 +298,7 @@ describe.skipIf(gpuOnly)('prism-rainbow room', () => {
       const render = async (orbit: readonly [number, number], label: string): Promise<Uint8Array> => {
         const output = target(gpu, { size: SIZE, format: 'rgba8unorm', label });
         await renderComposite(gpu, output, { orbit });
-        return output.read();
+        return output.color.read({ mipLevel: 0, region: "all" });
       };
       const rest = await render([0, 0], 'prism-orbit-rest');
       const swung = await render([1, -1], 'prism-orbit-swung');
@@ -282,7 +322,7 @@ describe.skipIf(gpuOnly)('prism-rainbow deterministic mesh', () => {
       const render = async (): Promise<Uint8Array> => {
         const output = target(gpu, { size: [160, 90], format: 'rgba8unorm', label: 'prism-determinism' });
         await renderComposite(gpu, output);
-        return output.read();
+        return output.color.read({ mipLevel: 0, region: "all" });
       };
       // Nothing in the pipeline reads a clock, history texture or random seed.
       expect(Array.from(await render())).toEqual(Array.from(await render()));

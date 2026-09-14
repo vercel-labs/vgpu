@@ -41,32 +41,37 @@ const BLURS = [
   { direction: [0, 1], radius: 2.4 },
 ] as const;
 
-export function createEffects(gpu: Gpu) {
+export function createEffects(gpu: Gpu, targets: Targets) {
+  const aspect = targets.scene.size[0] / targets.scene.size[1];
   const samp = sampler(gpu, { minFilter: 'linear', magFilter: 'linear' });
   const additive = {
     color: { src: 'src-alpha', dst: 'one' },
     alpha: { src: 'one', dst: 'one' },
   } as const;
   return {
-    nebula: effect(gpu, nebulaWgsl),
+    nebula: effect(gpu, nebulaWgsl, { set: { params: { time: 0, aspect } } }),
     stars: draw(gpu, {
       shader: starsWgsl,
       vertices: 6,
       instances: DUST_COUNT,
       blend: additive,
       label: 'particle-orbit-stars',
+      set: { params: { time: 0, aspect } },
     }),
-    atmosphere: effect(gpu, atmosphereWgsl, { set: { samp } }),
+    atmosphere: effect(gpu, atmosphereWgsl, { set: { samp, params: { time: 0, aspect } } }),
     trails: draw(gpu, {
       shader: trailsWgsl,
       vertices: 6,
       instances: TRAIL_INSTANCES,
       blend: additive,
       label: 'particle-orbit-trails',
+      set: { params: { time: 0, aspect } },
     }),
     bright: effect(gpu, brightWgsl, { set: { samp } }),
-    blur: BLURS.map((options) => effect(gpu, blurWgsl, { set: { samp, blur: options } })),
-    post: effect(gpu, postWgsl, { set: { samp, params: { pointer: [0, 0] } } }),
+    blur: BLURS.map((options, i) => effect(gpu, blurWgsl, {
+      set: { samp, blur: { ...options, texelSize: targets.bloom[i % 2].texelSize } },
+    })),
+    post: effect(gpu, postWgsl, { set: { samp, params: { pointer: [0, 0], time: 0, aspect } } }),
   };
 }
 

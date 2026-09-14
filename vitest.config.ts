@@ -1,6 +1,9 @@
 import { resolve } from "node:path";
 import { defineConfig } from "vitest/config";
 import { wgslVitePlugin } from "./packages/wgsl/src/loader-vite/index.ts";
+import { assertSnapshotEnvironment } from "./scripts/lib/visual-snapshot.mjs";
+
+if (process.env.VGPU_SNAPSHOT_MODE || process.env.VGPU_WRITE_SNAPSHOTS) assertSnapshotEnvironment();
 
 export default defineConfig({
   plugins: [wgslVitePlugin()],

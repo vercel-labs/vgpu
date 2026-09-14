@@ -33,7 +33,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu instancing GPU accep
 
       frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, clear: [0, 0, 0, 1] }, (pass) => pass.draw(quads)));
 
-      const pixels = await colorTarget.read();
+      const pixels = await colorTarget.color.read({ mipLevel: 0, region: "all" });
       const left = pixelAt(pixels, 32, 8, 8);
       const right = pixelAt(pixels, 32, 23, 8);
 

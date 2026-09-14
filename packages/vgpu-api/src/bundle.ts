@@ -1,5 +1,5 @@
 import { createRenderBundle } from "./core/render-bundle.ts";
-import { InternalDraw, drawUsesBlendConstant, drawUsesStencilReference, encodeDraw, registerDrawBundle, type BundleBackReference, type BundleStaleEvent, type Draw, type DrawCallOptions } from "./draw.ts";
+import { InternalDraw, drawUsesBlendConstant, drawUsesStencilReference, encodeDraw, registerDrawBundle, watchDrawResources, type BundleBackReference, type BundleStaleEvent, type Draw, type DrawCallOptions } from "./draw.ts";
 import { InternalEffect, effectDraw, type Effect } from "./effect.ts";
 import type { CompileTarget, Target, TargetSignature } from "./target.ts";
 import { normalizeSignature, signatureKeyOf, validateTargetSignature } from "./pipeline-store.ts";
@@ -54,19 +54,25 @@ class RecordedBundle implements Bundle, BundleBackReference {
   #staleEvent?: BundleStaleEvent;
   readonly #signatureKey: string;
   readonly #draws = new Set<InternalDraw>();
+  readonly #resourceSubscriptions: (() => void)[] = [];
 
   constructor(private readonly device: { readonly gpu: GPUDevice }, readonly id: string, readonly signature: TargetSignature) {
     this.#signatureKey = signatureKeyOf(signature);
   }
 
   record(record: (recorder: BundleRecorder) => void): void {
-    this.gpu = createRenderBundle(this.device, {
-      label: this.id,
-      colorFormats: this.signature.colors,
-      depthStencilFormat: this.signature.depth,
-      sampleCount: this.signature.sampleCount ?? 1,
-      record: (recorder) => this.#recordCommands(record, recorder.gpu as unknown as GPURenderPassEncoder),
-    });
+    try {
+      this.gpu = createRenderBundle(this.device, {
+        label: this.id,
+        colorFormats: this.signature.colors,
+        depthStencilFormat: this.signature.depth,
+        sampleCount: this.signature.sampleCount ?? 1,
+        record: (recorder) => this.#recordCommands(record, recorder.gpu as unknown as GPURenderPassEncoder),
+      });
+    } catch (error) {
+      this.#releaseResourceSubscriptions();
+      throw error;
+    }
     for (const draw of this.#draws) registerDrawBundle(draw, this);
   }
 
@@ -77,8 +83,11 @@ class RecordedBundle implements Bundle, BundleBackReference {
   get [FRAME_BUNDLE](): FrameBundleProtocol { return this; }
 
   markStale(event: BundleStaleEvent): void {
-    if (recordingDepth > 0) return;
+    // Set() while recording may deliberately encode different resources. Destruction of any
+    // captured resource is never safe, including during recording or after the Draw was rebound.
+    if (recordingDepth > 0 && !(event.kind === "binding-identity" && event.newIdentity.startsWith("destroyed:"))) return;
     this.#staleEvent ??= event;
+    this.#releaseResourceSubscriptions();
   }
 
   assertReplayable(target: Target): void {
@@ -90,6 +99,11 @@ class RecordedBundle implements Bundle, BundleBackReference {
 
   remember(draw: InternalDraw): void {
     this.#draws.add(draw);
+    if (!this.#staleEvent) this.#resourceSubscriptions.push(watchDrawResources(draw, event => this.markStale(event)));
+  }
+
+  #releaseResourceSubscriptions(): void {
+    for (const off of this.#resourceSubscriptions.splice(0)) off();
   }
 
   #recordCommands(record: (recorder: BundleRecorder) => void, encoder: GPURenderPassEncoder): void {
@@ -135,5 +149,3 @@ function staleEventMessage(id: string, event: BundleStaleEvent): string {
 function bundleStaleError(id: string, message: string): VGPUError {
   return new VGPUError({ code: "VGPU-R3-BUNDLE-STALE", message, where: `bundle '${id}' replay` });
 }
-
-
