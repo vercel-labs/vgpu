@@ -1,3 +1,6 @@
+import type { UniformCapture } from "./frame-uniforms.ts";
+import type { DispatchOptions } from "./api-types.ts";
+import type { OperationValidation } from "./native-validation.ts";
 /**
  * Nominal protocols a `Frame` talks to, so `frame.ts` never imports a feature module.
  *
@@ -35,7 +38,7 @@ export const FRAME_DRAWABLE: unique symbol = Symbol("vgpu.frame.drawable");
 export interface FrameDrawableProtocol {
   /** Used by pass-level error messages (read-only depth rejections name the offending draw). */
   readonly label: string;
-  encode(pass: GPURenderPassEncoder, target: Target, opts: DrawCallOptions, claimValidation?: (result: ClaimedGroupValidationResult) => void): void;
+  encode(pass: GPURenderPassEncoder, target: Target, opts: DrawCallOptions, claimValidation?: (result: ClaimedGroupValidationResult) => void, capture?: UniformCapture): void;
   /** True when the drawable's depth state writes depth — rejected by a `depthReadOnly` pass. */
   writesDepth(): boolean;
   /** Names of the stencil ops that can write, empty when none — rejected by a `depthReadOnly` pass on a stencil format. */
@@ -138,4 +141,13 @@ export interface FramePassAttachment {
 export function framePassAttachmentOf(value: unknown): FramePassAttachment | undefined {
   const attach = (value as Partial<FramePassAttachment> | null | undefined)?.[FRAME_PASS_ATTACHMENT];
   return typeof attach === "function" ? (value as FramePassAttachment) : undefined;
+}
+
+export const FRAME_COMPUTE = Symbol("vgpu.frame.compute");
+export interface FrameComputeProtocol {
+  readonly device: Device;
+  encode(pass: GPUComputePassEncoder, counts: number | DispatchOptions, y: number | undefined, z: number | undefined, validations: OperationValidation[], capture?: UniformCapture): void;
+}
+export function frameComputeOf(value: unknown): FrameComputeProtocol | undefined {
+  return (value as { [FRAME_COMPUTE]?: FrameComputeProtocol } | null)?.[FRAME_COMPUTE];
 }

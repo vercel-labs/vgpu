@@ -87,7 +87,7 @@ test("signature bundle recording still requires draw resources to be set", async
   gpu.dispose();
 });
 
-test("cold signature bundle recording uses the sync pipeline path and reports failures through gpu.onError", async () => {
+test("cold signature bundle recording throws synchronous pipeline failures", async () => {
   const gpu = await init();
   const shader = effect(gpu, SOLID, { label: "coldFailure" });
   const nativeError = new Error("sync pipeline failed during bundle recording");
@@ -95,16 +95,9 @@ test("cold signature bundle recording uses the sync pipeline path and reports fa
   gpu.onError((error) => errors.push(error));
   vi.spyOn(gpu.device.gpu, "createRenderPipeline").mockImplementation(() => { throw nativeError; });
 
-  expect(() => bundle(gpu, { target: { colors: ["rgba8unorm"] }, label: "coldFailureBundle" }, (b) => b.draw(shader))).not.toThrow();
+  expect(() => bundle(gpu, { target: { colors: ["rgba8unorm"] }, label: "coldFailureBundle" }, (b) => b.draw(shader))).toThrowError(/compilation failed/);
   await gpu.settled();
 
-  expect(errors).toEqual([
-    expect.objectContaining({
-      code: "VGPU-COMPILE-FAILED",
-      where: "coldFailure.pipelineFor",
-      cause: nativeError,
-      detail: { signature: "rgba8unorm:none:1" },
-    }),
-  ]);
+  expect(errors).toEqual([]);
   gpu.dispose();
 });

@@ -4,7 +4,12 @@ export interface VGPUErrorDetail {
   readonly drawLabel?: string;
   readonly group?: number;
   readonly signature?: string;
-  readonly stage?: "vertex" | "fragment";
+  readonly stage?: "vertex" | "fragment" | "compute";
+  readonly label?: string;
+  readonly entry?: string;
+  readonly axis?: string;
+  readonly workgroupSize?: readonly number[];
+  readonly limitName?: string;
   readonly entryPoint?: string;
   readonly count?: number;
   readonly limit?: number;

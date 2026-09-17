@@ -1,18 +1,18 @@
 ---
 title: "Frame"
-description: "`frame()` is both a callable one-frame submit helper and a `FrameRunner`. It creates one command encoder, lets you encode any number of explicit-target render passes, then submits once."
+description: "`frame()` is both a callable one-frame submit helper and a `FrameRunner`. It creates one command encoder, lets you encode any number of explicit-target render passes and compute passes, then submits once."
 ---
 
 ## Import
 
 ```ts
-import type { Frame, FramePass, FramePassOptions, FrameLoopHandle, FrameRunner } from "vgpu";
+import type { Frame, FramePass, FramePassOptions, FrameComputePass, FrameComputePassOptions, FrameLoopHandle, FrameRunner } from "vgpu";
 ```
 
 ## Signature
 
 ```ts
-import type { Bundle, ClearColor, Draw, DrawCallOptions, Effect, Target, TimerSpan, Visibility, VisibilityQuery } from "vgpu";
+import type { Compute, DispatchOptions, Bundle, ClearColor, Draw, DrawCallOptions, Effect, Target, TimerSpan, Visibility, VisibilityQuery } from "vgpu";
 
 interface FramePassOptions {
   readonly target: Target;
@@ -41,8 +41,16 @@ declare class Frame {
   done: Promise<void>;
   pass(target: Target, body: Effect | Draw | ((pass: FramePass) => void)): void;
   pass(options: FramePassOptions, body: Effect | Draw | ((pass: FramePass) => void)): void;
+  computePass(body: (pass: FrameComputePass) => void): void;
+  computePass(options: FrameComputePassOptions, body: (pass: FrameComputePass) => void): void;
   submit(): void;
   cancel(): void;
+}
+
+interface FrameComputePassOptions { readonly label?: string; }
+interface FrameComputePass {
+  dispatch(pipeline: Compute, x: number, y?: number, z?: number): void;
+  dispatch(pipeline: Compute, options: DispatchOptions): void;
 }
 
 declare class FramePass {
@@ -252,3 +260,11 @@ frame(gpu, (currentFrame) => {
 - `frame.done` is resolve-only. Await it as a completion/timing signal for readbacks, benchmarks, deterministic tests, or teardown; use `gpu.onError` plus `await gpu.settled()` for asynchronous errors.
 - Do not `await frame.done` inside a RAF/frame loop. Schedule the next frame as soon as `frame(gpu)` returns, or you serialize CPU and GPU work.
 - **See also:** `frame`, `Surface`, `Effect`, `Draw`, `Bundle`, `Target`, `Timer`, `Visibility`.
+
+## Compute passes and captured uniforms
+
+Use `frame.computePass(pass => pass.dispatch(simulation, x, y, z))` to encode compute work in the same command buffer as render passes. An optional `{ label }` identifies the native compute pass. `pass.dispatch(simulation, { indirect: args })` uses GPU-produced counts. One callback opens one compute pass, and can contain several dispatches.
+
+Compute-pass callbacks are synchronous: await pipeline preparation before the frame. Passes cannot nest; submit or cancel only after a pass ends. A retained compute-pass object throws `VGPU-COMPUTE-PASS-CLOSED` after its callback. A foreign pipeline throws `VGPU-COMPUTE-DEVICE-MISMATCH`; a thenable callback result throws `VGPU-COMPUTE-PASS-ASYNC`. A canceled/submitted frame rejects new passes.
+
+Direct `pass.draw()` and compute `pass.dispatch()` capture JS-owned uniform values and `uniforms()` uniform bindings at encoding time. Changing values later in the callback does not alter earlier commands. Uploads are released after completion or abandonment. Storage/raw buffers, claimed groups and bundles retain live-buffer semantics; host writes and CPU changes are not rolled back by cancellation.

@@ -24,6 +24,8 @@ interface DispatchOptions {
 
 interface Compute {
   set(values: Record<string, unknown>): this;
+  compile(): Promise<this>;
+  compileSync(): this;
   dispatch(x: number, y?: number, z?: number): void;
   dispatch(opts: DispatchOptions): void;
 }
@@ -63,7 +65,7 @@ interface StorageBuffer {
 | storage.access.indirect | `boolean` | ✖ | `false` | Appends the `"indirect"` buffer usage so the buffer can supply GPU-read draw/dispatch arguments. |
 | storage.write.data | `BufferSource` | ✔ | — | `ArrayBuffer` or `ArrayBufferView`; writes at offset `0` in the public main API (`vgpu`) type. |
 
-**Returns:** `compute(gpu)` returns `Compute`; `set()` returns the same `Compute`; `dispatch()` returns `void` after submitting; `storage(gpu)` returns a main API (`vgpu`) `StorageBuffer`; `StorageBuffer.read()` resolves an `ArrayBuffer` copy.
+**Returns:** `compute(gpu)` returns `Compute`; `set()` and `compileSync()` return the same `Compute`; `compile()` resolves to that object after successful validation; `dispatch()` returns `void` after submitting; `storage(gpu)` returns a main API (`vgpu`) `StorageBuffer`; `StorageBuffer.read()` resolves an `ArrayBuffer` copy.
 
 **Throws:** `VGPU-RING1-UNSUPPORTED` when the shader has no `@compute` entry point; `VGPU-INDIRECT-INVALID` at dispatch time for a malformed `indirect` (neither a `StorageBuffer` nor `{ buffer, offset? }`), a buffer created without the indirect flag (use `storage(gpu, bytes, { indirect: true })`), an `offset` that is not a non-negative integer multiple of 4, counts that do not fit the buffer (`offset + 12 > size`), or `indirect` combined with explicit workgroup counts in the same call; `VGPU-CONSTANTS-INVALID` for a malformed `constants` option (non-object value, a key that matches no override in the shader — the message lists the available overrides — or a value that is neither a finite number nor a boolean), and for an override declared without a default that `constants` does not provide; `VGPU-ENTRY-INVALID` for a non-string `entry`, a name that matches no entry point in the shader, or a name whose entry point is not `@compute` — the message lists the shader's available entry points with their stages; `VGPU-SET-VALUE-INVALID` when a JS-owned binding has the wrong reflected shape or an out-of-range integer; `VGPU-R1-STORAGE-ALIASING` when the same storage buffer is bound more than once and at least one reflected binding is writable; `VGPU-R1-BINDING-NEVER-SET`, `VGPU-R1-OWNERSHIP-FLIP`, and `VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE` for binding errors, including storage textures without `storage_binding` usage or whose format/dimension differs from WGSL; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`; `TypeError` if `StorageBuffer.write()` receives a non-buffer source.
 
@@ -161,8 +163,38 @@ GPU-driven dispatch: the first pass writes the workgroup counts from GPU-side st
 - Use `pingPongStorage(gpu, bytes)` when a compute step reads previous state and writes next state; binding the same writable storage identity twice is rejected before dispatch.
 - Storage textures come from `texture(gpu, opts)`. `set()` validates their usage, format, and dimension against the reflected `texture_storage_*` declaration; a render `Target` is not accepted.
 - Bindings use compute visibility only when statically reachable from the selected compute entry point; unused declarations stay in the layout with visibility `0`.
-- `constants` maps to `GPUProgrammableStage.constants` of the compute stage; the pipeline is created inside `compute(gpu)`, so recreate the compute to change them.
-- Dispatch counts are forwarded to WebGPU; validate domain-specific bounds in your app.
+- `constants` maps to `GPUProgrammableStage.constants` of the compute stage. Options are captured at construction; recreate the compute to change them. Pipeline creation is lazy: use `compile()`, `compileSync()`, or first dispatch.
+- Direct dispatch counts must be finite integers from zero through `gpu.device.limits.maxComputeWorkgroupsPerDimension`. Zero is legal. Workgroup axes and their product must fit the granted device limits; unresolved WGSL expressions are validated natively. Default examples use portable sizes. For a larger workgroup, explicitly request the supported axis and `maxComputeInvocationsPerWorkgroup` limits using `init({ requiredLimits: ... })`.
 - Write indirect counts from another compute pass (bind the same buffer as storage) or from JS via `write()`. The same option shape drives GPU-driven draws via `DrawCallOptions.indirect`.
 - `storage(gpu)` creates storage buffers with `copy_src` and `copy_dst`, so they can be read back and rewritten from JS.
 - **See also:** `compute`, `Draw.set`, `SharedUniforms`, `Target`, `StorageBuffer` from `vgpu/core`.
+
+## Preparation and frame-owned execution
+
+`await compute.compile()` uses asynchronous native compilation. Its rejection belongs to the returned promise; handle it with `try`/`catch`. `compileSync()` creates synchronously, but native validation may arrive later through `gpu.onError`. `gpu.settled()` waits for tracked preparation and error delivery and never rejects. Neither `settled()` nor buffer readback proves successful execution.
+
+```ts
+import { init, compute, frame, storage } from "vgpu/mock";
+
+const gpu = await init();
+const data = storage(gpu, 4);
+const simulation = compute(gpu, `
+  @group(0) @binding(0) var<storage, read_write> data: array<f32>;
+  @group(0) @binding(1) var<uniform> dt: f32;
+  @compute @workgroup_size(1) fn main() { data[0] += dt; }
+`, { set: { data, dt: 0.01 } });
+await simulation.compile();
+const current = frame(gpu, f => f.computePass({ label: "simulation" }, pass => {
+  pass.dispatch(simulation, 1);
+  simulation.set({ dt: 0.02 });
+  pass.dispatch(simulation, 1);
+}));
+await current.done;
+gpu.dispose();
+```
+
+`Frame.computePass()` encodes into the frame's encoder; multiple dispatches and render passes submit once, in pass order. Canceling the frame discards its encoded compute commands. Standalone `simulation.dispatch()` always submits independently, even inside a frame callback.
+
+Each direct frame draw/dispatch captures managed uniform values when encoded. Storage buffers remain live, so later dispatches observe earlier GPU writes. `uniforms()` adopted as storage, raw buffers, claimed bind groups, and render bundles retain live buffer semantics. Ordinary host writes are not ordered frame commands.
+
+Additional errors: `VGPU-COMPUTE-DISPATCH-INVALID` for invalid direct counts; `VGPU-COMPUTE-WORKGROUP-INVALID` for known workgroup limit violations; `VGPU-COMPILE-FAILED` for pipeline creation/validation failures; `VGPU-COMPUTE-VALIDATION` for asynchronous compute execution validation. Automatic use of a failed pipeline throws; explicit compilation can retry.

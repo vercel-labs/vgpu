@@ -1,3 +1,4 @@
+import type { UniformCapture, UniformValue } from "./frame-uniforms.ts";
 import { bindGroupLayoutMetadata, bindGroupMetadataFor, type Buffer, type Device, type UnsubscribeResourceDestroy } from "@vgpu/core";
 import type { BindingInfo, Reflection } from "@vgpu/wgsl/reflect-source";
 import { identityKey, type BindGroupCache, type BindGroupIdentityPart } from "./bind-cache.ts";
@@ -37,7 +38,7 @@ export interface SetCore {
   set(values: SetBag): readonly BindingIdentityChange[];
   claimGroup(group: number, bindGroup: GPUBindGroup, expectedLayout: GPUBindGroupLayout): string | undefined;
   layout(group: number): GPUBindGroupLayout;
-  bindGroups(): readonly { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimValidation?: { readonly label: string; readonly group: number } }[];
+  bindGroups(capture?: UniformCapture): readonly { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimValidation?: { readonly label: string; readonly group: number } }[];
   bindingState(name: string): BindingState | undefined;
 }
 
@@ -54,6 +55,8 @@ type MutableBindingState = {
   readonly memberOwnership: Map<string, BindingOwnership>;
   buffer?: Buffer;
   bytes?: ArrayBuffer;
+  revision?: number;
+  uniformValue?: () => UniformValue;
   libValue?: unknown;
   resource?: GPUBindingResource;
   identity?: BindGroupIdentityPart;
@@ -120,6 +123,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     state.libValue = value;
     if (!state.buffer) createLibBuffer(state, layout.size);
     state.bytes = bytes;
+    state.revision = (state.revision ?? 0) + 1;
     state.buffer!.write(bytes, 0);
   }
 
@@ -135,6 +139,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     state.unsubscribe?.();
     state.unsubscribeRecreate?.();
     state.resource = normalized.resource;
+    state.uniformValue = normalized.uniformValue;
     state.identity = normalized.identity;
     state.destroyed = false;
     state.resourceLabel = normalized.resourceLabel;
@@ -199,18 +204,24 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     return bgl;
   }
 
-  function bindGroups(): readonly { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimValidation?: { readonly label: string; readonly group: number } }[] {
+  function bindGroups(capture?: UniformCapture): readonly { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimValidation?: { readonly label: string; readonly group: number } }[] {
     assertUsable();
-    return groups.map(bindGroupFor);
+    return groups.map(group => bindGroupFor(group, capture));
   }
 
-  function bindGroupFor(group: number): { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimValidation?: { readonly label: string; readonly group: number } } {
+  function bindGroupFor(group: number, capture?: UniformCapture): { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimValidation?: { readonly label: string; readonly group: number } } {
     const claimed = claimedGroups.get(group);
     if (claimed) return { group, bindGroup: claimed, offsets: [], claimValidation: rawClaimValidation(claimed, group) };
     const active = new Set(bindGroupLayoutMetadata(layout(group))?.entries.map((entry) => entry.binding));
     const groupBindings = options.reflection.bindings.filter((binding) => binding.group === group && active.has(binding.binding));
-    const entries = bindGroupEntries(groupBindings);
-    const identities = identitiesFor(groupBindings);
+    const resolved = groupBindings.map(binding => {
+      const state = requiredState(binding);
+      const value = state.uniformValue?.() ?? (state.bytes && binding.addressSpace === "uniform" ? { owner: state, revision: state.revision!, bytes: new Uint8Array(state.bytes) } : undefined);
+      const captured = capture && value ? capture.capture(value, options.cache) : undefined;
+      return { binding: binding.binding, resource: captured?.resource ?? state.resource!, identity: captured?.identity ?? state.identity! };
+    });
+    const entries = resolved.map(({ binding, resource }) => ({ binding, resource }));
+    const identities = resolved.map(({ identity }) => identity);
     const bindGroup = options.cache.getOrCreate(options.drawId, group, identities, () => options.device.gpu.createBindGroup({
       label: `${options.label}.group${group}`,
       layout: layout(group),
@@ -221,17 +232,6 @@ export function createSetCore(options: SetCoreOptions): SetCore {
 
   function rawClaimValidation(bindGroup: GPUBindGroup, group: number): { readonly label: string; readonly group: number } | undefined {
     return bindGroupMetadataFor(bindGroup) ? undefined : { label: options.label, group };
-  }
-
-  function bindGroupEntries(groupBindings: readonly BindingInfo[]): GPUBindGroupEntry[] {
-    return groupBindings.map((binding) => {
-      const state = requiredState(binding);
-      return { binding: binding.binding, resource: state.resource! };
-    });
-  }
-
-  function identitiesFor(groupBindings: readonly BindingInfo[]): BindGroupIdentityPart[] {
-    return groupBindings.map((binding) => requiredState(binding).identity!);
   }
 
   function requiredState(binding: BindingInfo): MutableBindingState {

@@ -25,6 +25,8 @@ interface SharedUniformLayoutState {
  */
 export class SharedUniformsImpl<T extends Record<string, unknown>> implements SharedUniforms<T>, BindingResourceProvider {
   #values: Record<string, unknown>;
+  #revision = 0;
+  #bytes?: Uint8Array;
   #state?: SharedUniformLayoutState;
   #bufferRef?: Buffer;
 
@@ -42,8 +44,10 @@ export class SharedUniformsImpl<T extends Record<string, unknown>> implements Sh
     if (this.#state && this.#bufferRef) {
       const bytes = writeLayoutValue(this.#state.layout, next);
       this.#bufferRef.write(bytes, 0);
+      this.#bytes = new Uint8Array(bytes);
     }
     this.#values = next;
+    this.#revision += 1;
   }
 
   /**
@@ -59,6 +63,7 @@ export class SharedUniformsImpl<T extends Record<string, unknown>> implements Sh
     assertBufferUsable(buffer, `${sourceHint}.set`);
     return {
       resource: { buffer: buffer.gpu, offset: 0, size: adopted.layout.size },
+      ...(adopted.addressSpace === "uniform" ? { uniformValue: () => ({ owner: this, revision: this.#revision, bytes: this.#bytes! }) } : {}),
       identity: buffer.resourceIdentity,
       unsubscribe: (cb) => buffer.onDestroy(cb),
     };
@@ -93,6 +98,7 @@ export class SharedUniformsImpl<T extends Record<string, unknown>> implements Sh
       buffer.destroy();
       throw error;
     }
+    this.#bytes = new Uint8Array(bytes);
     this.#state = state;
     this.#bufferRef = buffer;
     return state;

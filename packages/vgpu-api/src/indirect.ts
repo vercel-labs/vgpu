@@ -1,3 +1,4 @@
+import { assertBufferUsable } from "./lifecycle.ts";
 /**
  * Validation for GPU-read draw/dispatch arguments, split out of `storage.ts` so the encoders can
  * check an `indirect` option without linking the storage buffer implementation: `draw()` and
@@ -7,7 +8,7 @@
  * The check is structural on purpose: it accepts this package's storage facade and anything with
  * the same core buffer underneath, which is what `ping-pong` hands out.
  */
-import { Buffer } from "@vgpu/core";
+import { Buffer, type Device } from "@vgpu/core";
 import type { StorageBuffer } from "./api-types.ts";
 import { indirectInvalidError } from "./errors.ts";
 import type { RingStorageBuffer } from "./storage.ts";
@@ -35,10 +36,11 @@ export type IndirectMethod = keyof typeof INDIRECT_METHODS;
  *
  * @internal
  */
-export function resolveIndirect(label: string, where: string, value: IndirectOption, method: IndirectMethod): { readonly buffer: GPUBuffer; readonly offset: number } {
+export function resolveIndirect(label: string, where: string, value: IndirectOption, method: IndirectMethod, device?: Device): { readonly buffer: GPUBuffer; readonly offset: number } {
   const wrapped = typeof value === "object" && value !== null ? (value as { buffer?: unknown }).buffer : undefined;
   const storage = isStorageBufferFacade(value) ? value : isStorageBufferFacade(wrapped) ? wrapped : undefined;
   if (!storage) throw indirectInvalidError(label, `received ${previewIndirect(value)}; expected a StorageBuffer or { buffer, offset? }.`, where);
+  assertBufferUsable(storage.buffer, where, device);
   const offset = storage === value ? 0 : (value as { offset?: number }).offset ?? 0;
   if (typeof offset !== "number" || !Number.isInteger(offset) || offset < 0) throw indirectInvalidError(label, `offset must be an integer >= 0; received ${previewIndirect(offset)}.`, where);
   if (offset % 4 !== 0) throw indirectInvalidError(label, `offset must be a multiple of 4 (WebGPU requires "indirectOffset is a multiple of 4"); received ${offset}.`, where);

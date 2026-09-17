@@ -9,26 +9,26 @@ import {
   type Gpu,
   type Surface,
   type Target,
-} from 'vgpu';
+} from "vgpu";
 
-import atmosphereWgsl from './atmosphere.wgsl';
+import atmosphereWgsl from "./atmosphere.wgsl";
 import {
   encodeRadiance,
   setRadianceScene,
   setRadianceTime,
   type Radiance,
-} from './radiance';
-import blurWgsl from './blur.wgsl';
-import brightWgsl from './bright.wgsl';
-import nebulaWgsl from './nebula.wgsl';
-import postWgsl from './post.wgsl';
-import starsWgsl from './stars.wgsl';
-import trailsWgsl from './trails.wgsl';
+} from "./radiance";
+import blurWgsl from "./blur.wgsl";
+import brightWgsl from "./bright.wgsl";
+import nebulaWgsl from "./nebula.wgsl";
+import postWgsl from "./post.wgsl";
+import starsWgsl from "./stars.wgsl";
+import trailsWgsl from "./trails.wgsl";
 
 type Output = Surface | Target;
 
 const CLEAR = [0, 0, 0, 1] as const;
-const SCENE_FORMAT = 'rgba16float' as const;
+const SCENE_FORMAT = "rgba16float" as const;
 // 4 trails × (191 history segments + 1 head halo).
 export const TRAIL_INSTANCES = 768;
 // Dense enough for each orbiting light to tint several motes as it passes.
@@ -43,35 +43,53 @@ const BLURS = [
 
 export function createEffects(gpu: Gpu, targets: Targets) {
   const aspect = targets.scene.size[0] / targets.scene.size[1];
-  const samp = sampler(gpu, { minFilter: 'linear', magFilter: 'linear' });
+  const samp = sampler(gpu, { minFilter: "linear", magFilter: "linear" });
   const additive = {
-    color: { src: 'src-alpha', dst: 'one' },
-    alpha: { src: 'one', dst: 'one' },
+    color: { src: "src-alpha", dst: "one" },
+    alpha: { src: "one", dst: "one" },
   } as const;
   return {
-    nebula: effect(gpu, nebulaWgsl, { set: { params: { time: 0, aspect } } }),
+    nebula: effect(gpu, nebulaWgsl, {
+      label: "particle-orbit-nebula",
+      set: { params: { time: 0, aspect } },
+    }),
     stars: draw(gpu, {
       shader: starsWgsl,
       vertices: 6,
       instances: DUST_COUNT,
       blend: additive,
-      label: 'particle-orbit-stars',
+      label: "particle-orbit-stars",
       set: { params: { time: 0, aspect } },
     }),
-    atmosphere: effect(gpu, atmosphereWgsl, { set: { samp, params: { time: 0, aspect } } }),
+    atmosphere: effect(gpu, atmosphereWgsl, {
+      label: "particle-orbit-atmosphere",
+      set: { samp, params: { time: 0, aspect } },
+    }),
     trails: draw(gpu, {
       shader: trailsWgsl,
       vertices: 6,
       instances: TRAIL_INSTANCES,
       blend: additive,
-      label: 'particle-orbit-trails',
+      label: "particle-orbit-trails",
       set: { params: { time: 0, aspect } },
     }),
-    bright: effect(gpu, brightWgsl, { set: { samp } }),
-    blur: BLURS.map((options, i) => effect(gpu, blurWgsl, {
-      set: { samp, blur: { ...options, texelSize: targets.bloom[i % 2].texelSize } },
-    })),
-    post: effect(gpu, postWgsl, { set: { samp, params: { pointer: [0, 0], time: 0, aspect } } }),
+    bright: effect(gpu, brightWgsl, {
+      label: "particle-orbit-bright",
+      set: { samp },
+    }),
+    blur: BLURS.map((options, i) =>
+      effect(gpu, blurWgsl, {
+        label: `particle-orbit-blur-${i}`,
+        set: {
+          samp,
+          blur: { ...options, texelSize: targets.bloom[i % 2].texelSize },
+        },
+      })
+    ),
+    post: effect(gpu, postWgsl, {
+      label: "particle-orbit-post",
+      set: { samp, params: { pointer: [0, 0], time: 0, aspect } },
+    }),
   };
 }
 
@@ -92,11 +110,13 @@ export function createTargets(gpu: Gpu, size: readonly [number, number]) {
     return {
       // Compatibility mode cannot combine rgba16float with MSAA. Keep HDR and
       // fall back to a single-sampled scene there; core WebGPU retains 4× MSAA.
-      scene: own(target(gpu, {
-        size,
-        format: SCENE_FORMAT,
-        msaa: !gpu.device.isCompatibilityMode,
-      })),
+      scene: own(
+        target(gpu, {
+          size,
+          format: SCENE_FORMAT,
+          msaa: !gpu.device.isCompatibilityMode,
+        })
+      ),
       composite: own(target(gpu, { size, format: SCENE_FORMAT })),
       bloom: [
         own(target(gpu, { size: bloomSize, format: SCENE_FORMAT })),
@@ -122,7 +142,11 @@ function destroy(color: Target | undefined): void {
   (color as { destroy?: () => void } | undefined)?.destroy?.();
 }
 
-export function setBindings(effects: Effects, targets: Targets, radiance: Radiance): void {
+export function setBindings(
+  effects: Effects,
+  targets: Targets,
+  radiance: Radiance
+): void {
   const aspect = targets.scene.size[0] / targets.scene.size[1];
   effects.nebula.set({ params: { aspect } });
   effects.stars.set({ params: { aspect } });
@@ -133,7 +157,7 @@ export function setBindings(effects: Effects, targets: Targets, radiance: Radian
     pass.set({
       src: targets.bloom[i % 2],
       blur: { texelSize: targets.bloom[i % 2].texelSize },
-    }),
+    })
   );
   effects.post.set({
     src: targets.composite,
@@ -144,7 +168,11 @@ export function setBindings(effects: Effects, targets: Targets, radiance: Radian
   setRadianceScene(radiance, targets.scene);
 }
 
-export function setTime(effects: Effects, radiance: Radiance, time: number): void {
+export function setTime(
+  effects: Effects,
+  radiance: Radiance,
+  time: number
+): void {
   const params = { params: { time } };
   effects.nebula.set(params);
   effects.stars.set(params);
@@ -154,11 +182,18 @@ export function setTime(effects: Effects, radiance: Radiance, time: number): voi
   setRadianceTime(radiance, time);
 }
 
-export function setPointer(effects: Effects, pointer: readonly [number, number]): void {
+export function setPointer(
+  effects: Effects,
+  pointer: readonly [number, number]
+): void {
   effects.post.set({ params: { pointer } });
 }
 
-export async function prewarm(effects: Effects, targets: Targets, output: Output): Promise<void> {
+export async function prewarm(
+  effects: Effects,
+  targets: Targets,
+  output: Output
+): Promise<void> {
   await Promise.all([
     effects.nebula.compile(targets.scene),
     effects.stars.compile(targets.scene),
@@ -179,12 +214,12 @@ export function recordScene(gpu: Gpu, effects: Effects): Bundle {
         colors: [SCENE_FORMAT],
         sampleCount: gpu.device.isCompatibilityMode ? 1 : 4,
       },
-      label: 'particle-orbit-scene',
+      label: "particle-orbit-scene",
     },
     (pass) => {
       pass.draw(effects.nebula);
       pass.draw(effects.stars);
-    },
+    }
   );
 }
 
@@ -194,19 +229,26 @@ export function renderChain(
   targets: Targets,
   output: Output,
   scene: Bundle,
-  radiance: Radiance,
+  radiance: Radiance
 ): void {
-  frame.pass({ target: targets.scene, clear: CLEAR }, (pass) => pass.bundles(scene));
+  frame.pass({ target: targets.scene, clear: CLEAR }, (pass) =>
+    pass.bundles(scene)
+  );
   encodeRadiance(frame, radiance);
   frame.pass({ target: targets.composite, clear: CLEAR }, (pass) => {
     pass.draw(effects.atmosphere);
     pass.draw(effects.trails);
   });
-  frame.pass({ target: targets.bloom[0], clear: CLEAR }, (pass) => pass.draw(effects.bright));
+  frame.pass({ target: targets.bloom[0], clear: CLEAR }, (pass) =>
+    pass.draw(effects.bright)
+  );
   effects.blur.forEach((pass, i) => {
-    frame.pass({ target: targets.bloom[(i + 1) % 2], clear: CLEAR }, (framePass) =>
-      framePass.draw(pass),
+    frame.pass(
+      { target: targets.bloom[(i + 1) % 2], clear: CLEAR },
+      (framePass) => framePass.draw(pass)
     );
   });
-  frame.pass({ target: output, clear: CLEAR }, (pass) => pass.draw(effects.post));
+  frame.pass({ target: output, clear: CLEAR }, (pass) =>
+    pass.draw(effects.post)
+  );
 }

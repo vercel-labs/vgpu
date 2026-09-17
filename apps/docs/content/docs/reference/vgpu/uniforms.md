@@ -56,6 +56,12 @@ const globals = uniforms(gpu, { exposure: 1, tint: [1, 1, 1] });
 globals.set({ exposure: 1.25 });
 ```
 
+## Frame value capture
+
+When used in the uniform address space, direct frame draws and compute dispatches capture the current values. Calling `set()` between operations changes only later operations. The same revision can share an upload slice across pipelines in a frame.
+
+When adopted as storage, this object keeps a live backing buffer so GPU-written state persists. Render bundles, raw/low-level resources and claimed bind groups also retain live contents; they do not acquire per-operation uniform snapshots.
+
 ## Notes
 
 - The first shader to bind the object chooses the WGSL layout. Keep struct member names/types/order aligned for every later shader that reuses it.

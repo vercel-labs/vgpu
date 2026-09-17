@@ -75,7 +75,7 @@ async function checkExportBudgets(dir, manifestPath, pkg) {
     });
   }
   if (options.update) {
-    updateManifest(manifestPath, pkg, (draft) => {
+    updateManifest(manifestPath, (draft) => {
       for (const [subpath, gzipBytes] of Object.entries(measured)) {
         if (!Number.isFinite(gzipBytes)) throw new Error(`${exportLabel(pkg.name, subpath)}: cannot update the budget, the built artifact is missing (run \`pnpm build\` first)`);
         draft[EXPORT_BUDGET_FIELD][subpath] = nextBudgetBytes(gzipBytes);
@@ -130,6 +130,13 @@ async function checkExperienceBudgets(dir, manifestPath, pkg) {
       structuralFailures.push(`vgpu experience ${measurement.experience.name}: retained prohibited ${retained.category} input ${retained.input}`);
     }
   }
+  if (options.update) {
+    updateManifest(manifestPath, (draft) => {
+      for (const { experience, gzipBytes } of measurements) {
+        draft[EXPERIENCE_BUDGET_FIELD][experience.name] = nextBudgetBytes(gzipBytes);
+      }
+    });
+  }
 }
 
 async function bundledGzipSize(entryPoint, peerExternals) {
@@ -155,7 +162,7 @@ async function checkPackageBudget(dir, manifestPath, pkg) {
     verdict: evaluateBudget({ measuredBytes: bytes, budgetBytes: pkg[PACKAGE_BUDGET_FIELD], audience: resolvePackageAudience(pkg), threshold: resolveThreshold(pkg, options.threshold) }),
   });
   if (options.update) {
-    updateManifest(manifestPath, pkg, (draft) => {
+    updateManifest(manifestPath, (draft) => {
       draft[PACKAGE_BUDGET_FIELD] = nextBudgetBytes(bytes);
       draft[PACKAGE_NOTE_FIELD] = BUDGET_NOTE;
     });
@@ -184,8 +191,8 @@ function record(entry) {
   if (entry.verdict.status === "warn") warnings.push(entry);
 }
 
-function updateManifest(manifestPath, pkg, mutate) {
-  const draft = JSON.parse(JSON.stringify(pkg));
+function updateManifest(manifestPath, mutate) {
+  const draft = JSON.parse(readFileSync(manifestPath, "utf8")); // preserve earlier export-budget updates
   mutate(draft);
   const next = `${JSON.stringify(draft, null, 2)}\n`;
   const previous = readFileSync(manifestPath, "utf8");

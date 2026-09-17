@@ -18,7 +18,7 @@ export class Buffer {
     readonly gpu: GPUBuffer,
     readonly options: BufferOptions,
     private readonly ownership: BufferOwnership = "owned",
-  ) { Object.defineProperty(this, "assertUsable", { value: (where: string) => this.#assertUsable(where) }); }
+  ) { Object.defineProperty(this, "assertUsable", { value: (where: string, device?: Device) => this.#assertUsable(where, device) }); }
 
   get resourceIdentity(): ResourceIdentity { return this.identity; }
 
@@ -26,7 +26,8 @@ export class Buffer {
     return this.destroySignal.onDestroy(this, cb);
   }
 
-  #assertUsable(where = "Buffer"): void {
+  #assertUsable(where = "Buffer", device?: Device): void {
+    if (device && device.gpu !== this.device.gpu) throw new ValidationError({ code: "VGPU-BUFFER-DEVICE-MISMATCH", message: "Buffer belongs to a different GPU device.", where });
     if (this.destroyed) {
       // Checked before the device: a destroyed buffer is the proximate cause even when its gpu is
       // going down too (`gpu.dispose()` destroys owned buffers and then the device), so naming the

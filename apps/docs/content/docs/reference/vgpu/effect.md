@@ -108,3 +108,9 @@ Effects compile lazily for the target signature they draw into. Use `await effec
 - Do not rely on implicit uniforms like time or resolution; pass `clock(gpu).time`, `target.size`, or `target.texelSize` explicitly through `set()`.
 - JS-owned values pack with the intrinsic `wgsl-host-shareable-v1` layout. Vectors, flattened column-major matrices, and fixed arrays require exact lengths; `i32`/`u32` require integral in-range numbers; padding is zero; and f16 conversion rounds to nearest with ties to even. A first complete binding object supplies every field. Later object updates merge over the last accepted value, while member-name shorthand starts unspecified siblings at WGSL zero. Each candidate is validated into temporary bytes before that binding's retained state or GPU bytes change.
 - **See also:** `effect`, `Draw`, `FramePass.draw`, `Surface`, `Target`, `SharedUniforms`.
+
+## Compilation validation and uniform capture
+
+`compile()` waits for native validation even after `compileSync()` created a candidate or took over a pending asynchronous compile. Synchronous creation failures throw; asynchronous validation from synchronous preparation uses `gpu.onError`. A failed pipeline throws on automatic reuse; explicitly compile again to retry.
+
+Direct frame draws capture managed uniform values when encoded, matching compute dispatches. Later `set()` calls do not alter earlier commands. Storage bindings, raw/low-level buffers, claimed bind groups, and render bundles retain their live buffer contents.

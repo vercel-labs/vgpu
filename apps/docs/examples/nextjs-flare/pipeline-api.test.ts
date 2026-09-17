@@ -1,10 +1,6 @@
 import { expect, test } from "vitest";
-import {
-  getMockGPUDeviceInstrumentation,
-  init,
-  target,
-  type Gpu,
-} from "vgpu/mock";
+import { init, target } from "vgpu/mock";
+import { uniformBindingFloats } from "../../test-support/mock-uniforms";
 
 import { FlarePipeline, rgbaRaster } from "./pipeline";
 
@@ -28,7 +24,7 @@ test("the flare initializes complete logo uniforms and preserves them during par
       await gpu.settled();
 
       expect(output.size).toEqual(size);
-      expect(logoUniformFloats(gpu)).toEqual(
+      expect(uniformBindingFloats(gpu, "nextjs-flare-logo")).toEqual([
         [
           ...placement.logoCenter,
           ...placement.logoScale,
@@ -36,36 +32,11 @@ test("the flare initializes complete logo uniforms and preserves them during par
           3 / 8,
           1.1,
           0,
-        ].map(Math.fround)
-      );
+        ].map(Math.fround),
+      ]);
     }
   } finally {
     pipeline?.dispose();
     gpu.dispose();
   }
 });
-
-function logoUniformFloats(gpu: Gpu): number[] {
-  const buffers = new Set<GPUBuffer>();
-  for (const descriptor of getMockGPUDeviceInstrumentation(gpu.device.gpu)
-    .createBindGroupDescriptors)
-    for (const { resource } of descriptor.entries)
-      if (
-        "buffer" in resource &&
-        resource.buffer.label === "nextjs-flare-logo.params"
-      )
-        buffers.add(resource.buffer);
-  expect(buffers.size).toBe(1);
-  const buffer = [...buffers][0]!;
-  if (
-    !("__vgpuMockBytes" in buffer) ||
-    !(buffer.__vgpuMockBytes instanceof Uint8Array)
-  )
-    throw new Error(
-      "The public mock backend did not expose packed buffer bytes"
-    );
-  const bytes = buffer.__vgpuMockBytes;
-  return [
-    ...new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4),
-  ];
-}

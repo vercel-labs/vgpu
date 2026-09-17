@@ -1,3 +1,7 @@
+import { FrameUniforms, disposeFrameUniforms, type UniformCapture } from "./frame-uniforms.ts";
+import { deliverOperations, validateOperation, type OperationValidation } from "./native-validation.ts";
+import type { Compute, DispatchOptions } from "./api-types.ts";
+import { frameComputeOf } from "./frame-protocols.ts";
 import type { Device } from "@vgpu/core";
 import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, popLastClaimedGroupValidationScope, preferClaimedGroupValidationResult, pushClaimedGroupValidationScope, submittedWorkDone, type ClaimedGroupValidationResult, type ValidationErrorSink } from "./claim-validation.ts";
 import { endRenderPassWithClaimValidation } from "./claim-validation-encode.ts";
@@ -55,6 +59,7 @@ const frameRunnerToken = serviceToken<FrameRunner>("frame-runner");
 function frameRunner(kernel: Kernel): FrameRunner {
   return kernel.service(frameRunnerToken, (self) => {
     const state = frameState(self);
+    self.own("service", () => disposeFrameUniforms(self.device));
     return new FrameRunner(
       () => {
         let release = () => {};
@@ -66,6 +71,13 @@ function frameRunner(kernel: Kernel): FrameRunner {
       (handle) => self.own("scheduler", () => handle.stop()),
     );
   });
+}
+
+export interface FrameComputePassOptions { readonly label?: string }
+
+export interface FrameComputePass {
+  dispatch(pipeline: Compute, x: number, y?: number, z?: number): void;
+  dispatch(pipeline: Compute, options: DispatchOptions): void;
 }
 
 export interface FramePassOptions {
@@ -117,6 +129,9 @@ export class Frame {
   done: Promise<void> = Promise.resolve();
   readonly #encoder: GPUCommandEncoder;
   readonly #validations: ClaimedGroupValidationResult[] = [];
+  readonly #computeValidations: OperationValidation[] = [];
+  #uniforms?: FrameUniforms;
+  readonly #capture: UniformCapture = { capture: (value, cache) => (this.#uniforms ??= new FrameUniforms(this.device)).capture(value, cache) };
   /**
    * Everything a pass of this frame attached, as opaque {@link FrameOwner}s: timers and
    * visibilities today, scene view generations later. The frame never learns what they are — it
@@ -153,6 +168,48 @@ export class Frame {
     this.#encoder = device.gpu.createCommandEncoder({ label: "vgpu.frame" });
   }
 
+  computePass(body: (pass: FrameComputePass) => void): void;
+  computePass(options: FrameComputePassOptions, body: (pass: FrameComputePass) => void): void;
+  computePass(options: FrameComputePassOptions | ((pass: FrameComputePass) => void), body?: (pass: FrameComputePass) => void): void {
+    this.#assertPassAvailable("Frame.computePass");
+    const callback = typeof options === "function" ? options : body;
+    if (typeof callback !== "function") throw new VGPUError({ code: "VGPU-COMPUTE-PASS-INVALID", message: "computePass requires a synchronous callback.", where: "Frame.computePass" });
+    const label = typeof options === "function" ? "vgpu.computePass" : options.label ?? "vgpu.computePass";
+    const encoder = validateOperation(this.device, this.#computeValidations, `${label}.begin`, () => this.#encoder.beginComputePass({ label }));
+    this.#passActive = true;
+    let open = true;
+    const pass: FrameComputePass = {
+      dispatch: (pipeline: Compute, x: number | DispatchOptions, y?: number, z?: number) => {
+        if (!open) throw new VGPUError({ code: "VGPU-COMPUTE-PASS-CLOSED", message: "The compute pass callback has ended.", where: `${label}.dispatch` });
+        assertDeviceUsable(this.device, `${label}.dispatch`);
+        const compute = frameComputeOf(pipeline);
+        if (!compute || compute.device.gpu !== this.device.gpu) throw new VGPUError({ code: "VGPU-COMPUTE-DEVICE-MISMATCH", message: "Expected a compute pipeline created for this frame's GPU device.", where: `${label}.dispatch` });
+        compute.encode(encoder, x, y, z, this.#computeValidations, this.#capture);
+      },
+    };
+    let failed = false;
+    try {
+      const returned = callback(pass) as unknown;
+      if (returned && typeof (returned as PromiseLike<unknown>).then === "function") {
+        void Promise.resolve(returned).catch(() => undefined);
+        throw new VGPUError({ code: "VGPU-COMPUTE-PASS-ASYNC", message: "computePass callbacks must be synchronous; await preparation before opening the frame.", where: "Frame.computePass" });
+      }
+    } catch (error) { failed = true; throw error; }
+    finally {
+      open = false;
+      this.#passActive = false;
+      try { validateOperation(this.device, this.#computeValidations, `${label}.end`, () => encoder.end()); }
+      catch (error) { if (!failed) throw error; }
+    }
+  }
+
+  #assertPassAvailable(where: string): void {
+    if (this.#canceled) throw frameCanceledError(where);
+    if (this.#submitted) throw frameAlreadySubmittedError(where);
+    assertDeviceUsable(this.device, where);
+    if (this.#passActive) throw framePassActiveError(where);
+  }
+
   pass(target: Target, body: Effect | Draw | ((pass: FramePass) => void)): void;
   pass(options: FramePassOptions, body: Effect | Draw | ((pass: FramePass) => void)): void;
   pass(target: Target | FramePassOptions, body: Effect | Draw | ((pass: FramePass) => void)): void {
@@ -162,6 +219,8 @@ export class Frame {
     // cancellation is the proximate cause there and names it better than a generic disposed device.
     if (this.#canceled) throw frameCanceledError("Frame.pass");
     assertDeviceUsable(this.device, "Frame.pass");
+    if (this.#passActive) throw framePassActiveError("Frame.pass");
+    if (this.#submitted && !isSurface(isTarget(target) ? target : target.target)) throw frameAlreadySubmittedError("Frame.pass");
     const targetOnly = isTarget(target);
     const cb = typeof body === "function" ? body : (p: FramePass) => p.draw(body);
     const resolvedTarget = targetOnly ? target : target.target ?? this.defaultTarget;
@@ -236,7 +295,8 @@ export class Frame {
           // re-checks the device here instead of taking it as a separate constructor argument.
           assertDeviceUsable(this.device, where);
           if (this.#canceled) throw frameCanceledError(where);
-        }));
+          if (!this.#passActive) throw framePassActiveError(where);
+        }, this.#capture));
       } finally {
         this.#passActive = false;
       }
@@ -260,15 +320,18 @@ export class Frame {
     // already-closed frame stays a no-op even after `gpu.dispose()` took the device with it.
     if (this.#submitted || this.#canceled) return;
     assertDeviceUsable(this.device, "Frame.submit");
+    if (this.#passActive) throw framePassActiveError("Frame.submit");
     this.#submitted = true;
     this.releaseLifecycle?.();
     // Timed and occlusion-queried frames append one resolveQuerySet of each instance's contiguous
     // used range (plus the staging copy) to the still-open frame encoder — zero extra submissions.
-    for (const owner of this.#liveOwners()) owner.finalizeFrame(this, this.#encoder);
+    try { for (const owner of this.#liveOwners()) owner.finalizeFrame(this, this.#encoder); }
+    catch (error) { this.#uniforms?.release(); this.#abandonOwners(this.#frameOwners()); throw error; }
+    try { this.#uniforms?.flush(); } catch (error) { this.#uniforms?.release(); this.#abandonOwners(this.#frameOwners()); throw error; }
     let commandBuffer: GPUCommandBuffer;
     const finishContext = this.#validations[0]?.context;
     if (finishContext) pushClaimedGroupValidationScope(this.device, finishContext);
-    try { commandBuffer = this.#encoder.finish(); }
+    try { commandBuffer = this.#computeValidations.length ? validateOperation(this.device, this.#computeValidations, "Frame.finish", () => this.#encoder.finish()) : this.#encoder.finish(); }
     catch (error) {
       // finish() failed, so the resolves encoded above never reach the queue: nothing may be read
       // back, but every instance still has to release the retain it took when it was attached.
@@ -277,7 +340,7 @@ export class Frame {
       discardClaimedGroupValidationResults(this.#validations);
       if (result) discardClaimedGroupValidationResults([result]);
       const context = result?.context ?? finishContext;
-      if (!context) throw error;
+      if (!context) { this.#uniforms?.release(); throw error; }
       this.done = this.#trackDone(this.#deliverValidationError(context.label, context.group, error));
       return;
     }
@@ -287,7 +350,10 @@ export class Frame {
     }
     const submitContext = this.#validations[0]?.context;
     if (submitContext) pushClaimedGroupValidationScope(this.device, submitContext);
-    try { this.device.gpu.queue.submit([commandBuffer]); }
+    try {
+      if (this.#computeValidations.length) validateOperation(this.device, this.#computeValidations, "Frame.submit", () => this.device.gpu.queue.submit([commandBuffer]));
+      else this.device.gpu.queue.submit([commandBuffer]);
+    }
     catch (error) {
       // Same as the finish() failure: the command buffer never ran, so release the retains and read
       // nothing back — the resolve's staging bytes are stale, not this frame's results.
@@ -296,7 +362,7 @@ export class Frame {
       discardClaimedGroupValidationResults(this.#validations);
       if (result) discardClaimedGroupValidationResults([result]);
       const context = result?.context ?? submitContext;
-      if (!context) throw error;
+      if (!context) { this.#uniforms?.release(); throw error; }
       this.done = this.#trackDone(this.#deliverValidationError(context.label, context.group, error));
       return;
     }
@@ -308,7 +374,7 @@ export class Frame {
     for (const owner of this.#liveOwners()) owner.frameSubmitted(this);
     // Instances a failed pass dropped are skipped above, so they still hold this frame's retain.
     this.#abandonOwners(this.#discardedOwners);
-    this.done = this.#trackDone(claimedGroupValidationDone(this.device, this.#validations, { errorSink: this.errorSink }));
+    this.done = this.#trackDone(Promise.all([claimedGroupValidationDone(this.device, this.#validations, { errorSink: this.errorSink }), deliverOperations(this.#computeValidations, this.errorSink ?? (error => console.error(error)))]).then(() => undefined));
   }
 
   /**
@@ -330,6 +396,8 @@ export class Frame {
     // could destroy them before encoder.end(), and the callback could keep encoding after cancel.
     if (this.#passActive) throw framePassActiveError("Frame.cancel");
     this.#canceled = true;
+    this.#uniforms?.release();
+    this.#computeValidations.length = 0;
     this.releaseLifecycle?.();
     // Nothing is finalized and nothing is read back: the encoded passes never reach the queue, so
     // decoding a resolve would report stale staging bytes as a phantom duration or "hidden".
@@ -405,19 +473,23 @@ export class Frame {
   }
 
   #trackDone(promise: Promise<void>): Promise<void> {
-    this.trackSettled?.(promise);
-    return promise;
+    const done = promise.catch(cause => {
+      const error = cause instanceof VGPUError ? cause : new VGPUError({ code: "VGPU-FRAME-COMPLETION", message: "GPU frame completion failed.", where: "Frame.done", cause });
+      return this.errorSink ? this.errorSink(error) : console.error(error);
+    }).finally(() => this.#uniforms?.release());
+    this.trackSettled?.(done);
+    return done;
   }
 }
 
 export class FramePass {
   #occlusionActive = false;
-  constructor(private readonly encoder: GPURenderPassEncoder, readonly target: Target, private readonly validations: ClaimedGroupValidationResult[], private readonly depthReadOnly = false, private readonly occlusionSource?: FrameOcclusionSource, private readonly frame?: Frame, private readonly assertFrameOpen?: (where: string) => void) {}
+  constructor(private readonly encoder: GPURenderPassEncoder, readonly target: Target, private readonly validations: ClaimedGroupValidationResult[], private readonly depthReadOnly = false, private readonly occlusionSource?: FrameOcclusionSource, private readonly frame?: Frame, private readonly assertFrameOpen?: (where: string) => void, private readonly capture?: UniformCapture) {}
   draw(drawable: Draw | Effect, opts: DrawCallOptions = {}): void {
     this.assertFrameOpen?.("FramePass.draw");
     const encodable = frameDrawable(drawable);
     if (this.depthReadOnly) assertDrawableAllowedInReadOnlyPass(encodable, this.target);
-    encodable.encode(this.encoder, this.target, opts, (result) => this.validations.push(result));
+    encodable.encode(this.encoder, this.target, opts, (result) => this.validations.push(result), this.capture);
   }
   /**
    * Wraps one or more draws in begin/endOcclusionQuery. The body ALWAYS executes; condition your

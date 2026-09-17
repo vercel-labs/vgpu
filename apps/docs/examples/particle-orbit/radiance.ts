@@ -5,23 +5,23 @@ import {
   type Frame,
   type Gpu,
   type Target,
-} from 'vgpu';
+} from "vgpu";
 
-import jfaInitWgsl from './jfa-init.wgsl';
-import jfaPassWgsl from './jfa-pass.wgsl';
-import radianceCascadeWgsl from './radiance-cascade.wgsl';
-import rcEmitterWgsl from './rc-emitter.wgsl';
-import rcResolveWgsl from './rc-resolve.wgsl';
-import sdfFinalizeWgsl from './sdf-finalize.wgsl';
+import jfaInitWgsl from "./jfa-init.wgsl";
+import jfaPassWgsl from "./jfa-pass.wgsl";
+import radianceCascadeWgsl from "./radiance-cascade.wgsl";
+import rcEmitterWgsl from "./rc-emitter.wgsl";
+import rcResolveWgsl from "./rc-resolve.wgsl";
+import sdfFinalizeWgsl from "./sdf-finalize.wgsl";
 
-const HDR_FORMAT = 'rgba16float' as const;
+const HDR_FORMAT = "rgba16float" as const;
 // Seeds store absolute pixel coordinates; f16 loses texels past 2048.
-const SEED_FORMAT = 'rgba32float' as const;
+const SEED_FORMAT = "rgba32float" as const;
 // The light field is low-frequency, so it runs well below canvas resolution.
 const MAX_HEIGHT = 288;
 
 export function radianceFieldSize(
-  screen: readonly [number, number],
+  screen: readonly [number, number]
 ): readonly [number, number] {
   const height = Math.max(1, Math.min(MAX_HEIGHT, screen[1]));
   return [
@@ -30,11 +30,13 @@ export function radianceFieldSize(
   ];
 }
 
-export function radianceJumps(size: readonly [number, number]): readonly number[] {
+export function radianceJumps(
+  size: readonly [number, number]
+): readonly number[] {
   const jumpCount = Math.ceil(Math.log2(Math.max(size[0], size[1], 2)));
   return [
     ...Array.from({ length: jumpCount }, (_, index) =>
-      Math.max(1, 2 ** (jumpCount - index - 1)),
+      Math.max(1, 2 ** (jumpCount - index - 1))
     ),
     1,
     1,
@@ -46,8 +48,10 @@ export function radianceCascadeCount(size: readonly [number, number]): number {
     6,
     Math.max(
       5,
-      Math.ceil(Math.log(1 + (3 * Math.hypot(size[0], size[1])) / 2) / Math.log(4)),
-    ),
+      Math.ceil(
+        Math.log(1 + (3 * Math.hypot(size[0], size[1])) / 2) / Math.log(4)
+      )
+    )
   );
 }
 
@@ -80,10 +84,10 @@ export function createRadiance(gpu: Gpu, screen: readonly [number, number]) {
     ];
     const irradiance = own(target(gpu, { size, format: HDR_FORMAT }));
     const samp = sampler(gpu, {
-      minFilter: 'linear',
-      magFilter: 'linear',
-      addressModeU: 'clamp-to-edge',
-      addressModeV: 'clamp-to-edge',
+      minFilter: "linear",
+      magFilter: "linear",
+      addressModeU: "clamp-to-edge",
+      addressModeV: "clamp-to-edge",
     });
     return {
       size,
@@ -97,14 +101,18 @@ export function createRadiance(gpu: Gpu, screen: readonly [number, number]) {
       samp,
       effects: {
         emitter: effect(gpu, rcEmitterWgsl, {
-          set: { samp, params: { time: 0, aspect: emitter.size[0] / emitter.size[1] } },
+          label: "particle-orbit-radiance-emitter",
+          set: {
+            samp,
+            params: { time: 0, aspect: emitter.size[0] / emitter.size[1] },
+          },
         }),
         jfaInit: effect(gpu, jfaInitWgsl),
-        // Uniforms upload immediately, so every encoded pass needs its own effect.
+        // Keep one effect per jump so every stage has explicit binding state.
         jfaSteps: jumps.map(() => effect(gpu, jfaPassWgsl)),
         sdfFinalize: effect(gpu, sdfFinalizeWgsl),
         cascade: Array.from({ length: cascadeCount }, () =>
-          effect(gpu, radianceCascadeWgsl),
+          effect(gpu, radianceCascadeWgsl)
         ),
         resolve: effect(gpu, rcResolveWgsl),
       },
@@ -162,12 +170,12 @@ export function encodeRadiance(frame: Frame, radiance: Radiance): void {
   const clear = [0, 0, 0, 0] as const;
 
   frame.pass({ target: radiance.emitter, clear }, (pass) =>
-    pass.draw(effects.emitter),
+    pass.draw(effects.emitter)
   );
 
   effects.jfaInit.set({ emitter: radiance.emitter });
   frame.pass({ target: radiance.jfa[0], clear }, (pass) =>
-    pass.draw(effects.jfaInit),
+    pass.draw(effects.jfaInit)
   );
 
   let seedRead = radiance.jfa[0];
@@ -181,7 +189,7 @@ export function encodeRadiance(frame: Frame, radiance: Radiance): void {
 
   effects.sdfFinalize.set({ seeds: seedRead });
   frame.pass({ target: radiance.sdf, clear }, (pass) =>
-    pass.draw(effects.sdfFinalize),
+    pass.draw(effects.sdfFinalize)
   );
 
   let atlasWrite = radiance.cascades[0];
@@ -189,7 +197,9 @@ export function encodeRadiance(frame: Frame, radiance: Radiance): void {
   for (let cascade = radiance.cascadeCount - 1; cascade >= 0; cascade--) {
     const pass = effects.cascade[cascade]!;
     pass.set({
-      rc: { state: [cascade, cascade < radiance.cascadeCount - 1 ? 1 : 0, 0, 0] },
+      rc: {
+        state: [cascade, cascade < radiance.cascadeCount - 1 ? 1 : 0, 0, 0],
+      },
       sdf_tex: radiance.sdf,
       sdf_samp: samp,
       emitter_tex: radiance.emitter,
@@ -202,6 +212,6 @@ export function encodeRadiance(frame: Frame, radiance: Radiance): void {
 
   effects.resolve.set({ cascade_tex: atlasRead, field_tex: radiance.emitter });
   frame.pass({ target: radiance.irradiance, clear }, (pass) =>
-    pass.draw(effects.resolve),
+    pass.draw(effects.resolve)
   );
 }

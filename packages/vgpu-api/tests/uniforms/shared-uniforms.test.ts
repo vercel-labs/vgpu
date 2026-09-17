@@ -95,7 +95,7 @@ describe("uniforms(gpu) shared uniforms", () => {
     gpu.dispose();
   });
 
-  test("one in-place write is visible to both consumers without reallocating buffers or bind groups", async () => {
+  test("shared canonical values stay live while frame consumers capture their own upload slices", async () => {
     const gpu = await init();
     const globals = uniforms(gpu, { time: 0, mouse: [0, 0] });
     const wave = effect(gpu, WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
@@ -121,8 +121,8 @@ describe("uniforms(gpu) shared uniforms", () => {
 
     const resource = drawBindingState(effectDraw(wave), "globals")?.resource as GPUBufferBinding;
     expect(resource.buffer).toBe((drawBindingState(effectDraw(blur), "globals")?.resource as GPUBufferBinding).buffer);
-    expect(mock.calls.createBuffer).toBe(1);
-    expect(mock.calls.createBindGroup).toBe(bindGroupsAfterFirstFrame);
+    expect(mock.calls.createBuffer).toBe(3); // canonical plus two in-flight frame pages
+    expect(mock.calls.createBindGroup).toBe(bindGroupsAfterFirstFrame + 2);
     expect(bindGroupsAfterFirstFrame).toBe(2);
     expect("__vgpuMockBytes" in resource.buffer).toBe(true);
     const bytes = resource.buffer.__vgpuMockBytes;

@@ -1,3 +1,4 @@
+import { deliverObjectValidation } from "./native-validation.ts";
 /**
  * The single lazy render service of a `Gpu`: bind groups, pipelines, shader modules,
  * pipeline layouts and samplers.
@@ -15,6 +16,7 @@ import { serviceToken, type Kernel } from "./kernel.ts";
 export interface RenderService {
   readonly binds: BindGroupCache;
   readonly pipelines: PipelineStore;
+  readonly computePipelines: PipelineStore<GPUComputePipeline>;
   readonly shaderModules: ShaderModuleCache;
   readonly pipelineLayouts: PipelineLayoutCache;
   sampler(desc?: GPUSamplerDescriptor): GPUSampler;
@@ -34,14 +36,25 @@ function createRenderService(kernel: Kernel): RenderService {
     errorSink: (error) => kernel.reportError(error),
     registerSettledSource: (source) => kernel.registerSettledSource(source),
   });
-  const shaderModules = createShaderModuleCache(device);
-  const pipelineLayouts = createPipelineLayoutCache(device);
+  const computePipelines = createPipelineStore<GPUComputePipeline>(device, { errorSink: error => kernel.reportError(error), registerSettledSource: source => kernel.registerSettledSource(source) });
+  const pendingObjects = new Set<Promise<void>>();
+  const unregisterObjects = kernel.registerSettledSource(() => [...pendingObjects]);
+  const observe = (object: object, where: string) => {
+    const pending = deliverObjectValidation(object, where, error => kernel.reportError(error));
+    pendingObjects.add(pending);
+    void pending.then(() => pendingObjects.delete(pending), () => pendingObjects.delete(pending));
+  };
+  const shaderModules = createShaderModuleCache(device, observe);
+  const pipelineLayouts = createPipelineLayoutCache(device, observe);
   const samplers = createSamplerCache(device);
   kernel.own("service", () => {
+    pendingObjects.clear();
+    unregisterObjects();
     pipelines.dispose();
+    computePipelines.dispose();
     shaderModules.dispose();
     pipelineLayouts.dispose();
     binds.dispose();
   });
-  return { binds, pipelines, shaderModules, pipelineLayouts, sampler: (desc) => samplers.sampler(desc) };
+  return { binds, pipelines, computePipelines, shaderModules, pipelineLayouts, sampler: (desc) => samplers.sampler(desc) };
 }

@@ -1,11 +1,6 @@
 import { expect, test } from "vitest";
-import {
-  frame,
-  getMockGPUDeviceInstrumentation,
-  init,
-  target,
-  type Gpu,
-} from "vgpu/mock";
+import { frame, init, target } from "vgpu/mock";
+import { uniformBindingFloats } from "../../test-support/mock-uniforms";
 import {
   compileScene,
   createScene,
@@ -26,10 +21,15 @@ test("the fractal initializes complete uniforms and preserves orbit across targe
       renderScene(current, scene!, output, { yaw: 1.2, pitch: -0.4 })
     );
     await gpu.settled();
-    expect(bindingFloats(gpu, ".params")).toEqual([
+    expect(uniformBindingFloats(gpu, "raymarched-fractal-scene")).toEqual([
       [1280, 720, Math.fround(1.2), Math.fround(-0.4)],
     ]);
-    expect(bindingFloats(gpu, ".blur")).toEqual([
+    expect(
+      uniformBindingFloats(gpu, [
+        "raymarched-fractal-blur-h",
+        "raymarched-fractal-blur-v",
+      ])
+    ).toEqual([
       [Math.fround(1 / 640), Math.fround(1 / 360), 1, 0],
       [Math.fround(1 / 640), Math.fround(1 / 360), 0, 1],
     ]);
@@ -37,10 +37,19 @@ test("the fractal initializes complete uniforms and preserves orbit across targe
     replaceTargets(gpu, scene, [800, 500]);
     expect(scene.targets.scene.size).toEqual([800, 500]);
     expect(scene.targets.bloomA.size).toEqual([576, 360]);
-    expect(bindingFloats(gpu, ".params")).toEqual([
+    frame(gpu, (current) =>
+      renderScene(current, scene!, output, { yaw: 1.2, pitch: -0.4 })
+    );
+    await gpu.settled();
+    expect(uniformBindingFloats(gpu, "raymarched-fractal-scene")).toEqual([
       [800, 500, Math.fround(1.2), Math.fround(-0.4)],
     ]);
-    expect(bindingFloats(gpu, ".blur")).toEqual([
+    expect(
+      uniformBindingFloats(gpu, [
+        "raymarched-fractal-blur-h",
+        "raymarched-fractal-blur-v",
+      ])
+    ).toEqual([
       [Math.fround(1 / 576), Math.fround(1 / 360), 1, 0],
       [Math.fround(1 / 576), Math.fround(1 / 360), 0, 1],
     ]);
@@ -49,25 +58,3 @@ test("the fractal initializes complete uniforms and preserves orbit across targe
     gpu.dispose();
   }
 });
-
-function bindingFloats(gpu: Gpu, suffix: string): number[][] {
-  const buffers = new Set<GPUBuffer>();
-  for (const descriptor of getMockGPUDeviceInstrumentation(gpu.device.gpu)
-    .createBindGroupDescriptors)
-    for (const { resource } of descriptor.entries)
-      if ("buffer" in resource && resource.buffer.label.endsWith(suffix))
-        buffers.add(resource.buffer);
-  return [...buffers].map((buffer) => {
-    if (
-      !("__vgpuMockBytes" in buffer) ||
-      !(buffer.__vgpuMockBytes instanceof Uint8Array)
-    )
-      throw new Error(
-        "The public mock backend did not expose packed buffer bytes"
-      );
-    const bytes = buffer.__vgpuMockBytes;
-    return [
-      ...new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4),
-    ];
-  });
-}
