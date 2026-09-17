@@ -50,6 +50,21 @@ test("Device.isCompatibilityMode defaults false and can be set by adapters", () 
   expect(new Device(gpu, null, { isCompatibilityMode: true }).isCompatibilityMode).toBe(true);
 });
 
+test("Device.createShader exposes entry points extracted from a WGSL string", () => {
+  const gpu = createMockGPUDevice();
+  const device = new Device(gpu);
+  const source = `
+    @compute @workgroup_size(1) fn simulate() {}
+    @fragment fn maín() {}
+  `;
+
+  const shader = device.createShader(source);
+
+  expect(shader.code).toBe(source);
+  expect(shader.entryPoints).toEqual(["simulate", "maín"]);
+  expect(getMockGPUDeviceInstrumentation(gpu).calls.createShaderModule).toBe(1);
+});
+
 test("mock GPU device creates instrumented query sets", () => {
   const gpu = createMockGPUDevice();
   const querySet = gpu.createQuerySet({ type: "timestamp", count: 64, label: "ts" });
