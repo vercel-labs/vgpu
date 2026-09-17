@@ -27,6 +27,7 @@ export const exampleSlugs = [
   'particle-orbit',
   'typegpu-liquid-glass',
   'adaptive-quality',
+  'spiral-galaxy',
 ] as const;
 
 export type ExampleSlug = (typeof exampleSlugs)[number];
