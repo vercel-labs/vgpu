@@ -1,12 +1,6 @@
 import { expect, test } from "vitest";
-import {
-  frame,
-  getMockGPUDeviceInstrumentation,
-  init,
-  storage,
-  target,
-  type Gpu,
-} from "vgpu/mock";
+import { frame, init, storage, target } from "vgpu/mock";
+import { uniformBindingFloats } from "../../test-support/mock-uniforms";
 import {
   createEffects,
   createTargets,
@@ -26,6 +20,19 @@ import {
   prewarmRadiance,
   type Radiance,
 } from "./radiance";
+
+const PARAM_PASSES = [
+  "particle-orbit-nebula",
+  "particle-orbit-stars",
+  "particle-orbit-atmosphere",
+  "particle-orbit-trails",
+  "particle-orbit-radiance-emitter",
+  "particle-orbit-post",
+] as const;
+const BLUR_PASSES = Array.from(
+  { length: 4 },
+  (_, i) => `particle-orbit-blur-${i}`
+);
 
 test("particle effects start with complete uniforms and retain time and pointer on resize", async () => {
   const gpu = await init();
@@ -48,20 +55,26 @@ test("particle effects start with complete uniforms and retain time and pointer 
       renderChain(current, effects, targets!, output, recorded, radiance!)
     );
     await gpu.settled();
-    const params = bindingFloats(gpu, ".params");
+    const params = uniformBindingFloats(gpu, PARAM_PASSES);
     expect(params.filter((values) => values.length === 2)).toEqual(
       Array.from({ length: 5 }, () => [0, Math.fround(320 / 180)])
     );
     expect(params.filter((values) => values.length === 4)).toEqual([
       [0, Math.fround(320 / 180), 0, 0],
     ]);
-    expect(bindingFloats(gpu, ".blur")).toEqual(expectedBlurs(320, 180));
+    expect(uniformBindingFloats(gpu, BLUR_PASSES)).toEqual(
+      expectedBlurs(320, 180)
+    );
 
     setTime(effects, radiance, 7.25);
     setPointer(effects, [0.25, -0.5]);
     resized = createTargets(gpu, [800, 500]);
     setBindings(effects, resized, radiance);
-    const after = bindingFloats(gpu, ".params");
+    frame(gpu, (current) =>
+      renderChain(current, effects, resized!, output, recorded, radiance!)
+    );
+    await gpu.settled();
+    const after = uniformBindingFloats(gpu, PARAM_PASSES);
     expect(
       after.filter(
         (values) => values.length === 2 && values[1] === Math.fround(800 / 500)
@@ -76,7 +89,9 @@ test("particle effects start with complete uniforms and retain time and pointer 
       [7.25, Math.fround(800 / 500), 0.25, -0.5],
     ]);
     expect(resized.bloom[0].size).toEqual([576, 360]);
-    expect(bindingFloats(gpu, ".blur")).toEqual(expectedBlurs(576, 360));
+    expect(uniformBindingFloats(gpu, BLUR_PASSES)).toEqual(
+      expectedBlurs(576, 360)
+    );
   } finally {
     if (radiance) destroyRadiance(radiance);
     if (resized) destroyTargets(resized);
@@ -99,26 +114,4 @@ function expectedBlurs(width: number, height: number): number[][] {
     Math.fround(radius!),
     0,
   ]);
-}
-
-function bindingFloats(gpu: Gpu, suffix: string): number[][] {
-  const buffers = new Set<GPUBuffer>();
-  for (const descriptor of getMockGPUDeviceInstrumentation(gpu.device.gpu)
-    .createBindGroupDescriptors)
-    for (const { resource } of descriptor.entries)
-      if ("buffer" in resource && resource.buffer.label.endsWith(suffix))
-        buffers.add(resource.buffer);
-  return [...buffers].map((buffer) => {
-    if (
-      !("__vgpuMockBytes" in buffer) ||
-      !(buffer.__vgpuMockBytes instanceof Uint8Array)
-    )
-      throw new Error(
-        "The public mock backend did not expose packed buffer bytes"
-      );
-    const bytes = buffer.__vgpuMockBytes;
-    return [
-      ...new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4),
-    ];
-  });
 }

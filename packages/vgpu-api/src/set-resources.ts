@@ -1,3 +1,4 @@
+import type { UniformValue } from "./frame-uniforms.ts";
 import { Buffer, Texture, type ResourceIdentity, type UnsubscribeResourceDestroy } from "@vgpu/core";
 import type { BindingInfo } from "@vgpu/wgsl/reflect-source";
 import type { BindGroupIdentityPart } from "./bind-cache.ts";
@@ -7,6 +8,7 @@ import { assertBufferUsable } from "./lifecycle.ts";
 import { BINDING_RESOURCE, bindingResourceOf } from "./draw-protocols.ts";
 
 export interface NormalizedBindingResource {
+  readonly uniformValue?: () => UniformValue;
   readonly resourceLabel?: string;
   readonly resource: GPUBindingResource;
   readonly identity: BindGroupIdentityPart;

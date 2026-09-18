@@ -1,3 +1,4 @@
+import { nativeObject } from "./native-validation.ts";
 import { attachBindGroupLayoutMetadata, type Device } from "@vgpu/core";
 import type { BindingInfo, EntryPointInfo, ReflectedBindingLayout, Reflection } from "@vgpu/wgsl/reflect-source";
 import { entryMetadata } from "./entry-metadata.ts";
@@ -71,7 +72,7 @@ export function bindGroupLayoutsForReflection(
 }
 
 export function pipelineLayoutFor(device: Device, bindGroupLayouts: ReadonlyMap<number, GPUBindGroupLayout>): GPUPipelineLayout {
-  return device.gpu.createPipelineLayout({ bindGroupLayouts: contiguousLayouts(bindGroupLayouts) });
+  return nativeObject(device, () => device.gpu.createPipelineLayout({ bindGroupLayouts: contiguousLayouts(bindGroupLayouts) }), [...bindGroupLayouts.values()]);
 }
 
 function createBindGroupLayout(
@@ -90,7 +91,7 @@ export function cachedBindGroupLayout(device: Device, label: string, entries: re
   const key = JSON.stringify(entries);
   const cached = cache.get(key);
   if (cached) return cached;
-  const layout = attachBindGroupLayoutMetadata(device.gpu.createBindGroupLayout({ label, entries }), { entries });
+  const layout = attachBindGroupLayoutMetadata(nativeObject(device, () => device.gpu.createBindGroupLayout({ label, entries })), { entries });
   cache.set(key, layout);
   return layout;
 }

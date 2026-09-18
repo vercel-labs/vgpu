@@ -1,25 +1,40 @@
 export interface CanvasMouseTrackerSpec {
   readonly canvas: HTMLCanvasElement;
-  readonly normalize?: boolean;
   readonly flipY?: boolean;
 }
 
+export interface CanvasMousePosition {
+  readonly normalized: readonly [number, number];
+  readonly canvasPixels: readonly [number, number];
+}
+
 export interface CanvasMouseTracker {
-  readonly position: readonly [number, number];
+  readonly position: CanvasMousePosition;
   dispose(): void;
 }
 
 export function canvasMouseTracker(spec: CanvasMouseTrackerSpec): CanvasMouseTracker {
-  let position: readonly [number, number] = Object.freeze([0, 0] as const);
+  let position: CanvasMousePosition = Object.freeze({
+    normalized: Object.freeze([0, 0] as const),
+    canvasPixels: Object.freeze([0, 0] as const),
+  });
   const handler = (event: PointerEvent): void => {
     const rect = spec.canvas.getBoundingClientRect();
-    const rawX = Number.isFinite(event.offsetX) ? event.offsetX : event.clientX - rect.left;
-    const rawY = Number.isFinite(event.offsetY) ? event.offsetY : event.clientY - rect.top;
-    const width = spec.canvas.width || rect.width || 1;
-    const height = spec.canvas.height || rect.height || 1;
-    const x = spec.normalize === true ? rawX / width : rawX;
-    const y = spec.normalize === true ? rawY / height : rawY;
-    position = Object.freeze([x, spec.flipY === true ? (spec.normalize === true ? 1 - y : height - y) : y] as const);
+    const hasOffsetX = Number.isFinite(event.offsetX);
+    const hasOffsetY = Number.isFinite(event.offsetY);
+    // Offset coordinates ignore transforms and start at the padding edge, so pair them with
+    // client dimensions. Viewport coordinates instead use the transformed bounding rectangle.
+    const cssWidth = (hasOffsetX ? spec.canvas.clientWidth : rect.width) || rect.width;
+    const cssHeight = (hasOffsetY ? spec.canvas.clientHeight : rect.height) || rect.height;
+    const width = spec.canvas.width || cssWidth || 1;
+    const height = spec.canvas.height || cssHeight || 1;
+    const normalizedX = (hasOffsetX ? event.offsetX : event.clientX - rect.left) / (cssWidth || width);
+    const normalizedY = (hasOffsetY ? event.offsetY : event.clientY - rect.top) / (cssHeight || height);
+    const y = spec.flipY === true ? 1 - normalizedY : normalizedY;
+    position = Object.freeze({
+      normalized: Object.freeze([normalizedX, y] as const),
+      canvasPixels: Object.freeze([normalizedX * width, y * height] as const),
+    });
   };
   spec.canvas.addEventListener("pointermove", handler);
   return Object.freeze({

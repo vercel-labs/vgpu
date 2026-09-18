@@ -466,7 +466,7 @@ export function compileFailedError(where: string, cause: unknown, signature?: st
   return new VGPUError({
     code: "VGPU-COMPILE-FAILED",
     message: "WebGPU pipeline compilation failed.",
-    fix: "Check WGSL, vertex layouts, and target signature.",
+    fix: "Check WGSL, pipeline bindings, device limits, and render target/vertex layouts when applicable.",
     where,
     cause,
     detail: signature ? { signature } : undefined,

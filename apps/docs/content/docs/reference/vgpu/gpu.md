@@ -126,7 +126,7 @@ frameLoop(gpu, (frame) => {
 
 `gpu.onError(cb)` subscribes to asynchronous vgpu errors and returns an unsubscribe function. Listeners run in subscription order; removing one stops future deliveries; a throwing listener is reported to `console.error` without stopping the rest. If no listener is registered, vgpu reports the error to `console.error` by default.
 
-`gpu.settled()` resolves after the current snapshot of pending error deliveries and in-flight pipeline work settles. It never rejects, so it is safe for deterministic tests and teardown.
+`gpu.settled()` resolves after the current snapshot of pending error deliveries and in-flight pipeline work settles. This includes compute compilation and native compute validation through error delivery. It never rejects, so it is safe for deterministic tests and teardown. It is not a successful-execution assertion: await a pipeline’s `compile()` to handle compilation rejection and subscribe to `onError` for asynchronous execution failures.
 
 ## Notes
 

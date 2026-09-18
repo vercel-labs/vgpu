@@ -17,7 +17,7 @@ order: 60
 
 # Frames
 
-A frame is one unit of GPU work. Inside it you open passes, each drawing into a target you choose, and draw the effects you created earlier. Everything is encoded into one command encoder, and vgpu submits it once when the callback returns.
+A frame is one unit of GPU work. Inside it you open render passes with explicit targets and compute passes that dispatch prepared kernels. Everything is encoded into one command encoder, and vgpu submits it once when the callback returns.
 
 ## Render a single frame
 
@@ -155,3 +155,11 @@ requestAnimationFrame(tick);
 Both work. `frameLoop(gpu)` is the same loop with the clock, throttling, and resize handling done for you.
 
 See it live: the [fluid example](/examples/fluid) runs a compute-driven simulation with exactly this frame loop shape.
+
+## Compute and render in one submission
+
+Use `f.computePass(pass => pass.dispatch(simulation, workgroups))` between render passes when work depends on their output. Each compute callback can dispatch several kernels, including indirect dispatches. The frame preserves pass order and submits the combined command buffer once. Standalone `simulation.dispatch()` remains an independent submission even if called inside the frame callback.
+
+Prepare pipelines with `await simulation.compile()` before opening a frame. Compute-pass callbacks are synchronous and cannot nest other passes. Cancellation discards both render and compute commands belonging to the frame.
+
+Direct draws and dispatches capture their current managed uniform values. Storage buffers stay live for GPU-to-GPU dataflow. Explicit host writes, raw resources and render bundles keep their existing buffer semantics; later host writes are not inserted between encoded commands.

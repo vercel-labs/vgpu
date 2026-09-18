@@ -40,11 +40,15 @@ function createEffects(gpu: Gpu, targets: Targets) {
     magFilter: "linear",
   });
   const effects = {
-    scene: effect(gpu, fractalWgsl),
-    brightPass: effect(gpu, brightPassWgsl),
-    blurH: effect(gpu, blurWgsl),
-    blurV: effect(gpu, blurWgsl),
-    composite: effect(gpu, compositeWgsl),
+    scene: effect(gpu, fractalWgsl, { label: "raymarched-fractal-scene" }),
+    brightPass: effect(gpu, brightPassWgsl, {
+      label: "raymarched-fractal-bright-pass",
+    }),
+    blurH: effect(gpu, blurWgsl, { label: "raymarched-fractal-blur-h" }),
+    blurV: effect(gpu, blurWgsl, { label: "raymarched-fractal-blur-v" }),
+    composite: effect(gpu, compositeWgsl, {
+      label: "raymarched-fractal-composite",
+    }),
   };
   effects.scene.set({ params: { resolution: targets.scene.size, ...POSTER } });
   effects.brightPass.set({ samp: sharedSampler });

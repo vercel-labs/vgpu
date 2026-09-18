@@ -220,6 +220,7 @@ vgpu/scene OrbitControlsValues packages/vgpu-api/src/scene/orbit-controls.docs.m
 @vgpu/render/inspect InspectMaterialUniformParams packages/render/src/inspect/inspect-material.docs.md
 @vgpu/render/utils canvasMouseTracker packages/render/src/utils/canvas-mouse-tracker.docs.md
 @vgpu/render/utils CanvasMouseTrackerSpec packages/render/src/utils/canvas-mouse-tracker.docs.md
+@vgpu/render/utils CanvasMousePosition packages/render/src/utils/canvas-mouse-tracker.docs.md
 @vgpu/render/utils CanvasMouseTracker packages/render/src/utils/canvas-mouse-tracker.docs.md
 @vgpu/render/utils frameClock packages/render/src/utils/frame-clock.docs.md
 @vgpu/render/utils FrameClock packages/render/src/utils/frame-clock.docs.md

@@ -63,9 +63,11 @@ export function createEffects(vgpu: VgpuApi, gpu: Gpu): Effects {
   });
   const noiseSampler = noiseVolumeSampler(vgpu, gpu);
   return {
-    bake: vgpu.effect(gpu, bakeWgsl),
-    refine: vgpu.effect(gpu, refineWgsl),
-    shade: vgpu.effect(gpu, shadeWgsl),
+    bake: vgpu.effect(gpu, bakeWgsl, { label: "optimized-black-hole-bake" }),
+    refine: vgpu.effect(gpu, refineWgsl, {
+      label: "optimized-black-hole-refine",
+    }),
+    shade: vgpu.effect(gpu, shadeWgsl, { label: "optimized-black-hole-shade" }),
     bloomExtract: vgpu.effect(gpu, bloomWgsl),
     bloomBlurH0: vgpu.effect(gpu, bloomWgsl),
     bloomBlurV0: vgpu.effect(gpu, bloomWgsl),
