@@ -102,6 +102,10 @@ If the task only requested a closing comment draft, return the draft without pos
 | "Show me the comment to close the source." | Return a draft with the verified replacement link; do not send it. |
 | "Close the source with that comment" after the replacement merges. | Verify source kind/state and replacement merge, then post/close as authorized. |
 
-A concise closing note can be: "Addressed by [replacement PR], now merged into canary. Thanks for
-the report and reproduction." Substitute the verified link; mention co-authorship only if it was
-actually included. Closing an issue does not mean a related PR was closed.
+A concise closing note after crediting the original contributor as a co-author:
+
+> Addressed by [replacement PR], now merged into canary. You've been credited as a co-author.
+
+Substitute the verified replacement link and confirm the contributor's `Co-authored-by` trailer
+is present in the merged commit before using this wording. If a different form of credit was
+given, state that actual credit instead. Closing an issue does not mean a related PR was closed.
