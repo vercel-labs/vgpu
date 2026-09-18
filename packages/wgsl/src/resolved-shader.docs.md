@@ -80,7 +80,7 @@ interface ResolvedShader {
 | sourceMap | `SourceMap` | ✔ | — | Passthrough v1 source map with empty `mappings`. |
 | diagnostics | `readonly []` | ✔ | — | Always empty for `compile()` output. |
 | cacheKey | `Record<string, string>` | ✔ | — | Deterministic FNV-style key in the form `vgpu-wgsl-1:<hash>` under `default`. |
-| entryPoints | `readonly string[]` | ✔ | — | Names matched by `@(vertex|fragment|compute) fn <name>` in the source. |
+| entryPoints | `readonly string[]` | ✔ | — | Names of top-level functions carrying an exact `@vertex`, `@fragment`, or `@compute` attribute, in source order. Other attributes may surround the stage attribute; comments and function bodies are ignored, and Unicode XID names retain their original spelling. This is lexical metadata and does not validate WGSL semantics. |
 | stats | `{ lines: number; bytes: number; bindGroups: number }` | ✔ | — | Line count, UTF-8 byte length, and `bindGroups: 0`. |
 
 ### ShaderSource
@@ -205,5 +205,5 @@ acceptsLoaderOutput({
 - Treat `ResolvedShader` fields as read-only data. Do not patch placeholder AST internals to represent imports; use `resolveShader()` for import graphs.
 - `compile()` output does not prove WGSL validity. It only packages the string and rejects top-level `import`.
 - Pure-module contract for resolver graphs: imported modules may export structs/functions/constants/aliases, but no imported module may declare `@group/@binding`; declare resources only in the entry module.
-- **`entryPoints` here is not reflection.** `ResolvedShader.entryPoints` (this page, `compile()`'s output) is just `readonly string[]` — names matched by a regex over `@(vertex|fragment|compute) fn <name>`, nothing more. It is a different, older, and much simpler shape than the reflection `EntryPointInfo[]` returned by `reflectSource()` and by `resolveShader()`'s `ResolvedShader.reflection.entryPoints` (`@vgpu/wgsl/runtime`), which carries `stage`, `workgroupSize`, `inputs`, `bindings`, and `samplingPairs` per entry point. If you need stage/binding/input data, reach for `reflectSource` (`npx vgpu docs cat /@vgpu/wgsl/reflect-source/reflect-source.docs.md`) or `resolveShader`, not `compile()`.
+- **`entryPoints` here is not reflection.** `ResolvedShader.entryPoints` (this page, `compile()`'s output) is just a lexical `readonly string[]` of entry-point names. It does not validate stage signatures or expose stage, workgroup size, inputs, bindings, or sampling pairs. The reflection `EntryPointInfo[]` returned by `reflectSource()` and by `resolveShader()`'s `ResolvedShader.reflection.entryPoints` (`@vgpu/wgsl/runtime`) carries that semantic metadata. If you need it, reach for `reflectSource` (`npx vgpu docs cat /@vgpu/wgsl/reflect-source/reflect-source.docs.md`) or `resolveShader`, not `compile()`.
 - **See also:** `compile`, `resolveShader`, `reflectSource`, `wgslVitePlugin`, `wgslWebpackLoader`.

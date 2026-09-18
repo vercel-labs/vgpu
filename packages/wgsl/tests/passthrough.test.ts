@@ -7,8 +7,95 @@ test("compile passes plain WGSL through", () => {
   expect(compile(source)).toMatchObject({ kind: "wgsl", wgsl: source, diagnostics: [] });
 });
 
+test("compile derives passthrough metadata from the unchanged source", () => {
+  const source = "@compute @workgroup_size(1)\r\nfn ma\u0301in() {\r\n}\n";
+  const compiled = compile(source);
+
+  expect(compiled.wgsl).toBe(source);
+  expect(compiled.source).toEqual({ text: source, path: "<runtime>", imports: [] });
+  expect(compiled.ast.modules).toEqual([{ path: "<runtime>", text: source }]);
+  expect(compiled.ast.sourceMap).toBe(compiled.sourceMap);
+  expect(compiled.cacheKey).toEqual(compile(source).cacheKey);
+  expect(compiled.cacheKey).not.toEqual(compile(source.normalize()).cacheKey);
+  expect(compiled.stats).toEqual({ lines: 4, bytes: new TextEncoder().encode(source).byteLength, bindGroups: 0 });
+});
+
 test("compile rejects runtime imports", () => {
   const act = () => compile('import { x } from "./x";');
   expect(act).toThrow(/Runtime WGSL/);
   expect(act).toThrow(expect.objectContaining({ code: "VGPU-WGSL-RUNTIME-IMPORT" }));
+
+  expect(() => compile('/* preface */ // more preface\nimport { x } from "./x";')).toThrow(
+    expect.objectContaining({ code: "VGPU-WGSL-RUNTIME-IMPORT" }),
+  );
+  expect(() => compile('// import { x } from "./x";\n@vertex fn main() {}')).not.toThrow();
+});
+
+test("compile reports compute entry points with surrounding attributes", () => {
+  const source = `
+    @diagnostic(off, derivative_uniformity)
+    @compute
+    @workgroup_size(WORKGROUP_SIZE * ((2 + 2)))
+    @must_use
+    fn simulate() {}
+
+    @workgroup_size(8, 8) @compute fn shade() {}
+  `;
+
+  expect(compile(source).entryPoints).toEqual(["simulate", "shade"]);
+});
+
+test("compile preserves every entry point name and source order", () => {
+  const source = `
+    @vertex fn main_loop() {}
+    @fragment fn _main() {}
+    @compute @workgroup_size(1) fn maín() {}
+    @vertex fn Ωmain() {}
+    @fragment fn ma\u0301in() {}
+    @compute @workgroup_size(1) fn 𐐀main() {}
+  `;
+
+  expect(compile(source).entryPoints).toEqual(["main_loop", "_main", "maín", "Ωmain", "ma\u0301in", "𐐀main"]);
+});
+
+test("compile treats comments as token boundaries and ignores commented functions", () => {
+  const source = `
+    /*
+      @vertex fn blockGhost() {}
+      /* @fragment fn nestedGhost() {} */
+    */
+    // Block delimiters stay inert here: /* @compute fn lineGhost() {} */
+    @/**/compute/**/@workgroup_size(1)/**/fn/* separator */main/* separator */() {}
+  `;
+
+  expect(compile(source).entryPoints).toEqual(["main"]);
+});
+
+test("compile associates stage attributes only with their top-level function declaration", () => {
+  const source = `
+    @vertex_like fn almostVertex() {}
+    @fragmented fn almostFragment() {}
+    @compute2 fn almostCompute() {}
+    @location(0) fn helper() { @vertex fn nestedGhost() {} }
+    @compute const unrelated = 1;
+    fn auxiliary() {}
+    @fragment struct Incompatible { @location(0) value: f32 }
+    @compute fn missingName;
+    @vertex fn vertexMain() {}
+    @compute @workgroup_size(1) fn computeMain() {}
+    @fragment fn missingParen;
+  `;
+
+  expect(compile(source).entryPoints).toEqual(["vertexMain", "computeMain"]);
+});
+
+test("compile consumes incomplete attributes without matching a later declaration", () => {
+  const source = `
+    @vertex fn before() {}
+    @compute @workgroup_size((1)
+    @fragment fn after() {}
+  `;
+
+  expect(compile(source).entryPoints).toEqual(["before"]);
+  expect(compile("@compute @workgroup_size(1) /* unterminated").entryPoints).toEqual([]);
 });

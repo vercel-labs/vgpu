@@ -23,7 +23,7 @@ declare function compile(wgsl: string): ResolvedShader;
 |---|---|---|---|---|
 | wgsl | string | ✔ | — | Complete WGSL source for one runtime shader. It is copied byte-for-byte to `resolved.wgsl`. Top-level `import` syntax is rejected; use `resolveShader` or a build-time loader for WGSL import graphs. |
 
-**Returns:** `ResolvedShader` — a data object with `kind: "wgsl"`, the original `wgsl`, passthrough source/AST/source-map metadata, deterministic `cacheKey`, detected `entryPoints`, and source `stats`.
+**Returns:** `ResolvedShader` — a data object with `kind: "wgsl"`, the original `wgsl`, passthrough source/AST/source-map metadata, deterministic `cacheKey`, lexically detected `entryPoints`, and source `stats`.
 
 **Throws:** `VGPU-WGSL-RUNTIME-IMPORT` when the trimmed source starts with a top-level `import` statement after comments are stripped — remove the import, pre-resolve with `resolveShader`, or use the Vite/webpack loader.
 
@@ -59,6 +59,8 @@ try {
 
 - `compile()` does not read files, resolve packages, mangle imported symbols, reflect binding layouts, or validate WGSL semantics.
 - The only syntax check is import rejection. Invalid WGSL without `import` still returns a `ResolvedShader`; WebGPU validation happens later when a shader module is created.
+- `entryPoints` contains the names of top-level `fn` declarations carrying an exact `@vertex`, `@fragment`, or `@compute` attribute, in source order. Other declaration attributes may appear before or after the stage attribute. Comments and function bodies are ignored, and Unicode XID names are preserved without normalization.
+- Entry-point detection is intentionally lexical rather than semantic. It does not validate stage signatures, workgroup sizes, duplicate attributes, or any other WGSL rule. In incomplete source, an unterminated block comment or attribute argument ends extraction without throwing; names confirmed earlier are retained.
 - `stats.bindGroups` is `0` in this runtime passthrough shape. Do not use it as reflection for resource bindings.
 - Runtime WGSL modules with resources are allowed because there is no import graph. For imported WGSL modules, keep modules pure and declare every `@group/@binding` resource in the entry module.
 - **See also:** `ResolvedShader`, `ShaderSource`, `resolveShader`.

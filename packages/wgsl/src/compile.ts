@@ -33,11 +33,100 @@ function cacheKey(wgsl: string): Record<string, string> {
   return { default: `vgpu-wgsl-1:${(hash >>> 0).toString(16).padStart(8, "0")}` };
 }
 
+// Keep entry-point discovery local to the browser-facing compile path: importing the runtime
+// scanner or reflection would make the root export exceed its client bundle budget.
 function entryPoints(wgsl: string): string[] {
   const names: string[] = [];
-  const pattern = /@(vertex|fragment|compute)\s+fn\s+([A-Za-z_][A-Za-z0-9_]*)/g;
-  for (const match of wgsl.matchAll(pattern)) names.push(match[2]!);
+  const read = tokenReader(wgsl);
+
+  for (let token = read(); token !== undefined; token = read()) {
+    let hasStage = false;
+    while (token === "@") {
+      const attribute = read();
+      if (/^(vertex|fragment|compute)$/.test(attribute!)) hasStage = true;
+
+      token = read();
+      if (token === "(" && !skipParentheses(read)) return names;
+      if (token === "(") token = read();
+    }
+
+    if (token === "fn") {
+      const name = read();
+      const open = read();
+      if (hasStage && open === "(" && name && IDENTIFIER.test(name)) names.push(name);
+      skipDeclaration(read, open);
+    } else {
+      skipDeclaration(read, token);
+    }
+  }
   return names;
+}
+
+const IDENTIFIER = /[_\p{XID_Start}][_\p{XID_Continue}]*/uy;
+type TokenReader = () => string | undefined;
+
+function tokenReader(source: string): TokenReader {
+  let index = 0;
+  return () => {
+    while (index < source.length) {
+      const start = index;
+
+      if (/\s/.test(source[start]!)) {
+        index++;
+        continue;
+      }
+      if (source.startsWith("//", start)) {
+        index = source.indexOf("\n", start + 2);
+        if (index < 0) return undefined;
+        continue;
+      }
+      if (source.startsWith("/*", start)) {
+        index += 2;
+        let depth = 1;
+        while (index < source.length && depth > 0) {
+          if (source.startsWith("/*", index)) {
+            depth++;
+            index += 2;
+          } else if (source.startsWith("*/", index)) {
+            depth--;
+            index += 2;
+          } else {
+            index++;
+          }
+        }
+        continue;
+      }
+      IDENTIFIER.lastIndex = start;
+      const identifier = IDENTIFIER.exec(source);
+      if (identifier) {
+        index = IDENTIFIER.lastIndex;
+        return identifier[0];
+      }
+
+      index++;
+      return source[start];
+    }
+    return undefined;
+  };
+}
+
+function skipParentheses(read: TokenReader): boolean {
+  let depth = 1;
+  for (let token = read(); token !== undefined; token = read()) {
+    if (token === "(") depth++;
+    else if (token === ")" && --depth === 0) return true;
+  }
+  return false;
+}
+
+function skipDeclaration(read: TokenReader, first: string | undefined): void {
+  let braces = 0;
+
+  for (let token = first; token !== undefined; token = read()) {
+    if (token === "{") braces++;
+    else if (token === "}" && braces > 0 && --braces === 0) return;
+    else if (token === ";" && braces === 0) return;
+  }
 }
 
 function hasTopLevelImport(wgsl: string): boolean {
