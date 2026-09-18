@@ -68,22 +68,22 @@ test("pull rejects a symlink destination", async () => {
   await expect(pullExample({ getFile: async () => Buffer.from("x") } as any, manifest, join(root, "out"), { force: true })).rejects.toMatchObject({ exitCode: 7 });
 });
 
-test("portable pull fallback publishes nested files", async () => {
+test.each(["darwin", "win32"])("portable %s pull fallback publishes nested files", async (platform) => {
   const root = await mkdtemp(join(tmpdir(), "examples-pull-portable-"));
   const destination = join(root, "example");
   const manifest = { revision: hash, files: [{ path: "nested/a.ts", size: 4, sha256: hash }] } as any;
   const client = { getFile: async () => Buffer.from("new\n") } as any;
-  await pullExample(client, manifest, destination, { platform: "darwin" } as any);
+  await pullExample(client, manifest, destination, { platform } as any);
   expect(await readFile(join(destination, "nested/a.ts"), "utf8")).toBe("new\n");
 });
 
-test("Windows pull remains unsupported without downloading files", async () => {
+test("unsupported platforms fail closed without downloading files", async () => {
   let downloaded = false;
   const manifest = { revision: hash, files: [{ path: "a.ts", size: 1, sha256: hash }] } as any;
   const client = { getFile: async () => { downloaded = true; return Buffer.from("x"); } } as any;
-  await expect(pullExample(client, manifest, "unused", { platform: "win32" } as any)).rejects.toMatchObject({
+  await expect(pullExample(client, manifest, "unused", { platform: "freebsd" } as any)).rejects.toMatchObject({
     code: "VGPU-EXAMPLES-FILESYSTEM",
-    message: expect.stringContaining("unsupported on win32"),
+    message: expect.stringContaining("unsupported on freebsd"),
   });
   expect(downloaded).toBe(false);
 });
