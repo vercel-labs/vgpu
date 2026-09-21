@@ -185,12 +185,14 @@ const generatedArtifacts = generateExampleArtifacts(
   }),
 );
 const tree = new Map(generatedArtifacts.artifacts.map(({ key, bytes }) => [key, Buffer.from(bytes)]));
+const contentTypes = new Map(
+  generatedArtifacts.artifacts.map(({ key, contentType }) => [key, expectedContentType(contentType)]),
+);
 
 function contentTypeFor(key: string): string {
-  if (key.endsWith(".json")) return "application/json; charset=utf-8";
-  if (key.endsWith(".wgsl.raw")) return "text/wgsl; charset=utf-8";
-  if (key.endsWith(".mjs.raw")) return "text/plain; charset=utf-8";
-  return "text/typescript; charset=utf-8";
+  const contentType = contentTypes.get(key);
+  if (!contentType) throw new Error(`Missing generated content type for ${key}`);
+  return contentType;
 }
 
 const servers: Server[] = [];

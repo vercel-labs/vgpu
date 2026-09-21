@@ -55,10 +55,29 @@ test('uses the spin-independent default pose and honors an explicit zero time', 
 
 test('waits for both GPU barriers before destroying the scene', async () => {
   const env = setup();
-  await renderThumbnail(env.gpu as never, env.target as never);
+  let releaseQueue!: () => void;
+  let releaseSettled!: () => void;
+  env.queueDone.mockReturnValueOnce(new Promise<undefined>((resolve) => {
+    releaseQueue = () => resolve(undefined);
+  }));
+  env.settled.mockReturnValueOnce(new Promise<undefined>((resolve) => {
+    releaseSettled = () => resolve(undefined);
+  }));
 
-  expect(env.queueDone).toHaveBeenCalledOnce();
-  expect(env.settled).toHaveBeenCalledOnce();
+  const rendering = renderThumbnail(env.gpu as never, env.target as never);
+  await vi.waitFor(() => {
+    expect(env.queueDone).toHaveBeenCalledOnce();
+    expect(env.settled).toHaveBeenCalledOnce();
+  });
+  expect(sceneFns.destroyScene).not.toHaveBeenCalled();
+
+  releaseQueue();
+  await Promise.resolve();
+  expect(sceneFns.destroyScene).not.toHaveBeenCalled();
+
+  releaseSettled();
+  await rendering;
+
   expect(sceneFns.destroyScene).toHaveBeenCalledWith(env.scene);
 });
 

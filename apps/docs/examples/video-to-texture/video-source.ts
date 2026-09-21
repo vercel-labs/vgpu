@@ -3,9 +3,9 @@
  *
  * The API fires once per *presented* frame rather than once per display refresh,
  * which is the whole reason it exists: it tells the renderer when there are actually
- * new bytes to copy. Browsers without it (Firefox at the time of writing) fall back
- * to rAF plus a quantised clock, which approximates the same contract — see `fps`
- * below for why nothing exact is available there.
+ * new bytes to copy. Older browsers without it fall back to rAF plus a quantised
+ * clock, which approximates the same contract — see `fps` below for why nothing
+ * exact is available there.
  *
  * @see https://developer.mozilla.org/en-US/docs/Web/API/HTMLVideoElement/requestVideoFrameCallback
  */
