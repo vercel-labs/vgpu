@@ -2,6 +2,8 @@
 
 This file is the workflow index. Before planning, editing files, or acting on an issue/PR, read
 [workflow context](.github/guides/workflow-context.md), then select the matching path below.
+If the directing person's role is unknown, follow its mandatory
+[GitHub permission lookup and routing rules](.github/guides/workflow-context.md#resolve-an-unknown-role-with-gh).
 Read required guides in full before the relevant stage. Read additional guides only when their
 conditions apply; the linked steps are mandatory, not optional reference material.
 

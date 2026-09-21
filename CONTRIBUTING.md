@@ -17,7 +17,10 @@ Read the guide that matches the person directing the work and the task's origin:
 
 Agents start at the [AGENTS.md workflow index](AGENTS.md), read
 [workflow context](.github/guides/workflow-context.md), and select/announce the matching path.
-Missing-context and existing-authorization rules live in that context guide. Maintainer
+If the role is unknown, agents must follow its
+[GitHub CLI permission lookup and result-based routing](.github/guides/workflow-context.md#resolve-an-unknown-role-with-gh),
+using the canonical upstream repository. Unverified roles default to the external-contributor
+workflow; established session roles and authorization are preserved. Maintainer
 implementations follow the
 [shared implementation guide](.github/guides/implementation.md). Review-only work stops at findings;
 implementation follows recorded triage and a plan. Relevant records belong in the eventual PR,

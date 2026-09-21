@@ -3,8 +3,10 @@
 ## When this applies
 
 Follow this guide when acting for a person outside the maintainer workflow who wants to submit or
-revise an issue or PR. Having repository credentials or a working implementation does not change
-this role. Use [workflow context](workflow-context.md) for role and scope selection.
+revise an issue or PR, or when the [workflow context](workflow-context.md#resolve-an-unknown-role-with-gh)
+permission lookup selects this path. An unverified role uses this guide by default; state that
+fallback and continue within the requested scope. Credentials or a working implementation alone
+do not change the role. Use workflow context's precedence rules if new role evidence appears.
 
 An external contribution provides a problem, evidence, and optionally a proposed solution.
 Maintainers triage it, choose a plan, and implement accepted work from scratch in a separate PR.
