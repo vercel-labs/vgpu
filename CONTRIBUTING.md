@@ -1,14 +1,68 @@
 # Contributing
 
+## Choose a contribution workflow
+
+External issues and PRs are inputs to maintainer triage, design, and independent implementation.
+A clear report or use case is a complete contribution; a patch or prototype is optional. Accepted
+work is implemented from scratch in a separate maintainer PR. We do not merge external PRs into
+`canary` or `main`, convert them into integration PRs, or cherry-pick their patches. We link the
+source, credit its actual contribution, and close it with the result after the replacement merges.
+
+Read the guide that matches the person directing the work and the task's origin:
+
+- **Submitting an external issue or PR:** [external contributor](.github/guides/external-contributor.md).
+- **Maintainer reviewing or implementing an external contribution:**
+  [maintainer adoption](.github/guides/maintainer-adoption.md).
+- **Maintainer starting an internal task:** [maintainer original](.github/guides/maintainer-original.md).
+
+Agents start at the [AGENTS.md workflow index](AGENTS.md), read
+[workflow context](.github/guides/workflow-context.md), and select/announce the matching path.
+If the role is unknown, agents must follow its
+[GitHub CLI permission lookup and result-based routing](.github/guides/workflow-context.md#resolve-an-unknown-role-with-gh),
+using the canonical upstream repository. Unverified roles default to the external-contributor
+workflow; established session roles and authorization are preserved. Maintainer
+implementations follow the
+[shared implementation guide](.github/guides/implementation.md). Review-only work stops at findings;
+implementation follows recorded triage and a plan. Relevant records belong in the eventual PR,
+not only in private agent context. Release preparation and production lanes retain all rules below.
+
+Read stage-specific procedures when that stage applies:
+
+- Before maintainer implementation: [implementation](.github/guides/implementation.md).
+- While changing published behavior or writing changesets: [changesets and migrations](.github/guides/migrations.md).
+- Before preparing, reviewing, editing, or merging an integration PR: [pull requests](.github/guides/pull-requests.md).
+- Before release preparation/review or publishing: [releases](.github/guides/releases.md).
+
+### Contribution policy rollout
+
+The agent workflow above is required now. Dedicated `contribution` CI and an independent required
+merge-policy check have **not** been implemented. The existing `release-impact` validator accepts
+only `development` and `release`, and CI does not yet provide a reduced proposal-only suite.
+These instructions and draft status are not a technical guarantee against merging an external PR.
+
+During this transition, submit an issue by default. If a contributor explicitly wants to submit a
+PR, use a draft with `## PR type` set to `contribution` and explain that the existing type validator
+will reject it. Do not change it to `development` to pass that check. Existing external PRs remain
+proposals, regardless of their old type or passing checks. Maintainers must take the adoption path.
+Proposals do not need changesets or release preparation; the integration PR carries those duties.
+
+Completing the CI rollout requires trusted proposal validation and a required merge-policy check
+on protected targets. Contribution PRs must remain blocked even if their description is changed
+to `development`; maintainer integration eligibility must also use trusted GitHub identity and
+origin data. Configure branch protection with no bypass for this workflow, and verify the live
+settings and check behavior before claiming enforcement. Enabling an extra type in the parser
+alone is insufficient. Until then, the integration requirements below remain unchanged.
+
 ## Prerequisites
 
 - Node.js 22 (the workspace engine is `>=22 <23`)
 - pnpm
 
-## Making changes
+## Making integration changes
 
-Every PR description must contain exactly one `## PR type` section with exactly `development` or
-`release` (no default). Use `release` only to prepare a new RC/stable package version on `canary`.
+Every maintainer integration PR description must contain exactly one `## PR type` section with
+exactly `development` or `release` (no default). Use `release` only to prepare a new RC/stable package
+version on `canary`.
 Use `development` for other work, including stable promotions to `main` and branch synchronization
 whose versions are already accounted for on the target. Titles and branch names do not determine type.
 
@@ -135,8 +189,10 @@ pnpm bundle-check --update   # budget = next 512 B multiple at least 512 B above
 
 Run `pnpm build` first, since budgets are measured from `dist`.
 
-## PR checklist
+## Integration PR checklist
 
+- [ ] The selected workflow, origin, triage, and plan are recorded in the PR.
+- [ ] External-origin work follows adoption in a separate maintainer implementation PR, with source links and credit.
 - [ ] Normal work targets `canary`; only `site/*` and `promote/vX.Y.Z` target `main`.
 - [ ] The PR explicitly declares `development` or `release`; release preparation passes the strict readiness checks before merge.
 - [ ] Code changes to a published package include a `.changeset/*.md` file.
