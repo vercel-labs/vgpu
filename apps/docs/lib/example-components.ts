@@ -9,6 +9,7 @@ export type ExampleComponentLoader = () => Promise<ExampleComponentModule>;
 
 export const exampleComponentLoaders = {
   gradient: () => import('../examples/gradient/index'),
+  'holographic-card': () => import('../examples/holographic-card/index'),
   'triangle-led-front': () => import('../examples/triangle-led-front/index'),
   'anti-aliasing': () => import('../examples/anti-aliasing/index'),
   'black-hole': () => import('../examples/black-hole/index'),

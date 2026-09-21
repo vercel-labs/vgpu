@@ -1,5 +1,6 @@
 export const exampleSlugs = [
   'gradient',
+  'holographic-card',
   'triangle-led-front',
   'anti-aliasing',
   'black-hole',
