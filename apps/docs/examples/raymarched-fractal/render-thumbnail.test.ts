@@ -59,10 +59,10 @@ function setup() {
   };
   const output = {
     format: "rgba8unorm",
-    read: vi.fn(async () => {
+    color: { read: vi.fn(async () => {
       events.push("read");
       return new Uint8Array([1, 2, 3, 4]);
-    }),
+    }) },
     size: [160, 90] as const,
   };
   mocks.createScene.mockImplementation(() => {

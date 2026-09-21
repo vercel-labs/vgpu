@@ -1,16 +1,18 @@
 {
   "root": true,
   "title": "Documentation",
-  "description": "Build WebGPU applications for browsers, Node.js, and automated workflows.",
+  "description": "Build WebGPU applications for browsers and Node.js, and integrate WGSL with native Metal code.",
   "pages": [
     "get-started",
     "concepts",
     "guides",
+    "migrations",
     "[Examples](/examples)",
     "examples-api",
     "cli",
     "mcp",
     "ml",
+    "native",
     "reference"
   ]
 }

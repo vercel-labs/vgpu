@@ -23,12 +23,12 @@ const BLURS = [
   { direction: [0, 1], radius: 2.4 },
 ] as const;
 
-export function createEffects(gpu: Gpu) {
+export function createEffects(gpu: Gpu, targets: Targets) {
   const samp = sampler(gpu, { minFilter: 'linear', magFilter: 'linear' });
   return {
-    scene: effect(gpu, blackHoleWgsl, { set: { params: { pointer: [0, 0.05], time: 0 } } }),
+    scene: effect(gpu, blackHoleWgsl, { set: { params: { resolution: targets.scene.size, pointer: [0, 0.05], time: 0 } } }),
     bright: effect(gpu, brightPassWgsl, { set: { samp } }),
-    blur: BLURS.map((blur) => effect(gpu, blurWgsl, { set: { samp, blur } })),
+    blur: BLURS.map((blur, i) => effect(gpu, blurWgsl, { set: { samp, blur: { ...blur, texelSize: targets.bloom[i % 2].texelSize } } })),
     composite: effect(gpu, compositeWgsl, { set: { samp } }),
   };
 }

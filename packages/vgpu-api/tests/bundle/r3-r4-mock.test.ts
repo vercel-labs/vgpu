@@ -99,6 +99,7 @@ test("R4 raw claim validation stays attributed when frames overlap", async () =>
 
   const cubeA = rawClaimedDraw(gpu, "cubeA");
   const cubeB = rawClaimedDraw(gpu, "cubeB");
+  for (const resolve of popResolvers.splice(0)) resolve(null); // layout/module creation validated separately
 
   const frameA = frame(gpu);
   frameA.pass({ target: colorTarget }, (p) => p.draw(cubeA, { offsets: { 1: [0] } }));

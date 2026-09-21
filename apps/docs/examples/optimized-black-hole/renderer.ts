@@ -268,6 +268,8 @@ export function createRenderer({ canvas }: RendererOptions) {
     surface = vgpu.surface(gpu, canvas, { dpr: 1 });
     effects = createEffects(vgpu, gpu);
     targets = createTargets(vgpu, gpu, surface.size);
+    setBakeUniforms(effects, targets, settings);
+    setShadeUniforms(effects, targets, settings, animationTime, currentSceneYaw);
     setBindings(effects, targets);
     setPostUniforms(effects, targets, settings);
     await prewarm(effects, targets, surface);

@@ -1,4 +1,5 @@
 import type { ExampleByteGraph, ExampleGraphSource, UnhashedExampleRecord } from './byte-graph';
+import { portableExampleSource } from '../example-export';
 import { buildByteGraph } from './hashing';
 
 /** Frozen shape exported by React ingestion after foundation commit 0c77a65. */
@@ -16,8 +17,8 @@ export interface CanonicalSourceExportRecord {
 }
 
 /**
- * Adapts React's data-only generated export without sorting or transforming bytes.
- * This is the public artifact-generation adapter after the all-ten migration checkpoint.
+ * Adapts React's data-only generated export without sorting. Public asset URLs become portable at
+ * this export boundary; the docs renderer keeps using its same-origin source snapshot.
  */
 export function adaptCanonicalSourceExport(
   exported: Readonly<Record<string, CanonicalSourceExportRecord>>,
@@ -35,7 +36,7 @@ export function adaptCanonicalSourceExport(
       },
       files: record.files.map((file) => ({
         path: file.path,
-        text: file.content,
+        text: portableExampleSource(file.content),
         contentType: contentType(file.path),
       })),
     };

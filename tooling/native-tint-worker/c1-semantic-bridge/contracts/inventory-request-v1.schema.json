@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vgpu.sh/schemas/native/tint-entry-inventory/v1/request.schema.json",
+  "title": "vGPU Native Tint Entry Inventory Request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "contractId",
+    "source",
+    "originMap",
+    "originMapSha256",
+    "languageFeatures"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "contractId": { "const": "vgpu-native-tint-entry-inventory/v1" },
+    "source": { "$ref": "#/$defs/source" },
+    "originMap": {
+      "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/origin-map.schema.json"
+    },
+    "originMapSha256": { "$ref": "#/$defs/sha256" },
+    "languageFeatures": {
+      "type": "array",
+      "maxItems": 5,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/languageFeature" }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?![A-Za-z][A-Za-z0-9+.-]*:)(?!.*\\\\)(?!.*[\\u0000-\\u001f\\u007f])(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*//).+$"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["virtualPath", "sha256", "text"],
+      "properties": {
+        "virtualPath": { "$ref": "#/$defs/relativePath" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16777216
+        }
+      }
+    },
+    "languageFeature": {
+      "enum": [
+        "dual_source_blending",
+        "f16",
+        "sized_binding_array",
+        "uniform_buffer_standard_layout",
+        "unrestricted_pointer_parameters"
+      ]
+    }
+  }
+}

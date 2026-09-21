@@ -33,11 +33,10 @@ const CLEAN_MODULE = "export struct Brush {\n  width: f32,\n}\nexport fn paint()
 const RESERVED_MODULE = "export struct Brush {\n  interface: f32,\n}\nexport fn paint() -> f32 { return 1.0; }\n";
 
 // `compile()` deliberately stays a passthrough. Running the reserved-identifier pass
-// there pulls the scanner into the browser-facing `@vgpu/wgsl` entry: measured
-// 688 B -> 4062 B gzip against a 1024 B budget (`vgpuExportBundleBudgetsGzipBytes`).
-// Runtime WGSL strings are not built by a bundler and the driver reports the same
-// error at createShaderModule, so the check is enforced on the build-time paths
-// (`vgpu check`, resolveShader, and both loaders) instead.
+// there pulls the full scanner into the browser-facing `@vgpu/wgsl` entry and exceeds
+// its client bundle budget. Runtime WGSL strings are not built by a bundler and the
+// driver reports the same error at createShaderModule, so the check is enforced on
+// the build-time paths (`vgpu check`, resolveShader, and both loaders) instead.
 test("compile() stays a byte-for-byte passthrough for runtime strings", () => {
   expect(compile(RESERVED_LEAF)).toMatchObject({ kind: "wgsl", wgsl: RESERVED_LEAF, diagnostics: [] });
   expect(compile(CLEAN_LEAF)).toMatchObject({ kind: "wgsl", wgsl: CLEAN_LEAF, diagnostics: [] });

@@ -10,8 +10,7 @@ struct Uniforms {
 
 struct VertexOut {
   @builtin(position) position: vec4f,
-  @location(0) local_position: vec3f,
-  @location(1) normal: vec3f,
+  @location(0) view_normal: vec3f,
 };
 
 // Spinning on the CPU would mean a model matrix; two angles and a rotation are
@@ -23,22 +22,6 @@ fn rotate(p: vec3f) -> vec3f {
   let cx = cos(uniforms.pitch);
   let sx = sin(uniforms.pitch);
   return vec3f(yawed.x, cx * yawed.y - sx * yawed.z, sx * yawed.y + cx * yawed.z);
-}
-
-@vertex
-fn vs_main(
-  @location(0) position: vec3f,
-  @location(1) normal: vec3f,
-) -> VertexOut {
-  var out: VertexOut;
-  out.position = uniforms.view_projection * vec4f(rotate(position), 1.0);
-  // The relief is carved in object space, so the pattern stays fixed to the
-  // surface and travels with the spin. Both the position and the untransformed
-  // normal are handed over in that same space, and the fragment stage rotates
-  // only after the perturbation is applied.
-  out.local_position = position;
-  out.normal = normal;
-  return out;
 }
 
 // Height field the relief is derived from. Three axis-aligned lobes fold into a
@@ -64,12 +47,25 @@ fn perturbed_normal(local_position: vec3f, normal: vec3f) -> vec3f {
   return normalize(normal - tangential * 0.055);
 }
 
+@vertex
+fn vs_main(
+  @location(0) position: vec3f,
+  @location(1) normal: vec3f,
+) -> VertexOut {
+  var out: VertexOut;
+  out.position = uniforms.view_projection * vec4f(rotate(position), 1.0);
+  // The relief is carved in object space, then rotated with the sphere. Doing
+  // this on the dense subdivided mesh keeps the fragment path to one lookup.
+  let shaded_normal = perturbed_normal(position, normalize(normal));
+  out.view_normal = (uniforms.view * vec4f(rotate(shaded_normal), 0.0)).xyz;
+  return out;
+}
+
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4f {
-  let normal = perturbed_normal(in.local_position, normalize(in.normal));
   // The entire lighting model: put the normal in view space and read the
   // matching texel of the baked ball. No lights, no BRDF, one fetch.
-  let view_normal = normalize((uniforms.view * vec4f(rotate(normal), 0.0)).xyz);
+  let view_normal = normalize(in.view_normal);
   // 0.49 rather than 0.5 keeps the fetch inside the disk, so the unlit corners
   // can never bleed in along the silhouette.
   let uv = vec2f(view_normal.x, -view_normal.y) * 0.49 + vec2f(0.5);

@@ -46,16 +46,18 @@ describe("wgslVitePlugin (real vite 5)", () => {
 
     const result = await build(config);
     const outputs = Array.isArray(result) ? result : [result];
-    const code = outputs.flatMap((output) => output.output)
-      .filter((chunk) => chunk.type === "chunk")
-      .map((chunk) => chunk.code)
-      .join("\n");
+    const entryChunk = outputs.flatMap((output) => output.output)
+      .find((chunk) => chunk.type === "chunk" && chunk.isEntry);
+    if (!entryChunk || entryChunk.type !== "chunk") throw new Error("Vite build emitted no entry chunk");
+    const dataUrl = `data:text/javascript;base64,${Buffer.from(entryChunk.code).toString("base64")}`;
+    const builtModule = await import(/* @vite-ignore */ dataUrl) as { readonly default: { readonly wgsl: string } };
+    const wgsl = builtModule.default.wgsl;
 
-    expect(code).not.toContain("helper_color");
-    expect(code).toContain("return b();");
-    expect(code).toContain("fn a()-> vec4f");
-    expect(code).not.toContain("helper comment");
-    expect(code).not.toContain("entry comment");
+    expect(wgsl).not.toContain("helper_color");
+    expect(wgsl).toContain("return b();");
+    expect(wgsl).toContain("fn a()-> vec4f");
+    expect(wgsl).not.toContain("helper comment");
+    expect(wgsl).not.toContain("entry comment");
   });
 
   it("triggers re-compile via addWatchFile when a transitively imported .wgsl changes", async () => {

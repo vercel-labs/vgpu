@@ -1,11 +1,13 @@
 [
   "3d",
+  "adaptive-quality",
   "animation",
   "anti-aliasing",
   "batch-rendering",
   "batching",
   "black-hole",
   "bloom",
+  "card",
   "chromatic-aberration",
   "clipping",
   "color-grading",
@@ -20,8 +22,10 @@
   "gradient",
   "hand-tracking",
   "hdr",
+  "holographic",
   "indirect-rendering",
   "instancing",
+  "iridescence",
   "led",
   "lighting",
   "machine-learning",
@@ -43,6 +47,8 @@
   "sierpinski",
   "simulation",
   "ssaa",
+  "three",
   "triangle",
+  "typegpu",
   "volumetric"
 ]

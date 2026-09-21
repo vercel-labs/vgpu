@@ -128,8 +128,8 @@ test("absent entry keeps descriptors byte-identical to first-of-stage selection"
 test("compute entry selects the named @compute entry point and its binding visibility", async () => {
   const gpu = await init();
 
-  compute(gpu, TWO_COMPUTE_WGSL, { label: "pick-cs-b", entry: "cs_b" });
-  compute(gpu, TWO_COMPUTE_WGSL, { label: "cs-default" });
+  compute(gpu, TWO_COMPUTE_WGSL, { label: "pick-cs-b", entry: "cs_b" }).compileSync();
+  compute(gpu, TWO_COMPUTE_WGSL, { label: "cs-default" }).compileSync();
 
   const descs = getMockGPUDeviceInstrumentation(gpu.device.gpu).createComputePipelineDescriptors;
   expect(descs.at(-2)?.compute.entryPoint).toBe("cs_b");

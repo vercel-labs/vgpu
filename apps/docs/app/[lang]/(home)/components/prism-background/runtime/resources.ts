@@ -1,20 +1,21 @@
 import type { Geometry, Gpu } from "vgpu";
 import { sampler } from "vgpu";
 
-import { cameraView } from "../camera";
+import { cameraView } from "../scene/camera";
 import {
   createEnvironmentSampler,
   createEnvironmentTexture,
   destroyEnvironmentTexture,
   prepareEnvironmentTexture,
-} from "../environment-texture";
-import { IDENTITY_PROJECTION_FRAMING } from "../framing";
+} from "../environment/texture";
+import { IDENTITY_PROJECTION_FRAMING } from "../scene/framing";
 import {
   buildLightMesh,
+  HIGH_LIGHT_MESH_LAYOUT,
   LIGHT_VERTEX_STRIDE,
-  lightVertexCount,
-} from "../light-mesh";
-import { prismGeometry, prismWireframeGeometry } from "../prism-mesh";
+  type LightMeshLayout,
+} from "../scene/light-mesh";
+import { prismGeometry, prismWireframeGeometry } from "../scene/prism-mesh";
 import {
   CAMERA_DISTANCE,
   DEFAULT_PRISM_CONTROLS,
@@ -29,6 +30,8 @@ import type { PrismRuntime } from "./types";
 export interface PrismRuntimeOptions {
   /** Bake the preview-only orientation environment alongside the studio. */
   readonly debugEnvironment?: boolean;
+  /** Initial light density; the GPU buffer still reserves the high-tier size. */
+  readonly lightMeshLayout?: LightMeshLayout;
 }
 
 export function createPrismRuntime(
@@ -40,6 +43,7 @@ export function createPrismRuntime(
   const controls = normalizeControls(DEFAULT_PRISM_CONTROLS);
   const aspect = output[0] / Math.max(1, output[1]);
   const lightVertexScratch: number[] = [];
+  const meshLayout = options.lightMeshLayout ?? HIGH_LIGHT_MESH_LAYOUT;
   const initialMesh = buildLightMesh(
     {
       light: lampAt(
@@ -53,12 +57,14 @@ export function createPrismRuntime(
         PRISM_DISPERSION_PRESETS[controls.dispersion],
       edgeFalloff: controls.lightFade.edgeFalloff,
       wallHalfExtent: wallExtent(aspect, CAMERA_DISTANCE, controls.cameraFov),
+      samples: meshLayout.samples,
+      beamSlices: meshLayout.beamSlices,
     },
     undefined,
     lightVertexScratch
   );
   const lightBuffer = gpu.device.createBuffer({
-    size: initialMesh.vertices.byteLength,
+    size: HIGH_LIGHT_MESH_LAYOUT.vertexCount * LIGHT_VERTEX_STRIDE,
     usage: ["vertex", "copy_dst"],
     label: `${label}.light-vertices`,
   });
@@ -72,6 +78,7 @@ export function createPrismRuntime(
     lightBuffer,
     lightVertexScratch,
     lightVertices: initialMesh.vertices,
+    lightMeshLayout: meshLayout,
     lightGeometry: {
       vertexBuffers: [lightBuffer.gpu],
       vertexBufferLayouts: [
@@ -83,7 +90,7 @@ export function createPrismRuntime(
           ],
         },
       ],
-      vertexCount: lightVertexCount(),
+      vertexCount: meshLayout.vertexCount,
     },
     prism,
     sceneSampler: sampler(gpu, {

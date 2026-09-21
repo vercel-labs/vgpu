@@ -1,6 +1,7 @@
 {
   "title": "vgpu/mock",
   "pages": [
+    "create-mock-adapter",
     "..."
   ]
 }

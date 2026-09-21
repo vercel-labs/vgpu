@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-entry-inventory/v1",
+  "source": {
+    "virtualPath": "Intermediate/inventory-invalid.wgsl",
+    "sha256": "ee14248dfcb1e9ecc4e77e781cba76a693c12f723abdbaaaf1e3e0dea540ea6e",
+    "text": "@compute @workgroup_size(1) fn broken() { let value: u32 = 1.5; }\n"
+  },
+  "originMap": {
+    "schemaVersion": 1,
+    "contractId": "vgpu-native-origin-map/v1",
+    "generatedSource": {
+      "virtualPath": "Intermediate/inventory-invalid.wgsl",
+      "sha256": "ee14248dfcb1e9ecc4e77e781cba76a693c12f723abdbaaaf1e3e0dea540ea6e"
+    },
+    "sources": [
+      {
+        "input": "inventory-invalid-wgsl",
+        "sha256": "ee14248dfcb1e9ecc4e77e781cba76a693c12f723abdbaaaf1e3e0dea540ea6e"
+      }
+    ],
+    "segments": [
+      {
+        "generated": { "startByte": 0, "endByte": 66 },
+        "origin": { "input": "inventory-invalid-wgsl" },
+        "precision": "module"
+      }
+    ]
+  },
+  "originMapSha256": "ba45c8b80453eedac9b7c6fc6f0443aeecbe86d1e109f33c337dd340c92a3d25",
+  "languageFeatures": []
+}

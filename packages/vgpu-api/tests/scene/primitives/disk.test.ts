@@ -36,7 +36,7 @@ test("Mesh.disk validates params", async () => {
   device.destroy();
 });
 
-test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("disk primitive snapshot battery matches", async () => {
+test.skipIf(!process.env.VGPU_SNAPSHOT_MODE)("disk primitive snapshot battery matches", async () => {
   const { device } = await initNode();
   try { await snapshots("disk", (material, angle) => renderPrimitiveFrame({ device, mesh: Mesh.disk({ device, radius: 0.6, segments: 24 }), camera: primitiveCamera(angle), material, baseColor: [0.85, 0.55, 0.35] })); }
   finally { device.destroy(); }

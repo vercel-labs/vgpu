@@ -1,3 +1,4 @@
+import type { UniformCapture } from "./frame-uniforms.ts";
 import type { Device } from "@vgpu/core";
 import type { ShaderSource } from "@vgpu/wgsl";
 import { reflectSource, type BindingInfo, type EntryPointInfo, type Reflection } from "@vgpu/wgsl/reflect-source";
@@ -143,7 +144,7 @@ export interface DrawOptions {
   };
   /** Values for WGSL `override` constants, keyed by name (or by numeric id as a string when the override has @id). Immutable after construction. */
   readonly constants?: Readonly<Record<string, number | boolean>>;
-  /** Entry points to use when the shader has several. Omitted fields use the first entry point of that stage. Immutable after construction. */
+  /** Immutable entry selection. Omitted fields prefer vs_main/fs_main for their stage, otherwise its first entry. */
   readonly entry?: { readonly vertex?: string; readonly fragment?: string };
 }
 
@@ -445,8 +446,9 @@ export class InternalDraw implements Draw {
     }
   }
 
-  encode(pass: GPURenderPassEncoder, target: Target | TargetSignature, opts: DrawCallOptions = {}, claimValidation?: (result: ClaimedGroupValidationResult) => void): void {
+  encode(pass: GPURenderPassEncoder, target: Target | TargetSignature, opts: DrawCallOptions = {}, claimValidation?: (result: ClaimedGroupValidationResult) => void, capture?: UniformCapture): void {
     assertDeviceUsable(drawState(this).device, `${this.label}.encode`);
+    drawState(this).setCore.assertUsable();
     const pipeline = this.pipelineFor(target, true);
     if (!pipeline) return;
     pass.setPipeline(pipeline);
@@ -454,11 +456,11 @@ export class InternalDraw implements Draw {
     if (state.blendConstant) pass.setBlendConstant(state.blendConstant);
     // Explicit ref always emits — even 0, which restores the pass default after an earlier draw changed it.
     if (state.stencilRef !== undefined) pass.setStencilReference(state.stencilRef);
-    for (const binding of state.setCore.bindGroups()) this.#setBindGroup(pass, binding, opts, claimValidation);
+    for (const binding of state.setCore.bindGroups(capture)) this.#setBindGroup(pass, binding, opts, claimValidation);
     this.#encodeGeometry(pass, opts);
   }
 
-  #setBindGroup(pass: GPURenderPassEncoder, binding: BindGroupBinding, opts: DrawCallOptions, claimValidation?: (result: ClaimedGroupValidationResult) => void): void {
+  #setBindGroup(pass: GPURenderPassEncoder, binding: BindGroupBinding, opts: DrawCallOptions, claimValidation?: (result: ClaimedGroupValidationResult) => void, capture?: UniformCapture): void {
     const offsets = offsetsForGroup(opts.offsets, binding.group, binding.offsets);
     if (!binding.claimValidation || !claimValidation) {
       pass.setBindGroup(binding.group, binding.bindGroup, offsets);
@@ -477,7 +479,7 @@ export class InternalDraw implements Draw {
   compile(target?: CompileTarget): Promise<this> {
     assertDeviceUsable(drawState(this).device, `${this.label}.compile`);
     const { key, signature, signatureKey } = this.#compileKey(target, `${this.label}.compile`);
-    const promise = drawState(this).pipelineStore.getAsync(key, () => this.#createPipelineAsync(signature), { where: `${this.label}.compile`, signature: signatureKey });
+    const promise = drawState(this).pipelineStore.getAsync(key, () => this.#createPipelineAsync(signature), { where: `${this.label}.compile`, signature: signatureKey, dependencies: [drawState(this).shaderModule, drawState(this).pipelineLayout] });
     return promise.then(() => {
       assertDeviceUsable(drawState(this).device, `${this.label}.compile`);
       drawState(this).resolvedPipelineKeys.add(key);
@@ -488,7 +490,7 @@ export class InternalDraw implements Draw {
   compileSync(target?: CompileTarget): this {
     assertDeviceUsable(drawState(this).device, `${this.label}.compileSync`);
     const { key, signature, signatureKey } = this.#compileKey(target, `${this.label}.compileSync`);
-    const pipeline = drawState(this).pipelineStore.getSync(key, () => this.#createPipeline(signature), { where: `${this.label}.compileSync`, signature: signatureKey });
+    const pipeline = drawState(this).pipelineStore.getSync(key, () => this.#createPipeline(signature), { where: `${this.label}.compileSync`, retry: true, signature: signatureKey, dependencies: [drawState(this).shaderModule, drawState(this).pipelineLayout] });
     if (pipeline) drawState(this).resolvedPipelineKeys.add(key);
     return this;
   }
@@ -496,7 +498,7 @@ export class InternalDraw implements Draw {
   pipelineFor(target: Target | TargetSignature, allowSurface = false): GPURenderPipeline | undefined {
     assertDeviceUsable(drawState(this).device, `${this.label}.pipelineFor`);
     const { key, signature, signatureKey } = this.#compileKey(target, `${this.label}.pipelineFor`, allowSurface);
-    const pipeline = drawState(this).pipelineStore.getSync(key, () => this.#createPipeline(signature), { where: `${this.label}.pipelineFor`, signature: signatureKey });
+    const pipeline = drawState(this).pipelineStore.getSync(key, () => this.#createPipeline(signature), { where: `${this.label}.pipelineFor`, signature: signatureKey, dependencies: [drawState(this).shaderModule, drawState(this).pipelineLayout] });
     if (pipeline) drawState(this).resolvedPipelineKeys.add(key);
     return pipeline;
   }
@@ -504,7 +506,7 @@ export class InternalDraw implements Draw {
   pipelineForAsync(target: Target | TargetSignature): Promise<GPURenderPipeline> {
     assertDeviceUsable(drawState(this).device, `${this.label}.pipelineForAsync`);
     const { key, signature, signatureKey } = this.#compileKey(target, `${this.label}.pipelineForAsync`);
-    const promise = drawState(this).pipelineStore.getAsync(key, () => this.#createPipelineAsync(signature), { where: `${this.label}.pipelineForAsync`, signature: signatureKey });
+    const promise = drawState(this).pipelineStore.getAsync(key, () => this.#createPipelineAsync(signature), { where: `${this.label}.pipelineForAsync`, signature: signatureKey, dependencies: [drawState(this).shaderModule, drawState(this).pipelineLayout] });
     return promise.then((pipeline) => {
       assertDeviceUsable(drawState(this).device, `${this.label}.pipelineForAsync`);
       drawState(this).resolvedPipelineKeys.add(key);
@@ -811,7 +813,8 @@ function normalizeEntryOptions(label: string, value: DrawOptions["entry"]): { re
   return value;
 }
 
-// Explicitly naming the first-of-stage entries behaves exactly like an absent option; pipeline cache keys stay byte-identical so they share pipelines.
+// Resolved entries determine cache identity, so explicit and automatic selections of the same functions share.
+// Keep the compact key for first-of-stage entries; other selections include their names.
 function entryKeyFor(reflection: Reflection, vertexEntry: EntryPointInfo | undefined, fragmentEntry: EntryPointInfo | undefined): string | undefined {
   const firstVertex = reflection.entryPoints.find((entry) => entry.stage === "vertex");
   const firstFragment = reflection.entryPoints.find((entry) => entry.stage === "fragment");
@@ -1060,6 +1063,11 @@ export function drawReflection(draw: Draw): Reflection { return drawState(draw).
 
 export function drawBindingState(draw: Draw, name: string): BindingState | undefined { return drawState(draw).setCore.bindingState(name); }
 
+/** Internal bundle hook: observes the resources captured by one encoded draw, not future bindings. */
+export function watchDrawResources(draw: InternalDraw, onDestroyed: (event: BundleStaleEvent) => void): () => void {
+  return drawState(draw).setCore.watchResources(change => onDestroyed({ kind: "binding-identity", drawLabel: draw.label, ...change }));
+}
+
 export function registerDrawBundle(draw: Draw, bundle: BundleBackReference): void { drawState(draw).recordedIn.add(bundle); }
 
 /** Render bundle encoders cannot set the pass blend constant; bundle uses this to reject such draws at recording. */
@@ -1103,8 +1111,8 @@ export function drawStencilWritingOps(draw: Draw): readonly string[] {
   return ops;
 }
 
-export function encodeDraw(draw: InternalDraw, pass: GPURenderPassEncoder, target: Target | TargetSignature, opts: DrawCallOptions = {}, claimValidation?: (result: ClaimedGroupValidationResult) => void): void {
-  draw.encode(pass, target, opts, claimValidation);
+export function encodeDraw(draw: InternalDraw, pass: GPURenderPassEncoder, target: Target | TargetSignature, opts: DrawCallOptions = {}, claimValidation?: (result: ClaimedGroupValidationResult) => void, capture?: UniformCapture): void {
+  draw.encode(pass, target, opts, claimValidation, capture);
 }
 
 function drawState(draw: Draw): DrawState {

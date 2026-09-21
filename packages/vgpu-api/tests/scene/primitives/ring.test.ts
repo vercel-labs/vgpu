@@ -35,7 +35,7 @@ test("Mesh.ring validates params", async () => {
   device.destroy();
 });
 
-test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("ring primitive snapshot battery matches", async () => {
+test.skipIf(!process.env.VGPU_SNAPSHOT_MODE)("ring primitive snapshot battery matches", async () => {
   const { device } = await initNode();
   try { await snapshots("ring", (material, angle) => renderPrimitiveFrame({ device, mesh: Mesh.ring({ device, innerRadius: 0.25, outerRadius: 0.6, segments: 32 }), camera: primitiveCamera(angle), material, baseColor: [0.45, 0.8, 0.45] })); }
   finally { device.destroy(); }

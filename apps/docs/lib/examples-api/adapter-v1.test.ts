@@ -23,4 +23,19 @@ describe('adapter v1 React source contract', () => {
       { path: 'shader.wgsl', text: '@compute @workgroup_size(1) fn main() {}\n', contentType: 'text/wgsl' },
     ]);
   });
+
+  it('makes public asset URLs portable without changing the renderer source snapshot', () => {
+    const content = 'const model = "/models/example.onnx";\n';
+    const graph = adaptCanonicalSourceExport({
+      portable: {
+        slug: 'portable', title: 'Portable', description: 'Assets', tags: [], capabilities: [],
+        files: [{ path: 'renderer.ts', language: 'typescript', content }],
+      },
+    }, { repository: 'https://github.com/vgpu/vgpu', gitCommit: 'snapshot' });
+
+    expect(graph.examples[0]?.files[0]?.text).toBe(
+      'const model = "https://vgpu.sh/models/example.onnx";\n',
+    );
+    expect(content).toBe('const model = "/models/example.onnx";\n');
+  });
 });

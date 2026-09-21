@@ -5,6 +5,8 @@ description: "Resolve a `.wgsl` entry file's import graph with `resolveShader()`
 
 `effect(gpu, source)` and `draw(gpu, { shader })` take WGSL as a plain string, so nothing forces you to use a bundler. This guide is the no-bundler half of [Getting started](getting-started.docs.md): resolve a `.wgsl` entry file — and everything it imports — yourself with `resolveShader()`, then render it headless from Node.
 
+Read [WGSL modules](/concepts/wgsl-modules) first if you need the `import`/`export` syntax, pure-module rule, or an explanation of the flattened output. This guide focuses on resolving that graph without a bundler.
+
 ## When you need this
 
 - Your shader lives in its own `.wgsl` file(s) rather than a template string, and you are not running webpack, Vite, or Turbopack.
@@ -73,7 +75,7 @@ const colorTarget = target(gpu, { size: [width, height] });
 const shader = effect(gpu, resolved.wgsl, { set: { params: { time: 0 } } });
 shader.draw(colorTarget);
 
-const pixels = await colorTarget.read();   // RGBA bytes — assert on them
+const pixels = await colorTarget.color.read({ mipLevel: 0, region: "all" });   // RGBA bytes — assert on them
 const png = new PNG({ width, height });
 png.data.set(pixels);
 writeFileSync("frame.png", PNG.sync.write(png));

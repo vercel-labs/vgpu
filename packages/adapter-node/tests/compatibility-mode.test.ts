@@ -1,4 +1,4 @@
-import { beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   adapterOptions: [] as GPURequestAdapterOptions[],
@@ -69,6 +69,7 @@ vi.mock("node:module", async (importOriginal) => {
 });
 
 beforeEach(() => {
+  vi.stubEnv("VGPU_DAWN_FLAGS", undefined);
   vi.resetModules();
   state.adapterOptions = [];
   state.createFlags = [];
@@ -79,9 +80,11 @@ beforeEach(() => {
   state.adapterInfo = null;
   state.icdAtRequest = [];
   state.vendorIcds = [];
-  delete process.env.VK_ICD_FILENAMES;
-  delete process.env.VK_DRIVER_FILES;
+  vi.stubEnv("VK_ICD_FILENAMES", undefined);
+  vi.stubEnv("VK_DRIVER_FILES", undefined);
 });
+
+afterEach(() => vi.unstubAllEnvs());
 
 test.runIf(process.platform === "linux")("node adapter marks default Linux Dawn devices as compatibility mode", async () => {
   const { createNodeDevice } = await import("../src/index.ts");
@@ -115,10 +118,11 @@ test("node adapter leaves webgpu backend devices out of compatibility mode", asy
   const device = await createNodeDevice({ backend: "webgpu" });
 
   expect(state.adapterOptions.at(-1)).not.toHaveProperty("featureLevel");
+  expect(state.createFlags).toEqual([[]]);
   expect(device.isCompatibilityMode).toBe(false);
 });
 
-test.runIf(process.platform === "linux")("node adapter lets Dawn discover Vulkan when no display server is configured", async () => {
+test.runIf(process.platform === "linux")("node adapter explicitly selects Vulkan when no display server is configured", async () => {
   const display = process.env.DISPLAY;
   const waylandDisplay = process.env.WAYLAND_DISPLAY;
   delete process.env.DISPLAY;
@@ -126,7 +130,7 @@ test.runIf(process.platform === "linux")("node adapter lets Dawn discover Vulkan
   try {
     const { createNodeDevice } = await import("../src/index.ts");
     const device = await createNodeDevice();
-    expect(state.createFlags).toEqual([[]]);
+    expect(state.createFlags).toEqual([["backend=vulkan"]]);
     device.destroy();
   } finally {
     if (display !== undefined) process.env.DISPLAY = display;
@@ -134,18 +138,46 @@ test.runIf(process.platform === "linux")("node adapter lets Dawn discover Vulkan
   }
 });
 
-test.runIf(process.platform === "linux")("node adapter preserves the OpenGL default when a display server is configured", async () => {
-  const display = process.env.DISPLAY;
-  process.env.DISPLAY = ":99";
-  try {
-    const { createNodeDevice } = await import("../src/index.ts");
-    const device = await createNodeDevice();
-    expect(state.createFlags).toEqual([["backend=opengl"]]);
-    device.destroy();
-  } finally {
-    if (display === undefined) delete process.env.DISPLAY;
-    else process.env.DISPLAY = display;
-  }
+test.runIf(process.platform === "linux").each(["DISPLAY", "WAYLAND_DISPLAY"] as const)("node adapter selects Vulkan even when %s is configured", async variable => {
+  vi.stubEnv(variable, variable === "DISPLAY" ? ":99" : "wayland-0");
+  const { createNodeDevice } = await import("../src/index.ts");
+  const device = await createNodeDevice();
+  expect(state.createFlags).toEqual([["backend=vulkan"]]);
+  device.destroy();
+});
+
+test.runIf(process.platform !== "linux")("node adapter preserves native backend discovery outside Linux", async () => {
+  const { createNodeDevice } = await import("../src/index.ts");
+  const device = await createNodeDevice();
+  expect(state.createFlags).toEqual([[]]);
+  device.destroy();
+});
+
+test("explicit Dawn flags retain precedence over default backend selection", async () => {
+  vi.stubEnv("VGPU_DAWN_FLAGS", "backend=opengl enable-dawn-features=allow_unsafe_apis");
+  const { createNodeDevice } = await import("../src/index.ts");
+  const device = await createNodeDevice({ backendFlags: ["backend=vulkan"] });
+  expect(state.createFlags).toEqual([["backend=opengl", "enable-dawn-features=allow_unsafe_apis"]]);
+  device.destroy();
+});
+
+test("programmatic Dawn flags retain precedence over default backend selection", async () => {
+  const { createNodeDevice } = await import("../src/index.ts");
+  const device = await createNodeDevice({ backendFlags: ["backend=opengl"] });
+  expect(state.createFlags).toEqual([["backend=opengl"]]);
+  device.destroy();
+});
+
+test.runIf(process.platform === "linux")("missing Vulkan fails without silently trying OpenGL", async () => {
+  vi.stubEnv("DISPLAY", ":99");
+  state.nullRequestsRemaining = 3;
+  const { createNodeDevice } = await import("../src/index.ts");
+  await expect(createNodeDevice({ adapterRequestRetryBaseDelayMs: 0 })).rejects.toMatchObject({
+    code: "VGPU-NODE-NO-ADAPTER",
+    message: expect.stringContaining("backend=vulkan"),
+    fix: expect.stringContaining("install-software-renderer"),
+  });
+  expect(state.createFlags).toEqual([["backend=vulkan"]]);
 });
 
 test("node adapter preserves explicit OpenGL backend selection", async () => {
@@ -177,6 +209,7 @@ test("auto retries with the cached software renderer only after hardware discove
   const { createNodeAdapter } = await import("../src/index.ts");
   const device = await createNodeAdapter({ adapter: "auto" }).requestDevice({ adapterRequestRetryBaseDelayMs: 0 } as never);
   expect(state.icdAtRequest).toEqual([undefined, undefined, undefined, "/cache/lvp_icd.json"]);
+  if (process.platform === "linux") expect(state.createFlags).toEqual([["backend=vulkan"], ["backend=vulkan"]]);
   // No vendor ICD is configured (env cleared, icd.d stubbed empty), so the notice blames the absent adapter.
   expect(error).toHaveBeenCalledWith(expect.stringContaining("no GPU adapter was found"));
   expect(error).toHaveBeenCalledWith(expect.stringContaining("using CPU software renderer (lavapipe)"));
@@ -234,6 +267,7 @@ test("software mode requires the cache, forces its ICD from the first request, a
   const { createNodeAdapter } = await import("../src/index.ts");
   const device = await createNodeAdapter({ adapter: "software" }).requestDevice({ adapterRequestRetryBaseDelayMs: 0 } as never);
   expect(state.icdAtRequest).toEqual(["/cache/lvp_icd.json"]);
+  if (process.platform === "linux") expect(state.createFlags).toEqual([["backend=vulkan"]]);
   expect(error).not.toHaveBeenCalled();
   expect((device.adapterInfo as GPUAdapterInfo & { adapterType?: string }).adapterType).toBe("cpu");
   device.destroy();

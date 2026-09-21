@@ -14,6 +14,14 @@ export interface PrismDebugDrawSet {
   readonly sources: Readonly<
     Partial<Record<PrismDebugSourceId, PrismDebugDrawable>>
   >;
+  readonly ranges?: Readonly<
+    Partial<
+      Record<
+        PrismDebugSourceId,
+        { readonly firstVertex: number; readonly vertices: number }
+      >
+    >
+  >;
   /** Refreshes preview-only uniforms without rebuilding any draw. */
   bind?(): void;
 }

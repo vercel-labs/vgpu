@@ -1,6 +1,7 @@
 export const docsHelp = `Usage: vgpu docs <command> [args] [flags]
 
 Start here: vgpu docs cat getting-started.md   (the guide for using the latest API correctly)
+Finishing or opening a PR: vgpu docs cat shipping-to-production   (gates, measure, free defaults, propose the rest)
 
 Commands:
   ls [path]                  List packages or docs under a virtual path
@@ -15,6 +16,8 @@ Commands:
 Examples:
   vgpu docs cat getting-started.md
   vgpu docs ls /guides
+  vgpu docs ls /migrations
+  vgpu docs cat /migrations/0.5.0.docs.md
   vgpu docs ls
   vgpu docs cat /@vgpu/core/Buffer.docs.md
   vgpu docs grep -i --package @vgpu/wgsl minify

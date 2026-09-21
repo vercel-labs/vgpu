@@ -26,10 +26,7 @@ test("samples warmup + deterministic frames and reports CPU, mesh, passes, and G
   } as unknown as PrismRuntime;
   const gpu = {
     device: {
-      features: new Set([
-        "timestamp-query",
-        "rg11b10ufloat-renderable",
-      ]),
+      features: new Set(["timestamp-query", "rg11b10ufloat-renderable"]),
     },
   } as unknown as Gpu;
   const restoreState = vi.fn();

@@ -7,13 +7,15 @@ export function Example() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    if (!canvasRef.current) return;
-    const pending = createRenderer(canvasRef.current).catch(() => undefined);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-    return () => {
-      void pending.then((renderer) => renderer?.dispose());
-    };
+    const renderer = createRenderer(canvas);
+    void renderer.ready;
+    return () => renderer.dispose();
   }, []);
 
   return <canvas ref={canvasRef} className="block h-full w-full bg-black" />;
 }
+
+export default Example;

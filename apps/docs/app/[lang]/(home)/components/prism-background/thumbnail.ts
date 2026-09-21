@@ -9,7 +9,7 @@ import {
   setControls,
   setLampArc,
   setOrbit,
-} from "./scene";
+} from "./scene/scene";
 import type { PrismControls } from "./types";
 
 export interface PrismThumbnailOptions extends ThumbnailOptions {

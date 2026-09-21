@@ -1,6 +1,7 @@
 # DOCS-TEMPLATE — standard format for code-symbol `.docs.md` files
 
-Primary audience: **LLM agents** that read the generated SKILL and copy examples literally.
+Primary audience: **LLM agents** that read these docs through the CLI bundled with their installed
+`vgpu` package and copy examples literally.
 Guiding principle: **anti-assumption** — explicit defaults, valid values, and expected errors.
 Anti-drift: option A — tables are hand-written and the **review gate checks each row against the real types in `src`**. There is no automatic lint for table correctness yet.
 
@@ -62,10 +63,14 @@ Add a realistic example when the symbol has distinct usage modes.
 6. **Every snippet compiles** — this is checked mechanically with the extractor plus `tsc`.
 7. **See also** goes at the end: at least one cross-link except for leaf symbols.
 8. Topic guides (`docs/topics/*.docs.md`) do not use this template; they are narrative guides.
-9. Files under `skills/vgpu/` are generated: never edit them directly. Edit the co-located source `.docs.md` and regenerate.
+9. API and guide docs ship in the `vgpu` package; they are not copied into the repository skill.
+   `skills/vgpu/SKILL.md` is a generated, version-neutral router. Edit co-located `.docs.md` files
+   for documentation changes, or `packages/vgpu/lib/docs/generate/skill.js` for router changes,
+   then regenerate.
 
 ## Docs change process
 
 1. Edit the co-located `.docs.md` next to the source.
 2. Run `pnpm -F @vgpu/cli generate:docs`.
-3. Commit source docs and generated files together; CI `docs-generated` requires them to stay in sync.
+3. Commit source docs and generated CLI/site artifacts together; CI `docs-generated` requires them
+   and the generated thin skill router to stay in sync with their respective sources.

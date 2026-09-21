@@ -1,6 +1,6 @@
 ---
 title: "canvasMouseTracker"
-description: "Listens for pointer movement over a canvas and exposes the latest coordinates. Use it to feed shaders with mouse positions without wiring global event listeners."
+description: "Tracks pointer coordinates relative to a canvas layout and drawing buffer."
 ---
 
 ## Import
@@ -19,12 +19,11 @@ export function canvasMouseTracker(spec: CanvasMouseTrackerSpec): CanvasMouseTra
 
 | Param | Type | Required | Default | Notes |
 |---|---|---|---|---|
-| spec | CanvasMouseTrackerSpec | ✔ | — | Configuration object describing the canvas and how to normalize coordinates. |
-| spec.canvas | HTMLCanvasElement | ✔ | — | Target element that receives `pointermove` events. |
-| spec.normalize | boolean | ✖ | false | When true, `position` is expressed in [0, 1] relative coordinates; otherwise uses raw canvas pixel coordinates. |
-| spec.flipY | boolean | ✖ | false | Reflects the Y axis (top → bottom) while preserving the chosen unit (normalized or pixel). |
+| spec | CanvasMouseTrackerSpec | ✔ | — | Options. |
+| spec.canvas | HTMLCanvasElement | ✔ | — | Event target. |
+| spec.flipY | boolean | ✖ | false | Flips Y in both outputs. |
 
-**Returns:** `CanvasMouseTracker` — exposes a live `position` tuple (`[x, y]`) and a `dispose()` method that removes the internal event listener.
+**Returns:** `CanvasMouseTracker` — live `position` and `dispose()`.
 
 ## Examples
 
@@ -32,50 +31,53 @@ export function canvasMouseTracker(spec: CanvasMouseTrackerSpec): CanvasMouseTra
 import { canvasMouseTracker } from "@vgpu/render/utils";
 
 const canvas = document.createElement("canvas");
-const effect = { set(values: { readonly mouse: readonly [number, number] }): void { void values; } };
-const mouse = canvasMouseTracker({ canvas, normalize: true, flipY: true });
+const mouse = canvasMouseTracker({ canvas, flipY: true });
 
-function frame() {
-  const [u, v] = mouse.position; // normalized UV with origin at bottom-left
-  effect.set({ mouse: [u, v] });
-  requestAnimationFrame(frame);
-}
-
-frame();
-// Later:
-mouse.dispose();
+const { normalized, canvasPixels } = mouse.position;
+const targetPixels = [normalized[0] * 960, normalized[1] * 540];
+console.log(canvasPixels, targetPixels);
 ```
 
 ## Notes
 
-- The initial `position` is `[0, 0]` until the first pointer event fires; guard against that if your shader requires seeded values.
-- The tracker prefers `PointerEvent.offsetX/Y` when available, falling back to `clientX/Y` minus the canvas bounds, so it works with both pointer-lock and classic pointer events.
-- Call `dispose()` before removing the canvas from the DOM to avoid dangling listeners.
+- Positions start at `[0, 0]`. Scale `normalized` for another target; `canvasPixels` uses the canvas buffer.
 - **See also:** `canvasResolution`, `frameClock`
 
 ---
 
 # CanvasMouseTrackerSpec
 
-Configuration object accepted by `canvasMouseTracker`.
+Tracker options.
 
 ## Fields
 
 | Field | Type | Required | Default | Notes |
 |---|---|---|---|---|
-| canvas | HTMLCanvasElement | ✔ | — | Canvas to observe. |
-| normalize | boolean | ✖ | false | Enables normalized `[0, 1]` output in both axes; otherwise uses raw pixel units. |
-| flipY | boolean | ✖ | false | Mirrors the Y coordinate so normalized output matches WebGPU clip space (`0` at bottom). |
+| canvas | HTMLCanvasElement | ✔ | — | Canvas to track. |
+| flipY | boolean | ✖ | false | Makes Y increase upward. |
 
 ---
 
 # CanvasMouseTracker
 
-Handle returned by `canvasMouseTracker`.
+Pointer tracker.
 
 ## Fields
 
 | Field | Type | Required | Default | Notes |
 |---|---|---|---|---|
-| position | readonly [number, number] | ✔ | — | Latest `[x, y]` coordinates (normalized or pixels depending on spec). Always returns a frozen tuple. |
-| dispose | () => void | ✔ | — | Removes the internal `pointermove` listener; idempotent. |
+| position | CanvasMousePosition | ✔ | — | Frozen coordinate snapshot. |
+| dispose | () => void | ✔ | — | Removes the listener. |
+
+---
+
+# CanvasMousePosition
+
+Pointer coordinates.
+
+## Fields
+
+| Field | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| normalized | readonly [number, number] | ✔ | — | Canvas-relative position, normally `[0, 1]`. |
+| canvasPixels | readonly [number, number] | ✔ | — | Drawing-buffer position. |

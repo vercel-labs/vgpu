@@ -1,8 +1,12 @@
 # vgpu
 
-[![npm version](https://img.shields.io/npm/v/vgpu.svg)](https://www.npmjs.com/package/vgpu)
-[![CI](https://github.com/vercel-labs/vgpu/actions/workflows/ci.yml/badge.svg)](https://github.com/vercel-labs/vgpu/actions/workflows/ci.yml)
-[![license](https://img.shields.io/npm/l/vgpu.svg)](./LICENSE)
+<p>
+  <a href="https://vercel.com/labs#labs-products"><img alt="Vercel Labs Product" src="https://img.shields.io/badge/LABS-PRODUCT-0a0a0a.svg?style=for-the-badge&amp;logo=Vercel&amp;labelColor=000000" height="28"></a>
+  <a href="https://www.npmjs.com/package/vgpu"><img alt="npm version: vgpu" src="https://img.shields.io/npm/v/vgpu.svg?style=for-the-badge&amp;labelColor=000000" height="28"></a>
+  <a href="https://github.com/vercel-labs/vgpu/blob/canary/LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/vercel-labs/vgpu.svg?style=for-the-badge&amp;labelColor=000000" height="28"></a>
+  <a href="https://www.npmjs.com/package/vgpu"><img alt="npm downloads per month: vgpu" src="https://img.shields.io/npm/dm/vgpu.svg?style=for-the-badge&amp;labelColor=000000&amp;label=npm%20downloads" height="28"></a>
+  <a href="https://github.com/vercel-labs/vgpu/actions/workflows/ci.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/vercel-labs/vgpu/ci.yml?branch=canary&amp;style=for-the-badge&amp;labelColor=000000&amp;label=CI&amp;logo=github" height="28"></a>
+</p>
 
 vgpu is a TypeScript library for WebGPU: typed shader imports, a tiny gpu-first API, and the same code running in the browser, headless Node, and your test suite.
 
@@ -91,6 +95,12 @@ vgpu is built to be operated by coding agents as well as people. The example gal
 ```bash
 npx vgpu examples search "raymarching"
 npx vgpu examples pull <id> --out ./example
+```
+
+Agents with skill support can install vgpu's thin documentation router. The skill contains no versioned API reference; it queries the docs bundled with the `vgpu` version installed in the project.
+
+```bash
+npx skills add vercel-labs/vgpu
 ```
 
 - [Agent readiness manifest](https://vgpu.sh/agents.md) — how agents should discover and use vgpu

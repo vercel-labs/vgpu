@@ -1,12 +1,5 @@
 import { bundle } from "vgpu";
 
-import {
-  LIGHT_INTERNAL_FIRST_VERTEX,
-  LIGHT_INTERNAL_VERTICES,
-  LIGHT_OUTGOING_FIRST_VERTEX,
-  LIGHT_OUTGOING_VERTICES,
-  LIGHT_WHITE_VERTICES,
-} from "../../light-mesh";
 import type { PrismRuntime } from "../../runtime/types";
 import type { DarkPipelineGraph } from "./types";
 
@@ -16,6 +9,7 @@ export function recordDarkBackdropBundle(
   runtime: PrismRuntime
 ): void {
   if (graph.backdropBundle || !graph.backgroundTarget) return;
+  const light = graph.lightMeshLayout;
   graph.backdropBundle = bundle(
     runtime.gpu,
     {
@@ -25,16 +19,16 @@ export function recordDarkBackdropBundle(
     (recorded) => {
       recorded.draw(graph.light, {
         firstVertex: 0,
-        vertices: LIGHT_WHITE_VERTICES,
+        vertices: light.whiteVertices,
       });
       recorded.draw(graph.light, {
-        firstVertex: LIGHT_OUTGOING_FIRST_VERTEX,
-        vertices: LIGHT_OUTGOING_VERTICES,
+        firstVertex: light.outgoingFirstVertex,
+        vertices: light.outgoingVertices,
       });
       recorded.draw(graph.glassBack);
       recorded.draw(graph.light, {
-        firstVertex: LIGHT_INTERNAL_FIRST_VERTEX,
-        vertices: LIGHT_INTERNAL_VERTICES,
+        firstVertex: light.internalFirstVertex,
+        vertices: light.internalVertices,
       });
     }
   );

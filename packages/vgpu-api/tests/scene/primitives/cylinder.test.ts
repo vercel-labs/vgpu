@@ -32,7 +32,7 @@ test("Mesh.cylinder accepts radius overrides and validates ambiguity", async () 
   device.destroy();
 });
 
-test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("cylinder primitive snapshot battery matches", async () => {
+test.skipIf(!process.env.VGPU_SNAPSHOT_MODE)("cylinder primitive snapshot battery matches", async () => {
   const { device } = await initNode();
   try { await snapshots("cylinder", (material, angle) => renderPrimitiveFrame({ device, mesh: Mesh.cylinder({ device, radius: 0.4, height: 1, radialSegments: 32 }), camera: primitiveCamera(angle), material, baseColor: [0.35, 0.65, 0.8] })); }
   finally { device.destroy(); }

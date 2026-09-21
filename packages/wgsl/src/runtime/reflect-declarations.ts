@@ -25,9 +25,14 @@ export function parseDeclarations(module: MangleModule): ParsedDecls {
     if (token.text === "}") { depth = Math.max(0, depth - 1); i++; continue; }
     if (depth > 0) { i++; continue; }
     const start = i;
-    const [attrs, afterAttrs] = readAttrs(tokens, i);
-    i = afterAttrs;
-    if (tokens[i]?.text === "export") i++;
+    let attrs: Attr[];
+    if (tokens[i]?.text === "export") {
+      i++;
+      [attrs, i] = readAttrs(tokens, i);
+    } else {
+      [attrs, i] = readAttrs(tokens, i);
+      if (tokens[i]?.text === "export") i++;
+    }
     const kind = tokens[i]?.text;
     if (kind === "enable") {
       if (tokens[i + 1]?.kind === "ident") features.push(tokens[i + 1]!.text);
@@ -53,7 +58,7 @@ export function parseDeclarations(module: MangleModule): ParsedDecls {
       continue;
     }
     if (kind === "fn") {
-      const result = parseEntryPointDecl(module, tokens, i, attrs);
+      const result = parseEntryPointDecl(module, tokens, i, attrs, start);
       if (result.item) entries.push(result.item);
       i = result.next;
       continue;
@@ -100,13 +105,27 @@ export function parseVarDecl(module: MangleModule, tokens: readonly Token[], ind
   };
 }
 
-export function parseEntryPointDecl(module: MangleModule, tokens: readonly Token[], index: number, attrs: readonly Attr[]): ParseEntryPointResult {
+export function parseEntryPointDecl(module: MangleModule, tokens: readonly Token[], index: number, attrs: readonly Attr[], declarationStart = index): ParseEntryPointResult {
   const name = expectIdent(tokens[index + 1]);
   const stage = attrs.find((attr) => attr.name === "vertex" || attr.name === "fragment" || attr.name === "compute")?.name as EntryPointInfo["stage"] | undefined;
   if (!stage) return { item: undefined, next: index + 1 };
   const open = findNext(tokens, index + 2, "(");
   const close = matching(tokens, open);
-  return { item: { name, mangledName: name, stage, workgroupSize: parseWorkgroupSize(attrs), path: module.path, params: parseEntryPointParams(tokens.slice(open + 1, close)) }, next: close + 1 };
+  const bodyOpen = findNext(tokens, close + 1, "{");
+  const bodyClose = matching(tokens, bodyOpen);
+  return {
+    item: {
+      name,
+      mangledName: name,
+      stage,
+      workgroupSize: parseWorkgroupSize(attrs),
+      path: module.path,
+      params: parseEntryPointParams(tokens.slice(open + 1, close)),
+      declarationStartToken: tokens[declarationStart]!,
+      declarationEndToken: tokens[bodyClose]!,
+    },
+    next: bodyClose + 1,
+  };
 }
 
 export function parseEntryPointParams(tokens: readonly Token[]): EntryPointParam[] {

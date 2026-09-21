@@ -3,6 +3,16 @@ import type { BindingInfo } from "@vgpu/wgsl/reflect-source";
 
 export class VGPUError extends CoreVGPUError {}
 
+export function destroyedBindingError(label: string, binding: BindingInfo, resourceName = "resource"): VGPUError {
+  return new VGPUError({
+    code: "VGPU-R1-BINDING-DESTROYED",
+    message: `Binding '${binding.name}' (@group(${binding.group}) @binding(${binding.binding})) in '${label}' refers to destroyed resource '${resourceName}'.`,
+    where: `${label}.${binding.name}`,
+    fix: `Create a live resource and call set({ ${binding.name}: replacement }). Direct attachment references do not follow target.resize(); bind the Target itself to follow replacements. Re-record bundles that captured the old resource.`,
+    detail: { binding: binding.binding, bindingName: binding.name, resourceName },
+  });
+}
+
 export function storageStageLimitError(label: string, stage: "vertex" | "fragment", entryPoint: string, count: number, limit: number, bindings: readonly BindingInfo[]): VGPUError {
   const title = stage === "vertex" ? "Vertex" : "Fragment";
   const suffix = stage === "vertex" ? "VERTEX" : "FRAGMENT";
@@ -201,7 +211,7 @@ export function entryInvalidError(label: string, reason: string, where = "draw")
   return new VGPUError({
     code: "VGPU-ENTRY-INVALID",
     message: `Invalid entry in '${label}': ${reason}`,
-    fix: `Name an entry point declared in the shader with the matching stage — { vertex?, fragment? } strings for draw, one @compute name string for compute. Omit entry (or a field) to use the first entry point of that stage.`,
+    fix: `Use a matching stage name: draw { vertex?, fragment? }, effect { fragment? }, compute string. Defaults prefer vs_main/fs_main/cs_main, otherwise first-in-stage.`,
     where,
   });
 }
@@ -456,7 +466,7 @@ export function compileFailedError(where: string, cause: unknown, signature?: st
   return new VGPUError({
     code: "VGPU-COMPILE-FAILED",
     message: "WebGPU pipeline compilation failed.",
-    fix: "Check WGSL, vertex layouts, and target signature.",
+    fix: "Check WGSL, pipeline bindings, device limits, and render target/vertex layouts when applicable.",
     where,
     cause,
     detail: signature ? { signature } : undefined,
@@ -628,6 +638,22 @@ export function incompatibleResourceError(binding: BindingInfo, expected: string
 
 export function unsupportedError(where: string, message: string, fix?: string): VGPUError {
   return new VGPUError({ code: "VGPU-RING1-UNSUPPORTED", message, fix, where });
+}
+
+export function setValueInvalidError(detail: {
+  readonly reason: string;
+  readonly path: string;
+  readonly expected?: string | number;
+  readonly actual?: string | number;
+  readonly type?: string;
+}, message: string): VGPUError {
+  return new VGPUError({
+    code: "VGPU-SET-VALUE-INVALID",
+    message: `Invalid WGSL value at '${detail.path}': ${message}.`,
+    fix: "Pass the exact reflected structure, vector, matrix, and array shapes; use integral in-range values for i32/u32.",
+    where: "set",
+    detail,
+  });
 }
 
 export function malformedShaderSourceError(input: unknown): VGPUError {

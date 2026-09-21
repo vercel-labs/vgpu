@@ -1,8 +1,4 @@
-import {
-  BLOOM_LEVEL_FACTORS,
-  PARTICLE_LIGHT_FIRST_LEVEL,
-  bloomSpread,
-} from "../../bloom";
+import { BLOOM_LEVEL_FACTORS, bloomSpread } from "./passes/bloom/config";
 import {
   glassUniforms,
   runtimeWallExtent,
@@ -15,10 +11,11 @@ import {
   PRISM_POSTPROCESS_RANGES,
   PRISM_TRIANGLE,
 } from "../../types";
-import { presentationRevealUniforms } from "../presentation";
+import { presentationRevealUniforms } from "../shared/presentation/index";
+import { darkBloomStrengthForQuality } from "../quality";
 import { ensureDarkWireframeDraws } from "./create-graph";
 import type { DarkPipelineGraph } from "./types";
-import { bloomBlurUniforms } from "./bloom-uniforms";
+import { bloomBlurUniforms } from "./passes/bloom/uniforms";
 
 export function bindDarkGraph(
   graph: DarkPipelineGraph,
@@ -63,7 +60,7 @@ export function bindDarkGraph(
     return;
   }
 
-  const scene = sceneUniforms(runtime, beamWidthReveal);
+  const scene = sceneUniforms(runtime, beamWidthReveal, graph.lightMeshLayout);
   graph.light.set({ scene });
   graph.lightWireframe?.set({ scene });
   graph.copyBackground.set({ sceneTexture: backgroundTarget });
@@ -90,22 +87,27 @@ export function bindDarkGraph(
     params: { threshold: runtime.controls.postprocess.bloomThreshold },
   });
 
-  const particleTarget = bloomTargets[PARTICLE_LIGHT_FIRST_LEVEL];
-  graph.particleLightDownsample.set({
-    sourceTexture: sceneTarget,
-    sourceSampler: runtime.sceneSampler,
-    params: {
-      sourceTexelSize: [1 / sceneTarget.size[0], 1 / sceneTarget.size[1]],
-      sourceToTargetScale: [
-        sceneTarget.size[0] / particleTarget.vertical.size[0],
-        sceneTarget.size[1] / particleTarget.vertical.size[1],
-      ],
-    },
-  });
+  const particleTarget = graph.dedicatedParticleLight
+    ? bloomTargets[graph.bloomVisibleLevels]!
+    : bloomTargets[graph.bloomVisibleLevels - 1]!;
+  if (graph.particleLightDownsample) {
+    graph.particleLightDownsample.set({
+      sourceTexture: sceneTarget,
+      sourceSampler: runtime.sceneSampler,
+      params: {
+        sourceTexelSize: [1 / sceneTarget.size[0], 1 / sceneTarget.size[1]],
+        sourceToTargetScale: [
+          sceneTarget.size[0] / particleTarget.vertical.size[0],
+          sceneTarget.size[1] / particleTarget.vertical.size[1],
+        ],
+      },
+    });
+  }
   graph.bloomBlur.forEach((bloom, level) => {
     const targets = bloomTargets[level]!;
     const horizontalSource =
-      level === 0 || level === PARTICLE_LIGHT_FIRST_LEVEL
+      level === 0 ||
+      (graph.dedicatedParticleLight && level === graph.bloomVisibleLevels)
         ? targets.vertical
         : bloomTargets[level - 1]!.vertical;
     bloom.horizontal.set({
@@ -119,20 +121,33 @@ export function bindDarkGraph(
       params: bloomBlurUniforms(level, "vertical", targets.vertical.size),
     });
   });
-  graph.bloomComposite.set({
-    level0Texture: bloomTargets[0].vertical,
-    level1Texture: bloomTargets[1].vertical,
-    level2Texture: bloomTargets[2].vertical,
-    levelSampler: runtime.sceneSampler,
-    params: {
-      radius: bloomSpread(
-        runtime.controls.postprocess.bloomRadius,
-        PRISM_POSTPROCESS_RANGES.bloomRadius.min,
-        PRISM_POSTPROCESS_RANGES.bloomRadius.max
-      ),
-      factors: [...BLOOM_LEVEL_FACTORS, 0],
-    },
-  });
+  const bloomRadius = bloomSpread(
+    runtime.controls.postprocess.bloomRadius,
+    PRISM_POSTPROCESS_RANGES.bloomRadius.min,
+    PRISM_POSTPROCESS_RANGES.bloomRadius.max
+  );
+  graph.bloomComposite.set(
+    graph.quality === "low"
+      ? {
+          level0Texture: bloomTargets[0]!.vertical,
+          level1Texture: bloomTargets[1]!.vertical,
+          levelSampler: runtime.sceneSampler,
+          params: {
+            radius: bloomRadius,
+            factors: BLOOM_LEVEL_FACTORS.slice(0, 2),
+          },
+        }
+      : {
+          level0Texture: bloomTargets[0]!.vertical,
+          level1Texture: bloomTargets[1]!.vertical,
+          level2Texture: bloomTargets[2]!.vertical,
+          levelSampler: runtime.sceneSampler,
+          params: {
+            radius: bloomRadius,
+            factors: [...BLOOM_LEVEL_FACTORS, 0],
+          },
+        }
+  );
   graph.present.set({
     sceneTexture: sceneTarget,
     bloomTexture: bloomTargets[0].horizontal,
@@ -140,7 +155,10 @@ export function bindDarkGraph(
     params: {
       bloomStrength:
         runtime.controls.view === "glass"
-          ? runtime.controls.postprocess.bloomStrength
+          ? darkBloomStrengthForQuality(
+              graph.quality,
+              runtime.controls.postprocess.bloomStrength
+            )
           : 0,
     },
   });

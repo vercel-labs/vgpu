@@ -5,7 +5,7 @@ const environment = vi.hoisted(() => ({
   prepare: vi.fn(),
 }));
 
-vi.mock("../environment-texture", () => ({
+vi.mock("../environment/texture", () => ({
   createEnvironmentSampler: vi.fn(),
   createEnvironmentTexture: environment.create,
   destroyEnvironmentTexture: vi.fn(),

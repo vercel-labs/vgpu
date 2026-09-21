@@ -141,7 +141,7 @@ for (let i = 0; i < 90; i++) {
   time.advance(1 / 60);                  // frame 90 always lands on t = 1.5s
   frame(gpu, (f) => f.pass(scene, shader));
 }
-const pixels = await scene.read();       // same bytes on every machine, every run
+const pixels = await scene.color.read({ mipLevel: 0, region: "all" });       // same bytes on every machine, every run
 void pixels;
 ```
 

@@ -1,5 +1,78 @@
 # docs
 
+## 0.1.8
+
+### Patch Changes
+
+- Updated dependencies [588a94e]
+- Updated dependencies [588a94e]
+- Updated dependencies [d163bad]
+- Updated dependencies [632a908]
+- Updated dependencies [5c18170]
+  - vgpu@0.5.0
+  - @vgpu/core@0.5.0
+  - @vgpu/adapter-node@0.5.0
+  - @vgpu/wgsl@0.5.0
+  - @vgpu/cli@0.2.3
+  - @vgpu/adapter-mock@0.5.0
+  - @vgpu/wgsl-std@0.5.0
+
+## 0.1.8-rc.1
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies [632a908]
+- Updated dependencies [5c18170]
+  - vgpu@0.5.0-rc.1
+  - @vgpu/wgsl@0.5.0-rc.1
+  - @vgpu/core@0.5.0-rc.1
+  - @vgpu/cli@0.2.3-rc.0
+  - @vgpu/adapter-mock@0.5.0-rc.1
+  - @vgpu/adapter-node@0.5.0-rc.1
+  - @vgpu/wgsl-std@0.5.0-rc.1
+
+## 0.1.8-rc.0
+
+### Patch Changes
+
+- Updated dependencies [588a94e]
+- Updated dependencies [588a94e]
+  - vgpu@0.5.0-rc.0
+  - @vgpu/core@0.5.0-rc.0
+  - @vgpu/adapter-node@0.5.0-rc.0
+  - @vgpu/cli@0.2.2
+  - @vgpu/adapter-mock@0.5.0-rc.0
+  - @vgpu/wgsl@0.5.0-rc.0
+  - @vgpu/wgsl-std@0.5.0-rc.0
+
+## 0.1.7
+
+### Patch Changes
+
+- Updated dependencies [01470c5]
+  - @vgpu/cli@0.2.2
+  - vgpu@0.4.1
+  - @vgpu/core@0.4.1
+  - @vgpu/wgsl@0.4.1
+  - @vgpu/wgsl-std@0.4.1
+  - @vgpu/adapter-node@0.4.1
+  - @vgpu/adapter-mock@0.4.1
+
+## 0.1.6
+
+### Patch Changes
+
+- Updated dependencies [2d137a4]
+- Updated dependencies [8b2282c]
+  - vgpu@0.4.0
+  - @vgpu/wgsl@0.4.0
+  - @vgpu/cli@0.2.1
+  - @vgpu/core@0.4.0
+  - @vgpu/adapter-mock@0.4.0
+  - @vgpu/adapter-node@0.4.0
+  - @vgpu/wgsl-std@0.4.0
+
 ## 0.1.5
 
 ### Patch Changes

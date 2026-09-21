@@ -1,3 +1,7 @@
+import { FrameUniforms, disposeFrameUniforms, type UniformCapture } from "./frame-uniforms.ts";
+import { deliverOperations, validateOperation, type OperationValidation } from "./native-validation.ts";
+import type { Compute, DispatchOptions } from "./api-types.ts";
+import { frameComputeOf } from "./frame-protocols.ts";
 import type { Device } from "@vgpu/core";
 import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, popLastClaimedGroupValidationScope, preferClaimedGroupValidationResult, pushClaimedGroupValidationScope, submittedWorkDone, type ClaimedGroupValidationResult, type ValidationErrorSink } from "./claim-validation.ts";
 import { endRenderPassWithClaimValidation } from "./claim-validation-encode.ts";
@@ -18,7 +22,10 @@ import { serviceToken, type Gpu, type Kernel } from "./kernel.ts";
 
 /**
  * Opens a frame on `gpu`: advances the frame clock, runs `cb` against a fresh command encoder and
- * submits it when the callback returns (or on the way out of a throw).
+ * submits it when the callback returns. If the callback throws, the frame is canceled instead —
+ * nothing it encoded reaches the queue — and the error is rethrown unchanged; a callback that
+ * already submitted or canceled the frame is left as it is. Only the command buffer is covered,
+ * not the clock tick or CPU-side state. `frame.submit()` in your own `catch` keeps partial work.
  *
  * Without a callback the frame is yours: encode passes at your own pace and finish it with
  * `frame.submit()` or `frame.cancel()` — an unfinished frame holds every retain its passes took.
@@ -30,7 +37,9 @@ export function frame(gpu: Gpu, cb?: (frame: Frame) => void): Frame {
 }
 
 /**
- * Runs `cb` once per animation frame until the returned handle is stopped.
+ * Runs `cb` once per animation frame until the returned handle is stopped. Each tick follows the
+ * `frame(gpu, cb)` rule: submit on return, cancel on throw. A throwing tick also stops the loop,
+ * since its error escapes the animation-frame callback and no further tick would run.
  *
  * The loop belongs to the gpu's `scheduler` phase, so `gpu.dispose()` stops it before anything it
  * could encode against is torn down; a loop that stops on its own drops that registration.
@@ -38,6 +47,9 @@ export function frame(gpu: Gpu, cb?: (frame: Frame) => void): Frame {
 export function frameLoop(gpu: Gpu, cb: FrameLoopCallback, opts: FrameLoopOptions = {}): FrameLoopHandle {
   return frameRunner(liveKernel(gpu, "frameLoop")).loop(cb, opts);
 }
+
+/** Assigned by `Frame`'s static block; see the comment there. */
+let frameIsOpen!: (frame: Frame) => boolean;
 
 /**
  * One runner per gpu: it carries the reentrancy guard, the frame clock and the loop registrations,
@@ -47,6 +59,7 @@ const frameRunnerToken = serviceToken<FrameRunner>("frame-runner");
 function frameRunner(kernel: Kernel): FrameRunner {
   return kernel.service(frameRunnerToken, (self) => {
     const state = frameState(self);
+    self.own("service", () => disposeFrameUniforms(self.device));
     return new FrameRunner(
       () => {
         let release = () => {};
@@ -58,6 +71,13 @@ function frameRunner(kernel: Kernel): FrameRunner {
       (handle) => self.own("scheduler", () => handle.stop()),
     );
   });
+}
+
+export interface FrameComputePassOptions { readonly label?: string }
+
+export interface FrameComputePass {
+  dispatch(pipeline: Compute, x: number, y?: number, z?: number): void;
+  dispatch(pipeline: Compute, options: DispatchOptions): void;
 }
 
 export interface FramePassOptions {
@@ -88,7 +108,14 @@ export interface FramePassOptions {
 }
 
 export interface FrameLoopHandle { stop(): void }
-export interface FrameLoopOptions { readonly fps?: number }
+export interface FrameLoopOptions {
+  /**
+   * Caps the callback rate: ticks closer than 1000/fps ms to the last frame are skipped, less a millisecond of
+   * slack for requestAnimationFrame timestamp jitter, so a cap at a divisor of the display rate (60 on 120 Hz)
+   * runs on every second tick instead of stuttering.
+   */
+  readonly fps?: number;
+}
 export type FrameLoopCallback = (frame: Frame) => void;
 
 export class Frame {
@@ -102,6 +129,9 @@ export class Frame {
   done: Promise<void> = Promise.resolve();
   readonly #encoder: GPUCommandEncoder;
   readonly #validations: ClaimedGroupValidationResult[] = [];
+  readonly #computeValidations: OperationValidation[] = [];
+  #uniforms?: FrameUniforms;
+  readonly #capture: UniformCapture = { capture: (value, cache) => (this.#uniforms ??= new FrameUniforms(this.device)).capture(value, cache) };
   /**
    * Everything a pass of this frame attached, as opaque {@link FrameOwner}s: timers and
    * visibilities today, scene view generations later. The frame never learns what they are — it
@@ -118,6 +148,15 @@ export class Frame {
   #submitted = false;
   #canceled = false;
   #passActive = false;
+  /**
+   * Module-private view of the close state for `FrameRunner`: a callback that already submitted
+   * or canceled its frame needs neither the implicit submit nor the cancel-on-throw. Kept out of
+   * the public surface — the class exposes no `state` getter — by assigning the module-scoped
+   * `frameIsOpen` from inside the class body, where `#private` fields are reachable. The brand
+   * check keeps it from throwing on a frame that is not a `Frame` (a test double): an unknown
+   * frame is treated as open, and its own cancel() decides.
+   */
+  static { frameIsOpen = (frame) => !(#submitted in frame) || (!frame.#submitted && !frame.#canceled); }
   constructor(
     private readonly device: Device,
     private readonly defaultTarget?: Target,
@@ -129,6 +168,48 @@ export class Frame {
     this.#encoder = device.gpu.createCommandEncoder({ label: "vgpu.frame" });
   }
 
+  computePass(body: (pass: FrameComputePass) => void): void;
+  computePass(options: FrameComputePassOptions, body: (pass: FrameComputePass) => void): void;
+  computePass(options: FrameComputePassOptions | ((pass: FrameComputePass) => void), body?: (pass: FrameComputePass) => void): void {
+    this.#assertPassAvailable("Frame.computePass");
+    const callback = typeof options === "function" ? options : body;
+    if (typeof callback !== "function") throw new VGPUError({ code: "VGPU-COMPUTE-PASS-INVALID", message: "computePass requires a synchronous callback.", where: "Frame.computePass" });
+    const label = typeof options === "function" ? "vgpu.computePass" : options.label ?? "vgpu.computePass";
+    const encoder = validateOperation(this.device, this.#computeValidations, `${label}.begin`, () => this.#encoder.beginComputePass({ label }));
+    this.#passActive = true;
+    let open = true;
+    const pass: FrameComputePass = {
+      dispatch: (pipeline: Compute, x: number | DispatchOptions, y?: number, z?: number) => {
+        if (!open) throw new VGPUError({ code: "VGPU-COMPUTE-PASS-CLOSED", message: "The compute pass callback has ended.", where: `${label}.dispatch` });
+        assertDeviceUsable(this.device, `${label}.dispatch`);
+        const compute = frameComputeOf(pipeline);
+        if (!compute || compute.device.gpu !== this.device.gpu) throw new VGPUError({ code: "VGPU-COMPUTE-DEVICE-MISMATCH", message: "Expected a compute pipeline created for this frame's GPU device.", where: `${label}.dispatch` });
+        compute.encode(encoder, x, y, z, this.#computeValidations, this.#capture);
+      },
+    };
+    let failed = false;
+    try {
+      const returned = callback(pass) as unknown;
+      if (returned && typeof (returned as PromiseLike<unknown>).then === "function") {
+        void Promise.resolve(returned).catch(() => undefined);
+        throw new VGPUError({ code: "VGPU-COMPUTE-PASS-ASYNC", message: "computePass callbacks must be synchronous; await preparation before opening the frame.", where: "Frame.computePass" });
+      }
+    } catch (error) { failed = true; throw error; }
+    finally {
+      open = false;
+      this.#passActive = false;
+      try { validateOperation(this.device, this.#computeValidations, `${label}.end`, () => encoder.end()); }
+      catch (error) { if (!failed) throw error; }
+    }
+  }
+
+  #assertPassAvailable(where: string): void {
+    if (this.#canceled) throw frameCanceledError(where);
+    if (this.#submitted) throw frameAlreadySubmittedError(where);
+    assertDeviceUsable(this.device, where);
+    if (this.#passActive) throw framePassActiveError(where);
+  }
+
   pass(target: Target, body: Effect | Draw | ((pass: FramePass) => void)): void;
   pass(options: FramePassOptions, body: Effect | Draw | ((pass: FramePass) => void)): void;
   pass(target: Target | FramePassOptions, body: Effect | Draw | ((pass: FramePass) => void)): void {
@@ -138,6 +219,8 @@ export class Frame {
     // cancellation is the proximate cause there and names it better than a generic disposed device.
     if (this.#canceled) throw frameCanceledError("Frame.pass");
     assertDeviceUsable(this.device, "Frame.pass");
+    if (this.#passActive) throw framePassActiveError("Frame.pass");
+    if (this.#submitted && !isSurface(isTarget(target) ? target : target.target)) throw frameAlreadySubmittedError("Frame.pass");
     const targetOnly = isTarget(target);
     const cb = typeof body === "function" ? body : (p: FramePass) => p.draw(body);
     const resolvedTarget = targetOnly ? target : target.target ?? this.defaultTarget;
@@ -212,7 +295,8 @@ export class Frame {
           // re-checks the device here instead of taking it as a separate constructor argument.
           assertDeviceUsable(this.device, where);
           if (this.#canceled) throw frameCanceledError(where);
-        }));
+          if (!this.#passActive) throw framePassActiveError(where);
+        }, this.#capture));
       } finally {
         this.#passActive = false;
       }
@@ -231,20 +315,23 @@ export class Frame {
 
   submit(): void {
     // Closed either way: a re-submit has nothing left to flush, and a canceled frame dropped its
-    // encoder. Both are silent no-ops so `frame(gpu, cb)`'s submit-in-finally never masks a cancel()
-    // (or an exception) from inside the callback. Checked before the device so that submitting an
+    // encoder. Both are silent no-ops so `frame(gpu, cb)`'s implicit submit-on-return never masks
+    // a cancel() from inside the callback. Checked before the device so that submitting an
     // already-closed frame stays a no-op even after `gpu.dispose()` took the device with it.
     if (this.#submitted || this.#canceled) return;
     assertDeviceUsable(this.device, "Frame.submit");
+    if (this.#passActive) throw framePassActiveError("Frame.submit");
     this.#submitted = true;
     this.releaseLifecycle?.();
     // Timed and occlusion-queried frames append one resolveQuerySet of each instance's contiguous
     // used range (plus the staging copy) to the still-open frame encoder — zero extra submissions.
-    for (const owner of this.#liveOwners()) owner.finalizeFrame(this, this.#encoder);
+    try { for (const owner of this.#liveOwners()) owner.finalizeFrame(this, this.#encoder); }
+    catch (error) { this.#uniforms?.release(); this.#abandonOwners(this.#frameOwners()); throw error; }
+    try { this.#uniforms?.flush(); } catch (error) { this.#uniforms?.release(); this.#abandonOwners(this.#frameOwners()); throw error; }
     let commandBuffer: GPUCommandBuffer;
     const finishContext = this.#validations[0]?.context;
     if (finishContext) pushClaimedGroupValidationScope(this.device, finishContext);
-    try { commandBuffer = this.#encoder.finish(); }
+    try { commandBuffer = this.#computeValidations.length ? validateOperation(this.device, this.#computeValidations, "Frame.finish", () => this.#encoder.finish()) : this.#encoder.finish(); }
     catch (error) {
       // finish() failed, so the resolves encoded above never reach the queue: nothing may be read
       // back, but every instance still has to release the retain it took when it was attached.
@@ -253,7 +340,7 @@ export class Frame {
       discardClaimedGroupValidationResults(this.#validations);
       if (result) discardClaimedGroupValidationResults([result]);
       const context = result?.context ?? finishContext;
-      if (!context) throw error;
+      if (!context) { this.#uniforms?.release(); throw error; }
       this.done = this.#trackDone(this.#deliverValidationError(context.label, context.group, error));
       return;
     }
@@ -263,7 +350,10 @@ export class Frame {
     }
     const submitContext = this.#validations[0]?.context;
     if (submitContext) pushClaimedGroupValidationScope(this.device, submitContext);
-    try { this.device.gpu.queue.submit([commandBuffer]); }
+    try {
+      if (this.#computeValidations.length) validateOperation(this.device, this.#computeValidations, "Frame.submit", () => this.device.gpu.queue.submit([commandBuffer]));
+      else this.device.gpu.queue.submit([commandBuffer]);
+    }
     catch (error) {
       // Same as the finish() failure: the command buffer never ran, so release the retains and read
       // nothing back — the resolve's staging bytes are stale, not this frame's results.
@@ -272,7 +362,7 @@ export class Frame {
       discardClaimedGroupValidationResults(this.#validations);
       if (result) discardClaimedGroupValidationResults([result]);
       const context = result?.context ?? submitContext;
-      if (!context) throw error;
+      if (!context) { this.#uniforms?.release(); throw error; }
       this.done = this.#trackDone(this.#deliverValidationError(context.label, context.group, error));
       return;
     }
@@ -284,7 +374,7 @@ export class Frame {
     for (const owner of this.#liveOwners()) owner.frameSubmitted(this);
     // Instances a failed pass dropped are skipped above, so they still hold this frame's retain.
     this.#abandonOwners(this.#discardedOwners);
-    this.done = this.#trackDone(claimedGroupValidationDone(this.device, this.#validations, { errorSink: this.errorSink }));
+    this.done = this.#trackDone(Promise.all([claimedGroupValidationDone(this.device, this.#validations, { errorSink: this.errorSink }), deliverOperations(this.#computeValidations, this.errorSink ?? (error => console.error(error)))]).then(() => undefined));
   }
 
   /**
@@ -306,6 +396,8 @@ export class Frame {
     // could destroy them before encoder.end(), and the callback could keep encoding after cancel.
     if (this.#passActive) throw framePassActiveError("Frame.cancel");
     this.#canceled = true;
+    this.#uniforms?.release();
+    this.#computeValidations.length = 0;
     this.releaseLifecycle?.();
     // Nothing is finalized and nothing is read back: the encoded passes never reach the queue, so
     // decoding a resolve would report stale staging bytes as a phantom duration or "hidden".
@@ -381,19 +473,23 @@ export class Frame {
   }
 
   #trackDone(promise: Promise<void>): Promise<void> {
-    this.trackSettled?.(promise);
-    return promise;
+    const done = promise.catch(cause => {
+      const error = cause instanceof VGPUError ? cause : new VGPUError({ code: "VGPU-FRAME-COMPLETION", message: "GPU frame completion failed.", where: "Frame.done", cause });
+      return this.errorSink ? this.errorSink(error) : console.error(error);
+    }).finally(() => this.#uniforms?.release());
+    this.trackSettled?.(done);
+    return done;
   }
 }
 
 export class FramePass {
   #occlusionActive = false;
-  constructor(private readonly encoder: GPURenderPassEncoder, readonly target: Target, private readonly validations: ClaimedGroupValidationResult[], private readonly depthReadOnly = false, private readonly occlusionSource?: FrameOcclusionSource, private readonly frame?: Frame, private readonly assertFrameOpen?: (where: string) => void) {}
+  constructor(private readonly encoder: GPURenderPassEncoder, readonly target: Target, private readonly validations: ClaimedGroupValidationResult[], private readonly depthReadOnly = false, private readonly occlusionSource?: FrameOcclusionSource, private readonly frame?: Frame, private readonly assertFrameOpen?: (where: string) => void, private readonly capture?: UniformCapture) {}
   draw(drawable: Draw | Effect, opts: DrawCallOptions = {}): void {
     this.assertFrameOpen?.("FramePass.draw");
     const encodable = frameDrawable(drawable);
     if (this.depthReadOnly) assertDrawableAllowedInReadOnlyPass(encodable, this.target);
-    encodable.encode(this.encoder, this.target, opts, (result) => this.validations.push(result));
+    encodable.encode(this.encoder, this.target, opts, (result) => this.validations.push(result), this.capture);
   }
   /**
    * Wraps one or more draws in begin/endOcclusionQuery. The body ALWAYS executes; condition your
@@ -548,15 +644,27 @@ export class FrameRunner {
       const frame = this.createFrame();
       if (cb) {
         try { cb(frame); }
-        finally {
-          // A callback is allowed to dispose the owning gpu (gpu.dispose() inside a loop tick does
-          // exactly that). The device is then gone and the frame has nothing left to flush, so this
-          // implicit submit swallows that one error instead of throwing over the callback's own
-          // intent — the same reason a canceled frame submits as a no-op. An explicit
-          // frame.submit() on a dead device still reports it.
-          try { frame.submit(); }
-          catch (error) { if (!isDeviceGoneError(error)) throw error; }
+        catch (error) {
+          // Submit-on-success, cancel-on-throw: a throw means the callback never reached a state it
+          // meant to present, so the frame's command buffer is dropped whole rather than submitted
+          // half-encoded — and cancel() releases the telemetry retains the encoded passes took. A
+          // callback that already submitted (work on the queue, cannot be taken back) or canceled
+          // closed the frame itself, so there is nothing to do; asking cancel() would throw
+          // VGPU-FRAME-SUBMITTED over the callback's own error. Cleanup can only fail on an
+          // internal bug, and even then the original error is what the caller must see.
+          if (frameIsOpen(frame)) {
+            try { frame.cancel(); }
+            catch { /* never mask the callback's error with a cleanup failure */ }
+          }
+          throw error;
         }
+        // A callback is allowed to dispose the owning gpu (gpu.dispose() inside a loop tick does
+        // exactly that). dispose() cancels the open frame, so this submit is a no-op; if the device
+        // was lost instead, the frame has nothing left to flush either, so the implicit submit
+        // swallows that one error rather than throwing over the callback's own intent. An explicit
+        // frame.submit() on a dead device still reports it.
+        try { frame.submit(); }
+        catch (error) { if (!isDeviceGoneError(error)) throw error; }
       }
       return frame;
     } finally {
@@ -571,35 +679,49 @@ export class FrameRunner {
     const minIntervalMs = opts.fps && opts.fps > 0 ? 1000 / opts.fps : 0;
     let lastFrameMs: number | undefined;
     let id = 0;
+    // Registered with the owning gpu so gpu.dispose() stops it: a loop left running would keep
+    // encoding frames against a disposed device. Stopping is idempotent and drops the registration.
+    let untrack: (() => void) | undefined;
+    const stop = () => {
+      stopped = true;
+      cancel(id);
+      untrack?.();
+      untrack = undefined;
+    };
     const tick = (timestamp: number) => {
       if (stopped) return;
       if (shouldRunFrame(timestamp, lastFrameMs, minIntervalMs)) {
         lastFrameMs = timestamp;
-        this.frame(cb);
+        try { this.frame(cb); }
+        catch (error) {
+          // The frame was canceled and the error is about to escape the rAF callback, where no
+          // caller can catch it and no next tick would be scheduled anyway. Stop the loop properly
+          // rather than leave it "running" without ticks and registered with the gpu forever.
+          stop();
+          throw error;
+        }
       }
       // The callback may dispose the owning gpu, which stops this loop while the current tick is
       // running. Do not enqueue one last (no-op) tick after stop() already canceled the old id.
       if (!stopped) id = request(tick);
     };
     id = request(tick);
-    // Registered with the owning gpu so gpu.dispose() stops it: a loop left running would keep
-    // encoding frames against a disposed device. Stopping is idempotent and drops the registration.
-    let untrack: (() => void) | undefined;
-    const handle: FrameLoopHandle = {
-      stop() {
-        stopped = true;
-        cancel(id);
-        untrack?.();
-        untrack = undefined;
-      },
-    };
+    const handle: FrameLoopHandle = { stop };
     untrack = this.trackLoop?.(handle);
     return handle;
   }
 }
 
+/**
+ * requestAnimationFrame timestamps land a few tenths of a millisecond either side of the display period, so a strict
+ * comparison against 1000/fps drops every other tick when the cap equals the refresh rate or a divisor of it
+ * (a 60 fps cap measured 48 fps on a 60 Hz display). One millisecond of slack accepts those ticks and still skips the
+ * next-shorter interval of any display up to 240 Hz.
+ */
+const FRAME_INTERVAL_SLACK_MS = 1;
+
 function shouldRunFrame(timestamp: number, lastFrameMs: number | undefined, minIntervalMs: number): boolean {
   if (lastFrameMs === undefined) return true;
   if (minIntervalMs <= 0) return true;
-  return timestamp - lastFrameMs >= minIntervalMs;
+  return timestamp - lastFrameMs >= minIntervalMs - FRAME_INTERVAL_SLACK_MS;
 }

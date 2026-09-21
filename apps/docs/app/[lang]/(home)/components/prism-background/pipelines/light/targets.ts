@@ -11,20 +11,22 @@ export function ensureLightTargets(
   runtime: PrismRuntime,
   size: readonly [number, number]
 ): void {
-  graph.backdropHDR ??= createTarget(runtime, size, "backdrop-hdr");
-  graph.sceneHDR ??= createTarget(runtime, size, "scene-hdr");
+  graph.backdropHDR ??= createTarget(runtime, size, "backdrop-hdr", false);
+  graph.sceneHDR ??= createTarget(runtime, size, "scene-hdr", true);
   resizeLightTargets(graph, size);
 }
 
 function createTarget(
   runtime: PrismRuntime,
   size: readonly [number, number],
-  name: string
+  name: string,
+  multisampled: boolean
 ): Target {
   return target(runtime.gpu, {
     size,
     format: "rgba16float",
-    msaa: runtime.gpu.device.isCompatibilityMode ? undefined : 4,
+    msaa:
+      multisampled && !runtime.gpu.device.isCompatibilityMode ? 4 : undefined,
     label: `${runtime.label}.light.${name}`,
   });
 }

@@ -17,6 +17,7 @@ import {
   type PrismControls,
   type PrismTheme,
 } from "../../types";
+import type { PrismPipelineQuality } from "../../pipelines/types";
 import type { DebugControlGroup, DebugRangeControl } from "./control-types";
 import {
   withAbsorption,
@@ -326,19 +327,14 @@ const OUTPUT_CONTROLS: readonly DebugControlGroup[] = [
         })),
         read: (controls) => controls.lightMode.output.toneMapping,
         write: (controls, _mode, value) =>
-          withLightOutput(
-            controls,
-            "toneMapping",
-            value as LightToneMapping
-          ),
+          withLightOutput(controls, "toneMapping", value as LightToneMapping),
       },
       range(
         "scene-exposure",
         "Scene exposure",
         PRISM_LIGHT_MODE_RANGES.output.exposure,
         (controls) => controls.lightMode.output.exposure,
-        (controls, _mode, value) =>
-          withLightOutput(controls, "exposure", value)
+        (controls, _mode, value) => withLightOutput(controls, "exposure", value)
       ),
     ],
   },
@@ -429,9 +425,16 @@ const BLOOM_CONTROLS: readonly DebugControlGroup[] = [
   },
 ];
 
+const LOW_QUALITY_BLOOM_CONTROLS: readonly DebugControlGroup[] =
+  BLOOM_CONTROLS.map((group) => ({
+    ...group,
+    controls: group.controls.filter(({ id }) => id !== "bloom-strength"),
+  }));
+
 export function controlGroupsForSource(
   sourceId: string,
-  mode: PrismTheme
+  mode: PrismTheme,
+  quality: PrismPipelineQuality = "high"
 ): readonly DebugControlGroup[] {
   switch (sourceId) {
     case "scene-hdr":
@@ -441,11 +444,10 @@ export function controlGroupsForSource(
       return [
         ...BEAM_CONTROLS,
         ...SPECTRAL_CONTROLS,
+        ...LIGHT_APPEARANCE_CONTROLS,
         ...CAUSTIC_CONTROLS,
       ];
-    case "backdrop-hdr":
-      return LIGHT_APPEARANCE_CONTROLS;
-    case "dark-backdrop-hdr":
+    case "dark-external-light":
       return [
         ...BEAM_CONTROLS,
         ...SPECTRAL_CONTROLS,
@@ -464,7 +466,11 @@ export function controlGroupsForSource(
     case "dark-front-glass":
       return [...TRANSMISSION_CONTROLS, ...REFLECTION_CONTROLS];
     case "dark-bloom-composite":
-      return mode === "dark" ? BLOOM_CONTROLS : [];
+      return mode !== "dark"
+        ? []
+        : quality === "low"
+        ? LOW_QUALITY_BLOOM_CONTROLS
+        : BLOOM_CONTROLS;
     case "final-output":
       return OUTPUT_CONTROLS;
     default:

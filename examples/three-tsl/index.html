@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>vgpu WGSL modules as three.js TSL nodes</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #0b0d10; color: #dfe5ec; font-family: system-ui, sans-serif; }
+      #app { position: fixed; inset: 0; }
+      #overlay { position: fixed; left: 16px; bottom: 16px; font-size: 13px; opacity: 0.8; pointer-events: none; }
+      #overlay code { font-family: ui-monospace, monospace; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="overlay">
+      <code>lava.wgsl</code> → <code>@vgpu/wgsl-std</code> voronoi/hash → TSL <code>emissiveNode</code> / <code>normalNode</code> / 10 more physical-material slots
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

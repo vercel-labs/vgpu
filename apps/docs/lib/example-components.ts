@@ -9,11 +9,13 @@ export type ExampleComponentLoader = () => Promise<ExampleComponentModule>;
 
 export const exampleComponentLoaders = {
   gradient: () => import('../examples/gradient/index'),
+  'holographic-card': () => import('../examples/holographic-card/index'),
   'triangle-led-front': () => import('../examples/triangle-led-front/index'),
   'anti-aliasing': () => import('../examples/anti-aliasing/index'),
   'black-hole': () => import('../examples/black-hole/index'),
   'optimized-black-hole': () => import('../examples/optimized-black-hole/index'),
   earth: () => import('../examples/earth/index'),
+  atmosphere: () => import('../examples/atmosphere/index'),
   fluid: () => import('../examples/fluid/index'),
   'instanced-rendering': () => import('../examples/instanced-rendering/index'),
   'batch-rendering': () => import('../examples/batch-rendering/index'),
@@ -31,6 +33,12 @@ export const exampleComponentLoaders = {
   'depth-estimation': () => import('../examples/depth-estimation/index'),
   'mnist-classifier': () => import('../examples/mnist-classifier/index'),
   'air-painting': () => import('../examples/air-painting/index'),
+  'tsl-exports': () => import('../examples/tsl-exports/index'),
+  'three-tsl': () => import('../examples/three-tsl/index'),
+  'particle-orbit': () => import('../examples/particle-orbit/index'),
+  'typegpu-liquid-glass': () => import('../examples/typegpu-liquid-glass/index'),
+  'adaptive-quality': () => import('../examples/adaptive-quality/index'),
+  'glass-sculpture': () => import('../examples/glass-sculpture/index'),
 } satisfies Record<ExampleSlug, ExampleComponentLoader>;
 
 export function getExampleComponentLoader(slug: ExampleSlug): ExampleComponentLoader {

@@ -59,12 +59,13 @@ report();
 
 async function checkExportBudgets(dir, manifestPath, pkg) {
   const threshold = resolveThreshold(pkg, options.threshold);
+  const peerExternals = Object.keys(pkg.peerDependencies ?? {});
   const measured = {};
   for (const [subpath, budget] of Object.entries(pkg[EXPORT_BUDGET_FIELD])) {
     const exportInfo = pkg.exports?.[subpath];
     const jsFile = typeof exportInfo === "object" ? exportInfo.import : exportInfo;
     const path = join(dir, jsFile.replace(/^\.\//, ""));
-    const gzipBytes = existsSync(path) ? await bundledGzipSize(path) : Infinity;
+    const gzipBytes = existsSync(path) ? await bundledGzipSize(path, peerExternals) : Infinity;
     measured[subpath] = gzipBytes;
     record({
       label: exportLabel(pkg.name, subpath),
@@ -74,7 +75,7 @@ async function checkExportBudgets(dir, manifestPath, pkg) {
     });
   }
   if (options.update) {
-    updateManifest(manifestPath, pkg, (draft) => {
+    updateManifest(manifestPath, (draft) => {
       for (const [subpath, gzipBytes] of Object.entries(measured)) {
         if (!Number.isFinite(gzipBytes)) throw new Error(`${exportLabel(pkg.name, subpath)}: cannot update the budget, the built artifact is missing (run \`pnpm build\` first)`);
         draft[EXPORT_BUDGET_FIELD][subpath] = nextBudgetBytes(gzipBytes);
@@ -129,15 +130,22 @@ async function checkExperienceBudgets(dir, manifestPath, pkg) {
       structuralFailures.push(`vgpu experience ${measurement.experience.name}: retained prohibited ${retained.category} input ${retained.input}`);
     }
   }
+  if (options.update) {
+    updateManifest(manifestPath, (draft) => {
+      for (const { experience, gzipBytes } of measurements) {
+        draft[EXPERIENCE_BUDGET_FIELD][experience.name] = nextBudgetBytes(gzipBytes);
+      }
+    });
+  }
 }
 
-async function bundledGzipSize(entryPoint) {
+async function bundledGzipSize(entryPoint, peerExternals) {
   const result = await build({
     entryPoints: [entryPoint],
     bundle: true,
     format: "esm",
     platform: "neutral",
-    external: ["node:*", "webgpu", "@vgpu/*"],
+    external: ["node:*", "webgpu", "@vgpu/*", ...peerExternals],
     write: false,
     minify: true,
     mainFields: ["module", "main"],
@@ -154,7 +162,7 @@ async function checkPackageBudget(dir, manifestPath, pkg) {
     verdict: evaluateBudget({ measuredBytes: bytes, budgetBytes: pkg[PACKAGE_BUDGET_FIELD], audience: resolvePackageAudience(pkg), threshold: resolveThreshold(pkg, options.threshold) }),
   });
   if (options.update) {
-    updateManifest(manifestPath, pkg, (draft) => {
+    updateManifest(manifestPath, (draft) => {
       draft[PACKAGE_BUDGET_FIELD] = nextBudgetBytes(bytes);
       draft[PACKAGE_NOTE_FIELD] = BUDGET_NOTE;
     });
@@ -183,8 +191,8 @@ function record(entry) {
   if (entry.verdict.status === "warn") warnings.push(entry);
 }
 
-function updateManifest(manifestPath, pkg, mutate) {
-  const draft = JSON.parse(JSON.stringify(pkg));
+function updateManifest(manifestPath, mutate) {
+  const draft = JSON.parse(readFileSync(manifestPath, "utf8")); // preserve earlier export-budget updates
   mutate(draft);
   const next = `${JSON.stringify(draft, null, 2)}\n`;
   const previous = readFileSync(manifestPath, "utf8");

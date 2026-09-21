@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Fails the build when an artifact-backed route loses the generated examples tree or traces an
- * unsafe deployment bundle.
+ * Fails the build when an artifact-backed route loses the prebuild-generated examples tree or
+ * traces an unsafe deployment bundle.
  *
  * The route handlers read the tree with `fs` at request time, so Next's static tracing cannot see
- * the path and `outputFileTracingIncludes` in `next.config.mjs` is the only thing putting those
+ * the path and `outputFileTracingIncludes` in `next.config.ts` is the only thing putting those
  * files in the lambda. Two ways that silently breaks, both of which have already happened:
  *
  *   - the include entry is removed or the tree moves, so nothing is bundled;
@@ -72,7 +72,7 @@ for (const route of ROUTES) {
     console.error(
       `::error::/${route} bundles ${traced.size}/${artifacts.length} examples-api artifacts. ` +
         `Missing ${missing.length}, first: ${missing.slice(0, 3).join(', ')}. ` +
-        'Check that an outputFileTracingIncludes key in apps/docs/next.config.mjs still matches this route.',
+        'Check that an outputFileTracingIncludes key in apps/docs/next.config.ts still matches this route.',
     );
   } else {
     console.log(`/${route}: ${traced.size}/${artifacts.length} examples-api artifacts bundled`);

@@ -4,14 +4,16 @@ import type {
   PrismDebugSource,
   PrismPipeline,
   PrismPipelineMode,
+  PrismPipelineQuality,
 } from "./pipelines/types";
-import { resizeRuntime } from "./runtime/state";
+import { resizeRuntime, setRuntimeLightMeshLayout } from "./runtime/state";
 import type { PrismRuntime } from "./runtime/types";
 
 type PrismOutput = Surface | Target;
 
 export type PrismPipelineFactory = (
   mode: PrismPipelineMode,
+  quality: PrismPipelineQuality,
   runtime: PrismRuntime
 ) => PrismPipeline | Promise<PrismPipeline>;
 
@@ -19,15 +21,22 @@ export interface PrismPipelineControllerOptions {
   readonly runtime: PrismRuntime;
   readonly output: PrismOutput;
   readonly initialMode: PrismPipelineMode;
+  readonly initialQuality?: PrismPipelineQuality;
   readonly createPipeline?: PrismPipelineFactory;
-  readonly onActivate?: (mode: PrismPipelineMode) => void;
+  readonly onActivate?: (
+    mode: PrismPipelineMode,
+    quality: PrismPipelineQuality
+  ) => void;
 }
 
 export interface PrismPipelineController {
   readonly ready: Promise<void>;
   readonly pipeline: PrismPipeline | undefined;
+  readonly quality: PrismPipelineQuality | undefined;
   readonly requestedMode: PrismPipelineMode;
+  readonly requestedQuality: PrismPipelineQuality;
   setMode(mode: PrismPipelineMode): Promise<void>;
+  setQuality(quality: PrismPipelineQuality): Promise<void>;
   resize(size: readonly [number, number]): void;
   debugSources(): readonly PrismDebugSource[];
   /** Returns a promise while module loading or prepare still needs the runtime. */
@@ -66,13 +75,13 @@ export function preloadPrismPipeline(mode: PrismPipelineMode): void {
   });
 }
 
-const defaultFactory: PrismPipelineFactory = (mode, runtime) =>
+const defaultFactory: PrismPipelineFactory = (mode, quality, runtime) =>
   mode === "light"
     ? loadLightPipelineModule().then(({ createLightPipeline }) =>
-        createLightPipeline(runtime)
+        createLightPipeline(runtime, { quality })
       )
     : loadDarkPipelineModule().then(({ createDarkPipeline }) =>
-        createDarkPipeline(runtime)
+        createDarkPipeline(runtime, { quality })
       );
 
 /**
@@ -83,28 +92,47 @@ export function createPrismPipelineController({
   runtime,
   output,
   initialMode,
+  initialQuality = "high",
   createPipeline = defaultFactory,
   onActivate,
 }: PrismPipelineControllerOptions): PrismPipelineController {
   let requestedMode = initialMode;
+  let requestedQuality = initialQuality;
   let active: PrismPipeline | undefined;
+  let activeQuality: PrismPipelineQuality | undefined;
   let preparing: PrismPipeline | undefined;
   let running: Promise<void> | undefined;
   let cleanup: Promise<void> | undefined;
   let disposed = false;
 
   const run = async () => {
-    while (!disposed && active?.mode !== requestedMode) {
+    while (
+      !disposed &&
+      (active?.mode !== requestedMode || activeQuality !== requestedQuality)
+    ) {
       const candidateMode = requestedMode;
+      const candidateQuality = requestedQuality;
       let candidate: PrismPipeline;
       try {
-        candidate = await createPipeline(candidateMode, runtime);
+        candidate = await createPipeline(
+          candidateMode,
+          candidateQuality,
+          runtime
+        );
       } catch (error) {
         if (disposed) return;
-        if (candidateMode !== requestedMode) continue;
+        if (
+          candidateMode !== requestedMode ||
+          candidateQuality !== requestedQuality
+        )
+          continue;
         throw error;
       }
-      if (disposed || candidateMode !== requestedMode) {
+      if (
+        disposed ||
+        candidateMode !== requestedMode ||
+        candidateQuality !== requestedQuality
+      ) {
         candidate.destroy();
         continue;
       }
@@ -115,21 +143,32 @@ export function createPrismPipelineController({
         candidate.destroy();
         if (preparing === candidate) preparing = undefined;
         if (disposed) return;
-        if (candidateMode !== requestedMode) continue;
+        if (
+          candidateMode !== requestedMode ||
+          candidateQuality !== requestedQuality
+        )
+          continue;
         throw error;
       }
 
       if (preparing === candidate) preparing = undefined;
-      if (disposed || candidateMode !== requestedMode) {
+      if (
+        disposed ||
+        candidateMode !== requestedMode ||
+        candidateQuality !== requestedQuality
+      ) {
         candidate.destroy();
         continue;
       }
 
+      if (candidate.lightMeshLayout)
+        setRuntimeLightMeshLayout(runtime, candidate.lightMeshLayout);
       candidate.resize(runtime.outputSize);
       const previous = active;
       active = candidate;
+      activeQuality = candidateQuality;
       previous?.destroy();
-      onActivate?.(candidateMode);
+      onActivate?.(candidateMode, candidateQuality);
     }
   };
 
@@ -155,13 +194,30 @@ export function createPrismPipelineController({
     get pipeline() {
       return active;
     },
+    get quality() {
+      return activeQuality;
+    },
     get requestedMode() {
       return requestedMode;
+    },
+    get requestedQuality() {
+      return requestedQuality;
     },
     setMode(mode) {
       if (disposed) return Promise.resolve();
       requestedMode = mode;
-      return active?.mode === mode && !preparing
+      return active?.mode === mode &&
+        activeQuality === requestedQuality &&
+        !preparing
+        ? Promise.resolve()
+        : ensureRunning();
+    },
+    setQuality(quality) {
+      if (disposed) return Promise.resolve();
+      requestedQuality = quality;
+      return active?.mode === requestedMode &&
+        activeQuality === quality &&
+        !preparing
         ? Promise.resolve()
         : ensureRunning();
     },
@@ -180,6 +236,7 @@ export function createPrismPipelineController({
       disposed = true;
       active?.destroy();
       active = undefined;
+      activeQuality = undefined;
       if (!running) return undefined;
       cleanup = running.then(
         () => undefined,

@@ -110,8 +110,8 @@ export function createRenderer(options: RendererOptions) {
 
     gpu = nextGpu;
     canvasSurface = surface(gpu, options.canvas, { dpr: [1, 1.6] });
-    effects = createEffects(gpu);
     targets = createTargets(gpu, canvasSurface.size);
+    effects = createEffects(gpu, targets);
     setBindings(effects, targets);
     await prewarm(effects, targets, canvasSurface);
     if (disposed) return;

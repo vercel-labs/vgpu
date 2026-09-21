@@ -61,6 +61,8 @@ describe("unmatched Markdown responses", () => {
     "/examples",
     "/cn/examples/",
     "/examples/triangle-led-front",
+    "/examples/triangle-led-front/download",
+    "/examples/triangle-led-front/v0.json",
     "/docs/get-started",
     "/llms.txt",
     "/cn/llms-full.txt",

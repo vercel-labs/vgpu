@@ -131,7 +131,7 @@ frame(gpu, (currentFrame) => {
   currentFrame.pass(output, present);
 });
 
-const pixels = await output.read();   // RGBA bytes — assert on them, or encode a PNG
+const pixels = await output.color.read({ mipLevel: 0, region: "all" });   // RGBA bytes — assert on them, or encode a PNG
 gpu.dispose();
 ```
 

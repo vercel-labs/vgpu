@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-compiler/v1",
+  "source": {
+    "virtualPath": "resolved/direct-dual-source.wgsl",
+    "sha256": "7631c4138a629b1a38737194d73316cdcc0252950c23fb3cfdd1f59994324310",
+    "text": "enable dual_source_blending;\n\nstruct Outputs {\n  @location(0) @blend_src(0) primary: vec4f,\n  @location(0) @blend_src(1) secondary: vec4f,\n}\n\n@fragment\nfn main() -> Outputs {\n  return Outputs(vec4f(0.25, 0.5, 0.75, 0.8), vec4f(0.5, 0.25, 0.75, 0.5));\n}\n"
+  },
+  "originMap": {
+    "schemaVersion": 1,
+    "contractId": "vgpu-native-origin-map/v1",
+    "generatedSource": {
+      "virtualPath": "resolved/direct-dual-source.wgsl",
+      "sha256": "7631c4138a629b1a38737194d73316cdcc0252950c23fb3cfdd1f59994324310"
+    },
+    "sources": [
+      {
+        "input": "direct-dual-source-wgsl",
+        "sha256": "7631c4138a629b1a38737194d73316cdcc0252950c23fb3cfdd1f59994324310"
+      }
+    ],
+    "segments": [
+      {
+        "generated": {
+          "startByte": 0,
+          "endByte": 253
+        },
+        "origin": {
+          "input": "direct-dual-source-wgsl"
+        },
+        "precision": "module"
+      }
+    ]
+  },
+  "entryPoint": {
+    "stage": "fragment",
+    "wgsl": "main",
+    "metal": "vgpu_direct_dual_source"
+  },
+  "semanticInterface": {
+    "kind": "fragment",
+    "inputs": [],
+    "outputs": [
+      {
+        "type": {
+          "scalar": "f32",
+          "width": 4
+        },
+        "invariant": false,
+        "location": 0,
+        "blendSource": 0
+      },
+      {
+        "type": {
+          "scalar": "f32",
+          "width": 4
+        },
+        "invariant": false,
+        "location": 0,
+        "blendSource": 1
+      }
+    ]
+  },
+  "overrides": [],
+  "languageFeatures": ["dual_source_blending"],
+  "metal": {
+    "bindingModel": "vgpu-metal-binding-slots-v1",
+    "immediateDataLayoutModel": "vgpu-metal-immediate-data-layout-v1",
+    "bindings": [],
+    "internalReservations": [
+      {
+        "role": "immediate-data",
+        "slots": [
+          {
+            "mode": "direct",
+            "resourceClass": "buffer",
+            "component": "buffer",
+            "index": 30,
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "storageBufferSizes": {
+      "model": "vgpu-metal-slot-indexed-storage-buffer-byte-sizes-v1",
+      "immediateDataByteOffset": 12
+    }
+  }
+}

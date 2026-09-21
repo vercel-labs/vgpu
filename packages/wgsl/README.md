@@ -1,6 +1,6 @@
 # @vgpu/wgsl
 
-`@vgpu/wgsl` turns WGSL files into JavaScript string modules and resolves WGSL-to-WGSL imports before bundling. It includes a resolver/runtime, webpack and Vite integrations, and a TypeScript ambient-types sub-export for `import shader from "./shader.wgsl"`.
+`@vgpu/wgsl` turns WGSL files into JavaScript shader-source modules and resolves WGSL-to-WGSL imports before bundling. It includes a resolver/runtime, webpack and Vite integrations, and a TypeScript ambient-types sub-export for `import shader from "./shader.wgsl"`.
 
 The resolver preserves shader entry-point names for WebGPU pipeline creation while mangling non-entry helpers and imports to avoid cross-module symbol collisions. Loader integrations also wire transitive `.wgsl` imports into bundler watch/HMR systems.
 
@@ -34,7 +34,8 @@ This is required for TypeScript to accept `.wgsl` imports. If you cannot use the
 
 ```ts
 declare module "*.wgsl" {
-  const source: string;
+  import type { ShaderSource } from "@vgpu/wgsl";
+  const source: ShaderSource;
   export default source;
 }
 ```
@@ -223,7 +224,7 @@ Transitive `.wgsl` imports are registered with each bundler's watch graph:
 
 | Export | Purpose |
 | --- | --- |
-| `@vgpu/wgsl` | `compile()` for plain WGSL source strings plus shared public types. |
+| `@vgpu/wgsl` | `compile()` for plain WGSL source strings, `isShaderFunctionExport()` for unknown export metadata, plus shared public types. |
 | `@vgpu/wgsl/runtime` | `resolveShader()` for file/module graph resolution and reflection. |
 | `@vgpu/wgsl/loader-webpack` | Default webpack-compatible `.wgsl` loader. |
 | `@vgpu/wgsl/loader-vite` | Default/named `wgslVitePlugin()` and `transformWgsl()`. |

@@ -74,7 +74,7 @@ describe.skipIf(dockerOnly)("sampler filterability real-world Docker regressions
         currentFrame.pass({ target: source }, (pass) => pass.draw(solid));
         currentFrame.pass({ target: output }, (pass) => pass.draw(loaded));
       });
-      expect(pixelAt(await output.read(), 8, 4, 4)[1]).toBeGreaterThan(100);
+      expect(pixelAt(await output.color.read({ mipLevel: 0, region: "all" }), 8, 4, 4)[1]).toBeGreaterThan(100);
     } finally { gpu.dispose(); }
   });
 
@@ -108,7 +108,7 @@ async function renderSampledFixture(
     currentFrame.pass({ target: source }, (pass) => pass.draw(solid));
     currentFrame.pass({ target: output }, (pass) => pass.draw(sampled));
   });
-  const pixel = pixelAt(await output.read(), 8, 4, 4);
+  const pixel = pixelAt(await output.color.read({ mipLevel: 0, region: "all" }), 8, 4, 4);
   expect(pixel[1]).toBeGreaterThan(100);
   expect(pixel[2]).toBeGreaterThan(150);
   expect(pixel[3]).toBe(255);

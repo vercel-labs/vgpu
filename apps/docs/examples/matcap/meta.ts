@@ -2,7 +2,7 @@ export const meta = {
   slug: "matcap",
   title: "Matcap Shading",
   description:
-    "A lighting rig baked once into a sphere-shaped lookup texture, then replayed as a single texture fetch per pixel on a spinning faceted solid.",
+    "A lighting rig baked once into a sphere-shaped lookup texture, then replayed as a single texture fetch per pixel on a spinning relief-mapped sphere.",
   tags: ["matcap", "lighting", "shader", "3d"],
   capabilities: [
     "webgpu",

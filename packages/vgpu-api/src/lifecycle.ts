@@ -18,6 +18,6 @@ export function isDeviceUsable(device: Device): boolean {
   }
 }
 
-export function assertBufferUsable(buffer: Buffer, where: string): void {
-  (buffer as unknown as { assertUsable(where: string): void }).assertUsable(where);
+export function assertBufferUsable(buffer: Buffer, where: string, device?: Device): void {
+  (buffer as unknown as { assertUsable(where: string, device?: Device): void }).assertUsable(where, device);
 }

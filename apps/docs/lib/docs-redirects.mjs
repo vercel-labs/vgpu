@@ -15,21 +15,14 @@
  *     page). Without these 7 redirects the cutover breaks 7 live URLs — the
  *     single biggest handoff out of F1-F3.
  *
- *  2. `SECTION_ROOTS` — was `/docs/get-started`, `/docs/concepts`, `/docs/guides`
- *     and `/docs/reference` redirecting to the first page of the section,
- *     because the generated tree had no `index.md` in those directories and
- *     fumadocs had no page at the folder URL to answer with. That stopgap is
- *     gone: `content/docs/{get-started,concepts,guides,reference}/index.mdx`
- *     (hand-authored, TGEIST-11 follow-up) are real section-index pages now,
- *     ported verbatim from `apps/docs/app/docs/{get-started,concepts,guides,
- *     reference}/page.tsx`, so the four URLs answer 200 directly and a redirect
- *     here would only get in the way — Next.js resolves `redirects()` before
- *     it resolves a page, so a live entry would mask the very index it used to
- *     stand in for. Left as an empty array (not deleted) since the shape —
- *     "redirect a section root to its first page until it has a real
- *     `index.md`" — is still the correct stopgap for the next section that
- *     ships without one; `checkSectionRootTargets()` below stays wired to it
- *     for free.
+ *  2. `SECTION_ROOTS` — directories that are linked as landing pages but have
+ *     no `index.md`. The four top-level sections (`get-started`, `concepts`,
+ *     `guides`, and `reference`) now have hand-authored index pages and must not
+ *     appear here. Reference package directories are different: their cards on
+ *     `/docs/reference` link to the package root, while the generated corpus
+ *     contains topic pages only. Redirect each package root to the first topic
+ *     from its `meta.json`; `checkSectionRootTargets()` fails CI if navigation
+ *     ordering changes without updating this table.
  *
  *  3. `legacyTopLevelRedirects()` + the manifest-derived package/symbol
  *     redirects — ported from `apps/docs/next.config.mjs` (the app being
@@ -64,12 +57,44 @@ export const CONSOLIDATED_CONCEPT_GUIDES = [
 
 /**
  * Section directories with no `index.md` in `content/docs/**`, and the page
- * each one would redirect to (the first real page of the section's
- * `meta.json` — asserted by `check-url-anchor-parity.mjs`). Empty: all four
- * sections that ever needed this (get-started, concepts, guides, reference)
- * have a real `index.mdx` now. See the module comment above.
+ * each one redirects to (the first real page of the section's `meta.json` —
+ * asserted by `check-url-anchor-parity.mjs`).
  */
-export const SECTION_ROOTS = [];
+export const SECTION_ROOTS = [
+  { source: "/docs/reference/vgpu", destination: "/docs/reference/vgpu/init", dir: "reference/vgpu" },
+  {
+    source: "/docs/reference/vgpu-three",
+    destination: "/docs/reference/vgpu-three/tsl-exports",
+    dir: "reference/vgpu-three",
+  },
+  {
+    source: "/docs/reference/vgpu-scene",
+    destination: "/docs/reference/vgpu-scene/camera",
+    dir: "reference/vgpu-scene",
+  },
+  { source: "/docs/reference/wgsl", destination: "/docs/reference/wgsl/compile", dir: "reference/wgsl" },
+  { source: "/docs/reference/wgsl-std", destination: "/docs/reference/wgsl-std/color", dir: "reference/wgsl-std" },
+  {
+    source: "/docs/reference/vgpu-core",
+    destination: "/docs/reference/vgpu-core/device",
+    dir: "reference/vgpu-core",
+  },
+  {
+    source: "/docs/reference/render",
+    destination: "/docs/reference/render/wireframe-material",
+    dir: "reference/render",
+  },
+  {
+    source: "/docs/reference/vgpu-adapter-node",
+    destination: "/docs/reference/vgpu-adapter-node/create-node-adapter",
+    dir: "reference/vgpu-adapter-node",
+  },
+  {
+    source: "/docs/reference/vgpu-mock",
+    destination: "/docs/reference/vgpu-mock/create-mock-adapter",
+    dir: "reference/vgpu-mock",
+  },
+];
 
 /**
  * `apps/docs/next.config.mjs`'s hand-written redirect list, ported verbatim

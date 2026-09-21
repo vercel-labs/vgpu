@@ -59,7 +59,7 @@ test("layout handles mat3x3 vec3 padding and explicit member attributes", async 
   ]);
 });
 
-test("uniform and storage arrays use Naga/Dawn standard-layout natural stride", async () => {
+test("uniform and storage arrays use the same intrinsic WGSL stride", async () => {
   const shader = await resolveShader({ entry: "/m.wgsl", validate: false, modules: { "/m.wgsl": `
     struct U { values: array<f32, 3> }
     struct S { values: array<f32, 3> }
@@ -142,7 +142,7 @@ test("reflectSource reflects raw WGSL strings through the frozen ReflectionFacad
   `);
   expect(reflection.entryPoints[0]).toMatchObject({ name: "main", stage: "fragment" });
   expect(reflection.bindings[0]).toMatchObject({ name: "params", kind: "buffer", bindingLayout: { kind: "buffer" } });
-  expect(reflection.bindings[0]?.layout).toMatchObject({ layoutMode: "naga-standard", size: 32 });
+  expect(reflection.bindings[0]?.layout).toMatchObject({ layoutMode: "wgsl-host-shareable-v1", size: 16 });
   expect(reflection.bindings[1]).toMatchObject({ name: "tex", kind: "texture", bindingLayout: { kind: "texture" } });
 });
 

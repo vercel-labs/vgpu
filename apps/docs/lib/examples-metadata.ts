@@ -2,12 +2,14 @@ import { exampleThumbs } from './example-thumbs.generated';
 import type { ExampleMeta, ExampleMetaDefinition } from './example-meta';
 import { exampleSlugs, type ExampleSlug } from './example-slugs';
 
+import { meta as holographicCardMeta } from '../examples/holographic-card/meta';
 import { meta as gradientMeta } from '../examples/gradient/meta';
 import { meta as triangleLedFrontMeta } from '../examples/triangle-led-front/meta';
 import { meta as antiAliasingMeta } from '../examples/anti-aliasing/meta';
 import { meta as blackHoleMeta } from '../examples/black-hole/meta';
 import { meta as optimizedBlackHoleMeta } from '../examples/optimized-black-hole/meta';
 import { meta as earthMeta } from '../examples/earth/meta';
+import { meta as atmosphereMeta } from '../examples/atmosphere/meta';
 import { meta as fluidMeta } from '../examples/fluid/meta';
 import { meta as instancedRenderingMeta } from '../examples/instanced-rendering/meta';
 import { meta as batchRenderingMeta } from '../examples/batch-rendering/meta';
@@ -25,14 +27,22 @@ import { meta as nextjsFlareMeta } from '../examples/nextjs-flare/meta';
 import { meta as depthEstimationMeta } from '../examples/depth-estimation/meta';
 import { meta as mnistClassifierMeta } from '../examples/mnist-classifier/meta';
 import { meta as airPaintingMeta } from '../examples/air-painting/meta';
+import { meta as tslExportsMeta } from '../examples/tsl-exports/meta';
+import { meta as threeTslMeta } from '../examples/three-tsl/meta';
+import { meta as particleOrbitMeta } from '../examples/particle-orbit/meta';
+import { meta as typegpuLiquidGlassMeta } from '../examples/typegpu-liquid-glass/meta';
+import { meta as adaptiveQualityMeta } from '../examples/adaptive-quality/meta';
+import { meta as glassSculptureMeta } from '../examples/glass-sculpture/meta';
 
 const rawMetadata = {
   gradient: gradientMeta,
+  'holographic-card': holographicCardMeta,
   'triangle-led-front': triangleLedFrontMeta,
   'anti-aliasing': antiAliasingMeta,
   'black-hole': blackHoleMeta,
   'optimized-black-hole': optimizedBlackHoleMeta,
   earth: earthMeta,
+  atmosphere: atmosphereMeta,
   fluid: fluidMeta,
   'instanced-rendering': instancedRenderingMeta,
   'batch-rendering': batchRenderingMeta,
@@ -50,6 +60,12 @@ const rawMetadata = {
   'depth-estimation': depthEstimationMeta,
   'mnist-classifier': mnistClassifierMeta,
   'air-painting': airPaintingMeta,
+  'tsl-exports': tslExportsMeta,
+  'three-tsl': threeTslMeta,
+  'particle-orbit': particleOrbitMeta,
+  'typegpu-liquid-glass': typegpuLiquidGlassMeta,
+  'adaptive-quality': adaptiveQualityMeta,
+  'glass-sculpture': glassSculptureMeta,
 } satisfies Record<ExampleSlug, ExampleMetaDefinition>;
 
 function withThumbnails(meta: ExampleMetaDefinition): ExampleMeta {
@@ -62,11 +78,13 @@ function withThumbnails(meta: ExampleMetaDefinition): ExampleMeta {
 
 export const exampleMetadataBySlug = {
   gradient: withThumbnails(rawMetadata.gradient),
+  'holographic-card': withThumbnails(rawMetadata['holographic-card']),
   'triangle-led-front': withThumbnails(rawMetadata['triangle-led-front']),
   'anti-aliasing': withThumbnails(rawMetadata['anti-aliasing']),
   'black-hole': withThumbnails(rawMetadata['black-hole']),
   'optimized-black-hole': withThumbnails(rawMetadata['optimized-black-hole']),
   earth: withThumbnails(rawMetadata.earth),
+  atmosphere: withThumbnails(rawMetadata.atmosphere),
   fluid: withThumbnails(rawMetadata.fluid),
   'instanced-rendering': withThumbnails(rawMetadata['instanced-rendering']),
   'batch-rendering': withThumbnails(rawMetadata['batch-rendering']),
@@ -84,6 +102,12 @@ export const exampleMetadataBySlug = {
   'depth-estimation': withThumbnails(rawMetadata['depth-estimation']),
   'mnist-classifier': withThumbnails(rawMetadata['mnist-classifier']),
   'air-painting': withThumbnails(rawMetadata['air-painting']),
+  'tsl-exports': withThumbnails(rawMetadata['tsl-exports']),
+  'three-tsl': withThumbnails(rawMetadata['three-tsl']),
+  'particle-orbit': withThumbnails(rawMetadata['particle-orbit']),
+  'typegpu-liquid-glass': withThumbnails(rawMetadata['typegpu-liquid-glass']),
+  'adaptive-quality': withThumbnails(rawMetadata['adaptive-quality']),
+  'glass-sculpture': withThumbnails(rawMetadata['glass-sculpture']),
 } satisfies Record<ExampleSlug, ExampleMeta>;
 
 export const examplesMetadata = exampleSlugs.map((slug) => exampleMetadataBySlug[slug]);

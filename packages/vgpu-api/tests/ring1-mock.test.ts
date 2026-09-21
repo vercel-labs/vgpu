@@ -38,7 +38,7 @@ struct Camera { value: f32 }
 @fragment fn main(@location(0) uv: vec2f) -> @location(0) vec4f { return vec4f(camera.value, uv, 1.0); }
 `;
 
-test("set() writes lib-owned values in-place and keeps bind group stable on mock", async () => {
+test("set() preserves canonical values while frame draws use separate snapshots", async () => {
   const gpu = await init();
   const wave = effect(gpu, WAVE, { label: "wave" });
   const colorTarget = target(gpu, { size: [4, 4] });
@@ -49,8 +49,8 @@ test("set() writes lib-owned values in-place and keeps bind group stable on mock
   wave.set({ time: 0.5 });
   frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (p) => p.draw(wave)));
 
-  expect(mock.calls.createBuffer).toBe(1);
-  expect(mock.calls.createBindGroup).toBe(1);
+  expect(mock.calls.createBuffer).toBe(3);
+  expect(mock.calls.createBindGroup).toBe(2);
   gpu.dispose();
 });
 
@@ -63,7 +63,7 @@ test("creation-time set sugar is exactly an initial set()", async () => {
   wave.set({ time: 0.25 });
   frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (p) => p.draw(wave)));
 
-  expect(mock.calls.createBuffer).toBe(1);
+  expect(mock.calls.createBuffer).toBe(2);
   expect(mock.calls.createBindGroup).toBe(1);
   gpu.dispose();
 });
@@ -226,8 +226,8 @@ test("target recreation subscriptions refresh across repeated resizes and are re
 
   events.length = 0;
   sourceC.destroy();
-  sourceC.resize([16, 16]);
-  expect(events).toEqual([]);
+  expect(() => sourceC.resize([16, 16])).toThrow(/destroyed/);
+  expect(events).toEqual([expect.objectContaining({ kind: "binding-identity", newIdentity: expect.stringContaining("destroyed:") })]);
   gpu.dispose();
 });
 

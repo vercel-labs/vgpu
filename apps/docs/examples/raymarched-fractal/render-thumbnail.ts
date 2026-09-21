@@ -89,6 +89,6 @@ async function reportVariant(
   output: Target
 ): Promise<void> {
   if (!options.onVariantRendered) return;
-  const pixels = await output.read();
+  const pixels = await output.color.read({ mipLevel: 0, region: "all" });
   await options.onVariantRendered(variant, new Uint8Array(pixels), output.size);
 }

@@ -7,7 +7,6 @@ import { generateExampleArtifacts } from './artifact-generator';
 import { SOURCE_SNAPSHOT_PREFIX, sha256, sourceSnapshotIdentity } from './hashing';
 
 const SNAPSHOT_FILE = 'apps/docs/lib/examples-source.generated.ts';
-const GENERATED_TREE = 'apps/docs/generated/examples-api';
 const repository = 'https://github.com/vgpu/vgpu';
 const snapshotBytes = await readFile(resolve(SNAPSHOT_FILE));
 const identity = sourceSnapshotIdentity(snapshotBytes);
@@ -37,9 +36,8 @@ describe('content-derived source snapshot identity', () => {
     // content-identical tree and therefore the revision, so the EOL is versioned in .gitattributes.
     expect(snapshotBytes.includes(0x0d)).toBe(false);
     const attributes = await readFile(resolve('.gitattributes'), 'utf8');
-    for (const path of [SNAPSHOT_FILE, `${GENERATED_TREE}/**`]) {
-      expect(attributes, `.gitattributes must pin ${path} to LF`).toContain(`${path} text eol=lf\n`);
-    }
+    expect(attributes, `.gitattributes must pin ${SNAPSHOT_FILE} to LF`)
+      .toContain(`${SNAPSHOT_FILE} text eol=lf\n`);
   });
 
   it('keeps the revision independent of git history and merge strategy', async () => {
@@ -50,16 +48,15 @@ describe('content-derived source snapshot identity', () => {
     expect(generator).toContain('sourceSnapshotIdentity');
   });
 
-  it('matches the checked-in artifact tree byte for byte', async () => {
-    const set = generate(identity);
-    for (const artifact of set.artifacts) {
-      const bytes = await readFile(resolve(GENERATED_TREE, artifact.key));
-      expect(sha256(bytes), `stale checked-in artifact: ${artifact.key}`).toBe(artifact.sha256);
-    }
-    const index = JSON.parse(
-      await readFile(resolve(GENERATED_TREE, `examples/v1/revisions/${set.revision}/index.json`), 'utf8'),
-    ) as { revision: string; source: { gitCommit: string } };
-    expect(index.revision).toBe(set.revision);
-    expect(index.source.gitCommit).toBe(identity);
+  it('generates deployment artifacts during dev and build without tracking them', async () => {
+    const packageJson = JSON.parse(await readFile(resolve('apps/docs/package.json'), 'utf8')) as {
+      scripts: Record<string, string>;
+    };
+    expect(packageJson.scripts['examples-api:generate']).toBe('node scripts/generate-examples-api.mjs');
+    expect(packageJson.scripts.predev).toMatch(/ingest-examples\.mjs.*examples-api:generate/);
+    expect(packageJson.scripts.prebuild).toMatch(/ingest-examples\.mjs.*examples-api:generate/);
+
+    const ignore = await readFile(resolve('apps/docs/.gitignore'), 'utf8');
+    expect(ignore.split(/\r?\n/)).toContain('generated/examples-api');
   });
 });

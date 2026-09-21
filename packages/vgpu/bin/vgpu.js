@@ -17,8 +17,7 @@ const packageJson = JSON.parse(readFileSync(resolve(here, "../package.json"), "u
 // versioned independently of the public `vgpu` package and known to drift from it (see
 // CONTRIBUTING.md). Reporting that version made every in-repo `vgpu examples ...` call fail the
 // server handshake with VGPU-EXAMPLES-CLI-TOO-OLD, so resolve the public version from the sibling
-// `vgpu-api` package instead -- same try/catch-degrade pattern as computeStamp() in
-// lib/docs/generate/generate.js.
+// `vgpu-api` package instead and degrade to the CLI package version for an incomplete checkout.
 //
 // In the published tarball, `../package.json` is the synthetic `{type,version}` stamp written by
 // packages/vgpu-api/scripts/copy-cli.mjs, which has no `name` field, so this branch is dead code
@@ -43,8 +42,12 @@ const help = `vgpu ${VERSION}
 TypeScript library for WebGPU: typed shader imports, a tiny gpu-first API, and
 the same code running in the browser, headless Node, and your test suite.
 
-## Read the docs
-  npx vgpu docs cat getting-started.md    The guide for using the current API correctly
+## Run this first
+  npx vgpu docs cat getting-started.md
+  Always read this when working with vgpu, do not skip.
+  It is short and covers the API, project setup, and what to do before a PR.
+
+## Find anything else in the docs
   npx vgpu docs find "<topic | symbol | VGPU-error-code>"
   npx vgpu docs cat <path>
 
@@ -62,6 +65,9 @@ the same code running in the browser, headless Node, and your test suite.
 
 ## Node rendering environment
   npx vgpu doctor
+
+## Native Metal tooling
+  npx vgpu native --help
 `;
 
 const comingSoon = (command) => `vgpu ${command} is coming soon.
@@ -77,6 +83,9 @@ export function runCli(args) {
   if (command === "check") return runCheck(rest);
   if (command === "docs") return runDocs(rest);
   if (command === "examples") return runExamples(rest, { version: VERSION });
+  if (command === "native") {
+    return import("../lib/native/run.js").then(({ runNative }) => runNative(rest, { version: VERSION }));
+  }
   if (command === "mcp") {
     return import("../lib/mcp/stdio.js").then(({ runMcpStdio }) => runMcpStdio(rest, { version: VERSION }));
   }

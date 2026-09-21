@@ -2,6 +2,7 @@
   "title": "API Reference",
   "pages": [
     "vgpu",
+    "vgpu-three",
     "vgpu-scene",
     "wgsl",
     "wgsl-std",

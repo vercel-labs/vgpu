@@ -286,6 +286,7 @@ export function setStaticBindings(
     pass.set({
       samp: scene.linearSampler,
       blur: {
+        texelSize: (index % 2 === 0 ? targets.bloomA : targets.bloomB).texelSize,
         direction: directions[index % 2]!,
         radius: bloom.radii[Math.floor(index / 2)],
       },

@@ -1,8 +1,8 @@
 import { glassUniforms, sceneUniforms } from "../../runtime/uniforms";
 import type { PrismRuntime } from "../../runtime/types";
 import { ensureLightWireframeDraws } from "./create-graph";
-import { lightGlassAccentUniforms } from "./glass-accent";
-import { prismShadowUniforms } from "./shadow/tuning";
+import { lightGlassAccentUniforms } from "./passes/glass-accent/uniforms";
+import { prismShadowUniforms } from "./passes/shadow/tuning";
 import {
   lightCausticUniforms,
   lightPresentUniforms,
@@ -51,7 +51,7 @@ export function bindLightGraph(
     shadow: prismShadowUniforms(runtime.view.viewProjection),
   });
   graph.caustic.set({
-    scene: sceneUniforms(runtime, beamWidthReveal),
+    scene: sceneUniforms(runtime, beamWidthReveal, graph.lightMeshLayout),
     caustic: lightCausticUniforms(runtime),
     causticProfile: assets.causticProfile,
     causticSampler: graph.materialSampler,
@@ -83,7 +83,7 @@ export function bindLightGraph(
     params: { viewProjection: runtime.view.viewProjection },
   });
   graph.lightWireframe?.set({
-    scene: sceneUniforms(runtime, beamWidthReveal),
+    scene: sceneUniforms(runtime, beamWidthReveal, graph.lightMeshLayout),
   });
   graph.present.set({
     sceneTexture: scene,

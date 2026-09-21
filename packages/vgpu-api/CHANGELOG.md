@@ -1,5 +1,208 @@
 # vgpu
 
+## 0.5.0
+
+### Minor Changes
+
+- 588a94e: Unify texture creation around explicit shapes and usage, immutable allocations and explicit mip/region readback. Remove Texture.resize() and Target/Surface read delegates; improve replacement and resource lifetime validation.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.5.0/docs/migrations/0.5.0.docs.md).
+
+- 632a908: Add public `vgpu native doctor`, `check`, `build`, and `verify` command routing and
+  guides for generating self-contained Swift/Metal shader packages. Commands load
+  the optional companion lazily; help does not require it or a native toolchain.
+  The optional `@vgpu/native` companion is published as a beta in this release;
+  its platform and distribution qualifications remain unchanged from rc.1.
+
+  Expose captured WGSL source graphs and authored entry-point declaration spans for
+  consistent build-time validation and generation. Imports are resolved once per
+  captured graph, and snapshot resolution retains the captured source and edges.
+
+  Breaking changes for this pre-1.0 minor: reflected host-shareable layouts now use
+  intrinsic WGSL alignment and size, with `layoutMode: "wgsl-host-shareable-v1"`.
+  Read address space from the binding, not the removed
+  `HostShareableLayout.addressSpace` field. Code relying on the previous
+  `"naga-standard"` mode or padded uniform layout sizes must migrate.
+
+  JavaScript-owned binding values now require the reflected shape, exact component
+  counts, and in-range integers instead of silent coercion, truncation, or filling.
+  Invalid values produce `VGPU-SET-VALUE-INVALID` with structured reason/path and
+  expected/actual details. Binding ownership and stored values are retained when
+  candidate validation fails; this is a per-candidate guarantee, not an atomic
+  transaction across `set({ a, b })` or a rollback of arbitrary GPU errors. Shared
+  uniform updates preserve the previous accepted value on validation failure, and
+  half-float packing uses round-to-nearest, ties-to-even.
+
+  Migrate the rendered examples' initial uniform values to the strict contract:
+  provide every reflected member, including explicit shader padding, and use
+  actual render-target dimensions for initial resolution and bloom texel size.
+  Retain partial updates for animation and resizing without resetting their state.
+
+  The strict binding checks and candidate handling add approximately 1.4 KB gzip to
+  the measured full client entry; `init-only` is unchanged. The changed WGSL runtime
+  modules add approximately 2.8 KB gzip to the tooling entry. Captured-graph modules
+  are absent from the measured browser entries. Only the six affected package
+  bundle ceilings are updated to the existing 512-byte convention;
+  audiences, growth thresholds, and unrelated ceilings are unchanged.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.5.0/docs/migrations/0.5.0.docs.md).
+
+### Patch Changes
+
+- d163bad: Publish the optional `@vgpu/native` companion as a beta for generating self-contained
+  Swift/Metal shader packages through `vgpu native doctor`, `check`, `build`, and `verify`.
+  Bundle the pinned, hash-authenticated Tint worker, compiler schemas, C helpers and
+  third-party license notices. Installation does not compile or download Tint.
+  Expose only the internal `@vgpu/native/cli` protocol consumed by the vgpu CLI; the
+  low-level TypeScript generator is not a supported public API.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.5.0/docs/migrations/0.5.0.docs.md).
+
+- 5c18170: Bundle versioned consumer migration guides in the local docs CLI and MCP corpus. Discover them with `vgpu docs ls /migrations` and read a guide with `vgpu docs cat /migrations/0.5.0.docs.md`. Collect migration instructions from changesets during release preparation instead of relying on standalone repository files.
+- Updated dependencies [588a94e]
+- Updated dependencies [588a94e]
+- Updated dependencies [632a908]
+  - @vgpu/core@0.5.0
+  - @vgpu/adapter-node@0.5.0
+  - @vgpu/wgsl@0.5.0
+  - @vgpu/adapter-mock@0.5.0
+  - @vgpu/wgsl-std@0.5.0
+
+## 0.5.0-rc.1
+
+### Minor Changes
+
+- 632a908: Add public `vgpu native doctor`, `check`, `build`, and `verify` command routing and
+  guides for generating self-contained Swift/Metal shader packages. Commands load
+  the optional companion lazily; help does not require it or a native toolchain.
+  The `@vgpu/native` companion remains private and unpublished. This changeset does
+  not publish it or qualify a release compatibility matrix.
+
+  Expose captured WGSL source graphs and authored entry-point declaration spans for
+  consistent build-time validation and generation. Imports are resolved once per
+  captured graph, and snapshot resolution retains the captured source and edges.
+
+  Breaking changes for this pre-1.0 minor: reflected host-shareable layouts now use
+  intrinsic WGSL alignment and size, with `layoutMode: "wgsl-host-shareable-v1"`.
+  Read address space from the binding, not the removed
+  `HostShareableLayout.addressSpace` field. Code relying on the previous
+  `"naga-standard"` mode or padded uniform layout sizes must migrate.
+
+  JavaScript-owned binding values now require the reflected shape, exact component
+  counts, and in-range integers instead of silent coercion, truncation, or filling.
+  Invalid values produce `VGPU-SET-VALUE-INVALID` with structured reason/path and
+  expected/actual details. Binding ownership and stored values are retained when
+  candidate validation fails; this is a per-candidate guarantee, not an atomic
+  transaction across `set({ a, b })` or a rollback of arbitrary GPU errors. Shared
+  uniform updates preserve the previous accepted value on validation failure, and
+  half-float packing uses round-to-nearest, ties-to-even.
+
+  Migrate the rendered examples' initial uniform values to the strict contract:
+  provide every reflected member, including explicit shader padding, and use
+  actual render-target dimensions for initial resolution and bloom texel size.
+  Retain partial updates for animation and resizing without resetting their state.
+
+  The strict binding checks and candidate handling add approximately 1.4 KB gzip to
+  the measured full client entry; `init-only` is unchanged. The changed WGSL runtime
+  modules add approximately 2.8 KB gzip to the tooling entry. Captured-graph modules
+  are absent from the measured browser entries. Only the six affected package
+  bundle ceilings are updated to the existing 512-byte convention;
+  audiences, growth thresholds, and unrelated ceilings are unchanged.
+
+  This changeset requests the next minor; it does not assign or publish a version.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.5.0-rc.1/docs/migrations/0.5.0.docs.md).
+
+### Patch Changes
+
+- Publish the optional `@vgpu/native` companion as a beta for generating self-contained
+  Swift/Metal shader packages through `vgpu native doctor`, `check`, `build`, and `verify`.
+  Bundle the pinned, hash-authenticated Tint worker, compiler schemas, C helpers and
+  third-party license notices. Installation does not compile or download Tint.
+  Expose only the internal `@vgpu/native/cli` protocol consumed by the vgpu CLI; the
+  low-level TypeScript generator is not a supported public API.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.5.0-rc.1/docs/migrations/0.5.0.docs.md).
+
+- 5c18170: Bundle versioned consumer migration guides in the local docs CLI and MCP corpus. Discover them with `vgpu docs ls /migrations` and read a guide with `vgpu docs cat /migrations/0.5.0.docs.md`. Collect migration instructions from changesets during release preparation instead of relying on standalone repository files.
+- Updated dependencies [632a908]
+  - @vgpu/wgsl@0.5.0-rc.1
+  - @vgpu/core@0.5.0-rc.1
+  - @vgpu/adapter-mock@0.5.0-rc.1
+  - @vgpu/adapter-node@0.5.0-rc.1
+  - @vgpu/wgsl-std@0.5.0-rc.1
+
+## 0.5.0-rc.0
+
+### Minor Changes
+
+- 588a94e: Unify core and public texture creation around explicit `kind`, spatial `size`, array `layers`, and nonempty `usage`. Creation metadata is snapshotted and frozen; mip/sample allocation and additional view formats retain their explicit opt-ins.
+
+  Breaking changes for this pre-1.0 minor: remove `Texture.resize()` and Target/Surface read delegates. Select an attachment, then call `texture.read({ mipLevel: 0, region: "all" })` or `readFloats(options)`. Reads now include every selected layer/slice, support mip-relative crops, and validate usage, sample count, bounds and allocations. Buffer reads are unchanged.
+
+  Texture pairs and Targets prepare replacements before publishing them; synchronous preparation failures preserve the old generation. Destroyed tracked bindings fail early, and bundles capturing destroyed resources become stale. Raw native views retain native lifetime validation. Compute cache entries are isolated from draw entries even when they bind the same resource.
+
+  See `docs/texture-api-migration.md` in the repository for old/new creation, readback, metadata and replacement examples. This changeset requests the next minor; it does not publish or assign a release version.
+
+### Patch Changes
+
+- Updated dependencies [588a94e]
+- Updated dependencies [588a94e]
+  - @vgpu/core@0.5.0-rc.0
+  - @vgpu/adapter-node@0.5.0-rc.0
+  - @vgpu/adapter-mock@0.5.0-rc.0
+  - @vgpu/wgsl@0.5.0-rc.0
+  - @vgpu/wgsl-std@0.5.0-rc.0
+
+## 0.4.1
+
+### Patch Changes
+
+- 01470c5: Make the repository skill a version-neutral router that reads documentation from the project's selected `vgpu` package, keeping agent guidance aligned with the installed stable or prerelease version.
+  - @vgpu/core@0.4.1
+  - @vgpu/wgsl@0.4.1
+  - @vgpu/wgsl-std@0.4.1
+  - @vgpu/adapter-node@0.4.1
+  - @vgpu/adapter-mock@0.4.1
+
+## 0.4.0
+
+### Minor Changes
+
+- 2d137a4: `frame(gpu, cb)` and `frameLoop(gpu, cb)` now cancel the frame when the callback throws instead of submitting whatever was encoded. A callback that returns still submits once; a callback that throws submits no command buffer, releases the timer/visibility retains its passes took, and rethrows the original error unchanged. A callback that already called `frame.submit()` keeps that submit (the error is rethrown without a cancel attempt), and one that already called `frame.cancel()` stays canceled. The guarantee covers only the frame's command buffer: the clock tick, CPU-side mutations and independent submissions are not rolled back. Manual `frame(gpu)` is unchanged.
+
+  A `frameLoop` tick that throws now also stops the loop properly — the handle is released from the gpu as if `stop()` had been called — instead of leaving a loop that never ticks again registered until `gpu.dispose()`.
+
+  BREAKING CHANGE (pre-1.0): code that relied on a throwing callback still presenting its partial frame must now submit explicitly before rethrowing:
+
+  ```ts
+  frame(gpu, (currentFrame) => {
+    try {
+      encode(currentFrame);
+    } catch (error) {
+      currentFrame.submit();
+      throw error;
+    }
+  });
+  ```
+
+- 8b2282c: Add the `vgpu/three` adapter for calling resolved WGSL function exports from three.js TSL, including a sound curried selector with positional export names, manually typed input contracts, identifier-minified shader support, a type-only `TslExportsErrorCode` union, and early rejection of global WGSL directives that Three cannot place correctly.
+
+  Expose authored function-export metadata from the WGSL resolver and bundler loaders so integrations can address direct `export fn` declarations after mangling and minification. Add the `isShaderFunctionExport()` type guard to `@vgpu/wgsl`, with a convenience re-export from `vgpu`, for validating unknown metadata at integration boundaries.
+
+  Treat WGSL comments as trivia around stage and resource-binding attributes so declaration DCE, emitted identifiers, and reflection metadata stay aligned.
+
+  Use the entry source supplied by Vite and webpack during imported-graph resolution, preserving upstream transforms and virtual entries while resolving dependencies from their normal locations.
+
+### Patch Changes
+
+- Updated dependencies [8b2282c]
+  - @vgpu/wgsl@0.4.0
+  - @vgpu/core@0.4.0
+  - @vgpu/adapter-mock@0.4.0
+  - @vgpu/adapter-node@0.4.0
+  - @vgpu/wgsl-std@0.4.0
+
 ## 0.3.1
 
 ### Patch Changes

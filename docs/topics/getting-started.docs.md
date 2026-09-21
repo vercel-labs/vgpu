@@ -61,7 +61,7 @@ const height = 90;
 const gpu = await init();
 const colorTarget = target(gpu, { size: [width, height] }); // small targets stay fast, even on CPU
 effect(gpu, SHADER).draw(colorTarget);
-const pixels = await colorTarget.read();                   // RGBA bytes — assert on them
+const pixels = await colorTarget.color.read({ mipLevel: 0, region: "all" });                   // RGBA bytes — assert on them
 const png = new PNG({ width, height });               // ...and write a PNG you can open
 png.data.set(pixels);
 writeFileSync("frame.png", PNG.sync.write(png));
@@ -100,6 +100,7 @@ Read the concept guides in order — each builds on the previous one:
 
 ```sh
 vgpu docs cat concepts-context.md         # the Gpu context, surfaces, targets
+vgpu docs cat concepts-wgsl-modules.md    # split shaders with import and export
 vgpu docs cat concepts-draws.md           # draw(), meshes, instancing
 vgpu docs cat concepts-compilation.md     # compile() and pipeline warmup
 vgpu docs cat concepts-effects.md         # fragment effects and set()
@@ -136,4 +137,11 @@ For performance work and testing:
 vgpu docs cat /guides/performance-model.docs.md
 vgpu docs cat /guides/performance-patterns.docs.md
 vgpu docs cat browser-testing
+```
+
+Finishing, opening a PR, or calling a render done? Run the pre-PR checklist
+before you hand it over:
+
+```sh
+vgpu docs cat shipping-to-production   # correctness gates, measure, free defaults, propose the rest
 ```

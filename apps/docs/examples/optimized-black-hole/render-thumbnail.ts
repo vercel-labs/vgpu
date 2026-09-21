@@ -32,15 +32,16 @@ export async function renderThumbnail(
   try {
     const activeTargets = createTargets(vgpu, gpu, output.size);
     targets = activeTargets;
-    setBindings(effects, activeTargets);
-    setBakeUniforms(effects, activeTargets, settings);
-    setPostUniforms(effects, activeTargets, settings);
-    await prewarm(effects, activeTargets, output);
     const dt = opts.dt ?? 1 / 60;
     let time = opts.time ?? 2.5;
+    setBakeUniforms(effects, activeTargets, settings);
+    setShadeUniforms(effects, activeTargets, settings, time, 0);
+    setBindings(effects, activeTargets);
+    setPostUniforms(effects, activeTargets, settings);
+    await prewarm(effects, activeTargets, output);
     const frames = Math.max(1, opts.warmupFrames ?? 1);
     for (let i = 0; i < frames; i++) {
-      setShadeUniforms(effects, activeTargets, settings, time, 0);
+      if (i > 0) setShadeUniforms(effects, activeTargets, settings, time, 0);
       vgpu.frame(gpu, (currentFrame) =>
         renderChain(currentFrame, effects, activeTargets, output, i === 0)
       );

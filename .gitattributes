@@ -1,10 +1,8 @@
-# The examples API pipeline hashes and byte-compares these files: the artifact revision is a
-# SHA-256 of the exact bytes of the canonical source snapshot, and the `examples-api-generated`
-# gate diffs the regenerated tree against the checked-in one. Without a pinned EOL a checkout with
-# `core.autocrlf=true` would materialize LF blobs as CRLF, changing the digest and failing the gate
-# on a content-identical tree. Keep these checked out with LF on every platform.
+# The examples API pipeline hashes the canonical source snapshot. Without a pinned EOL a checkout
+# with `core.autocrlf=true` would materialize LF blobs as CRLF and produce a different revision for
+# a content-identical tree. Keep the snapshot checked out with LF on every platform. The generated
+# artifact tree is build output and is intentionally not tracked.
 apps/docs/lib/examples-source.generated.ts text eol=lf
-apps/docs/generated/examples-api/** text eol=lf
 
 # Frozen schema copies and their generated contract hashes are digested the same way.
 apps/docs/lib/examples-api/schemas/v1/*.json text eol=lf

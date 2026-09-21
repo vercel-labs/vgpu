@@ -39,8 +39,8 @@ import { PNG } from "pngjs";
  *   for liveness before its response is trusted.
  * - Every value that did not originate as a literal string constant in this
  *   file is passed through `shellQuote` before being spliced into a command
- *   string (the chromium binary path is resolved from a glob under
- *   `/root/.cache`, a directory the agent controls as root during its turn).
+ *   string (the chromium binary path is resolved from a glob under the sandbox
+ *   user's `~/.cache`, a directory the agent controls during its turn).
  */
 const WORKSPACE = "/workspace";
 const ARTIFACT_DIR = `${WORKSPACE}/.agent-evals`;
@@ -106,8 +106,18 @@ const FAR_RADIUS_FRACTION = 0.225;
 const DISPLAY = ":99";
 const SESSION = "n1-verify";
 
-/** Chromium is resolved via a shell glob under an agent-writable directory. */
-const CHROMIUM_PATTERN = /^\/root\/\.cache\/ms-playwright\/chromium-[0-9]+\/chrome-linux\/chrome$/;
+/**
+ * Chromium is resolved via a shell glob under an agent-writable directory, so
+ * the result is validated against the exact shape a playwright install
+ * produces. `$HOME` is either `/root` (the eve image before 2026-09-03) or
+ * `/home/<user>` (the `vercel-sandbox` user since). The platform directory is
+ * `chrome-linux` on older playwright builds and `chrome-linux64` /
+ * `chrome-linux-arm64` since Chrome for Testing started shipping arm64
+ * (measured: playwright chromium v1243 → `chromium-1243/chrome-linux-arm64/chrome`).
+ * Nothing else is accepted.
+ */
+const CHROMIUM_PATTERN =
+  /^\/(?:root|home\/[A-Za-z0-9._-]+)\/\.cache\/ms-playwright\/chromium-[0-9]+\/chrome-linux(?:64|-arm64)?\/chrome$/;
 
 /**
  * @typedef {Object} N1Spatial
@@ -331,23 +341,23 @@ export async function verifyN1HeroShader(sandbox) {
       );
       return verdict;
     }
-    // Chromium comes from playwright (bootstrap pre-warmed it): Chrome for Testing
-    // publishes no arm64 build, so agent-browser's own default download is not
-    // usable on this image.
+    // Chromium comes from playwright (bootstrap pre-warmed it, as the sandbox
+    // user, so it lives under that user's ~/.cache): agent-browser's own default
+    // download is not what this image needs on arm64.
     const resolve = await sh(
       sandbox,
-      "ls -d /root/.cache/ms-playwright/chromium-*/chrome-linux/chrome 2>/dev/null | head -1",
+      'ls -d "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux*/chrome 2>/dev/null | head -1',
     );
     const chromiumRaw = resolve.stdout.trim().split("\n")[0] ?? "";
     if (!chromiumRaw || !CHROMIUM_PATTERN.test(chromiumRaw)) {
-      // The agent has root during its own turn and this path is resolved from
-      // a glob under a directory it controls: refuse anything that does not
-      // match the exact shape a real playwright install produces (PR #272
-      // review, P1-3), rather than trusting `ls | head -1` blindly.
+      // This path is resolved from a glob under a directory the agent controls
+      // during its turn: refuse anything that does not match the exact shape a
+      // real playwright install produces (PR #272 review, P1-3), rather than
+      // trusting `ls | head -1` blindly.
       verdict.notes.push(
         chromiumRaw
           ? `resolved chromium path failed validation, refusing to use it: ${JSON.stringify(chromiumRaw).slice(0, 200)}`
-          : "no playwright chromium binary found under /root/.cache/ms-playwright",
+          : "no playwright chromium binary found under $HOME/.cache/ms-playwright",
       );
       return verdict;
     }

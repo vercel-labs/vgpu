@@ -33,11 +33,101 @@ function cacheKey(wgsl: string): Record<string, string> {
   return { default: `vgpu-wgsl-1:${(hash >>> 0).toString(16).padStart(8, "0")}` };
 }
 
+// Keep entry-point discovery local to the browser-facing compile path: importing the runtime
+// scanner or reflection would make the root export exceed its client bundle budget.
 function entryPoints(wgsl: string): string[] {
   const names: string[] = [];
-  const pattern = /@(vertex|fragment|compute)\s+fn\s+([A-Za-z_][A-Za-z0-9_]*)/g;
-  for (const match of wgsl.matchAll(pattern)) names.push(match[2]!);
+  const read = tokenReader(wgsl);
+
+  for (let token = read(); token !== undefined; token = read()) {
+    let hasStage = false;
+    while (token === "@") {
+      if (/^(vertex|fragment|compute)$/.test(read()!)) hasStage = true;
+
+      token = read();
+      if (token === "(") {
+        if (!skipParentheses(read)) return names;
+        token = read();
+      }
+    }
+
+    if (token === "fn") {
+      const name = read();
+      token = read();
+      if (hasStage && token === "(" && name && IDENTIFIER.test(name)) names.push(name);
+    }
+    skipDeclaration(read, token);
+  }
   return names;
+}
+
+// XIDC is Unicode's XID_Continue alias (including underscore); aliases keep the client bundle small.
+const IDENTIFIER = /[_\p{XID_Start}]\p{XIDC}*/uy;
+type TokenReader = () => string | undefined;
+
+function tokenReader(source: string): TokenReader {
+  let index = 0;
+  return () => {
+    while (index < source.length) {
+      const start = index;
+
+      // WGSL uses Pattern_White_Space, whose Unicode alias is Pat_WS.
+      if (/\p{Pat_WS}/u.test(source[start]!)) {
+        index++;
+        continue;
+      }
+      if (source.startsWith("//", start)) {
+        // Leave the line ending for blankspace handling; EOF stays exhausted.
+        while (index < source.length && !/[\n-\r\u0085\u2028\u2029]/.test(source[index]!)) index++;
+        continue;
+      }
+      if (source.startsWith("/*", start)) {
+        index += 2;
+        let depth = 1;
+        while (index < source.length && depth > 0) {
+          if (source.startsWith("/*", index)) {
+            depth++;
+            index += 2;
+          } else if (source.startsWith("*/", index)) {
+            depth--;
+            index += 2;
+          } else {
+            index++;
+          }
+        }
+        continue;
+      }
+      IDENTIFIER.lastIndex = start;
+      const identifier = IDENTIFIER.exec(source);
+      if (identifier) {
+        index = IDENTIFIER.lastIndex;
+        return identifier[0];
+      }
+
+      index++;
+      return source[start];
+    }
+    return undefined;
+  };
+}
+
+function skipParentheses(read: TokenReader): boolean {
+  let depth = 1;
+  for (let token = read(); token !== undefined; token = read()) {
+    if (token === "(") depth++;
+    else if (token === ")" && --depth === 0) return true;
+  }
+  return false;
+}
+
+function skipDeclaration(read: TokenReader, first: string | undefined): void {
+  let braces = 0;
+
+  for (let token = first; token !== undefined; token = read()) {
+    if (token === "{") braces++;
+    else if (token === "}" && braces > 0 && --braces === 0) return;
+    else if (token === ";" && braces === 0) return;
+  }
 }
 
 function hasTopLevelImport(wgsl: string): boolean {

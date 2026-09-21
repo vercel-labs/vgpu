@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-semantic-extraction/v1",
+  "ok": true,
+  "requestIdentity": {
+    "domain": "vgpu-native-tint-semantic-extraction-request-bytes/v1",
+    "sha256": "8bae2168543ee2bcf8ca3dd450bcaf200512274a550f840de6331306494b8bb8"
+  },
+  "compiler": {
+    "name": "vgpu-tint-compiler",
+    "version": "0.1.0",
+    "protocol": 1,
+    "upstream": {
+      "name": "dawn/tint",
+      "revision": "8f25b9c7064ae89802c8db4e7daab9d1fd3e77ca"
+    }
+  },
+  "diagnostics": [],
+  "result": {
+    "entryPoints": [
+      {
+        "stage": "compute",
+        "wgsl": "needs_required",
+        "semanticInterface": {
+          "kind": "compute",
+          "inputs": [],
+          "outputs": []
+        },
+        "bindings": [],
+        "samplingPairs": [],
+        "overrides": ["DEP", "REQUIRED"],
+        "workgroupSize": {
+          "x": 9,
+          "y": 1,
+          "z": 1
+        }
+      }
+    ],
+    "bindings": [],
+    "overrides": [
+      {
+        "name": "DEP",
+        "type": "u32",
+        "selected": {
+          "type": "u32",
+          "value": 9
+        }
+      },
+      {
+        "name": "REQUIRED",
+        "wgslId": 17,
+        "type": "u32",
+        "selected": {
+          "type": "u32",
+          "value": 4
+        }
+      }
+    ],
+    "types": {},
+    "layouts": {}
+  }
+}

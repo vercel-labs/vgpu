@@ -3,12 +3,12 @@ import { flag } from "flags/next";
 
 const heroCanvasDecision = process.env.FLAGS
   ? { adapter: vercelAdapter() }
-  : { decide: () => false };
+  : { decide: () => true };
 
 export const heroCanvas = flag<boolean>({
   key: "hero-canvas",
   ...heroCanvasDecision,
-  defaultValue: false,
+  defaultValue: true,
   description: "Release the prism hero canvas",
   options: [
     { value: false, label: "Hidden" },

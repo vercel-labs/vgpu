@@ -1,9 +1,5 @@
 import type { Frame } from "vgpu";
 
-import {
-  LIGHT_OUTGOING_FIRST_VERTEX,
-  LIGHT_OUTGOING_VERTICES,
-} from "../../light-mesh";
 import type { PrismDebugSourceId } from "../sources";
 import type { PreviewRegistration } from "./registrations";
 import type { TargetPreviewRenderer } from "./target-preview";
@@ -37,11 +33,9 @@ export function renderPreviewEntry(
     const drawable = draws?.sources[id];
     if (!drawable || !compiled(drawable, entry.output)) return false;
     current.pass({ target: entry.output, clear: [0, 0, 0, 1] }, (pass) => {
-      if (id === "projected-caustic") {
-        pass.draw(drawable, {
-          firstVertex: LIGHT_OUTGOING_FIRST_VERTEX,
-          vertices: LIGHT_OUTGOING_VERTICES,
-        });
+      const range = draws?.ranges?.[id];
+      if (range) {
+        pass.draw(drawable, range);
       } else {
         pass.draw(drawable);
       }
