@@ -39,6 +39,7 @@ export const exampleComponentLoaders = {
   'typegpu-liquid-glass': () => import('../examples/typegpu-liquid-glass/index'),
   'adaptive-quality': () => import('../examples/adaptive-quality/index'),
   'glass-sculpture': () => import('../examples/glass-sculpture/index'),
+  'spiral-galaxy': () => import('../examples/spiral-galaxy/index'),
 } satisfies Record<ExampleSlug, ExampleComponentLoader>;
 
 export function getExampleComponentLoader(slug: ExampleSlug): ExampleComponentLoader {

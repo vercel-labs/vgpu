@@ -30,6 +30,7 @@ export const exampleSlugs = [
   'typegpu-liquid-glass',
   'adaptive-quality',
   'glass-sculpture',
+  'spiral-galaxy',
 ] as const;
 
 export type ExampleSlug = (typeof exampleSlugs)[number];
