@@ -2,6 +2,7 @@ import { exampleThumbs } from './example-thumbs.generated';
 import type { ExampleMeta, ExampleMetaDefinition } from './example-meta';
 import { exampleSlugs, type ExampleSlug } from './example-slugs';
 
+import { meta as holographicCardMeta } from '../examples/holographic-card/meta';
 import { meta as gradientMeta } from '../examples/gradient/meta';
 import { meta as triangleLedFrontMeta } from '../examples/triangle-led-front/meta';
 import { meta as antiAliasingMeta } from '../examples/anti-aliasing/meta';
@@ -33,6 +34,7 @@ import { meta as adaptiveQualityMeta } from '../examples/adaptive-quality/meta';
 
 const rawMetadata = {
   gradient: gradientMeta,
+  'holographic-card': holographicCardMeta,
   'triangle-led-front': triangleLedFrontMeta,
   'anti-aliasing': antiAliasingMeta,
   'black-hole': blackHoleMeta,
@@ -72,6 +74,7 @@ function withThumbnails(meta: ExampleMetaDefinition): ExampleMeta {
 
 export const exampleMetadataBySlug = {
   gradient: withThumbnails(rawMetadata.gradient),
+  'holographic-card': withThumbnails(rawMetadata['holographic-card']),
   'triangle-led-front': withThumbnails(rawMetadata['triangle-led-front']),
   'anti-aliasing': withThumbnails(rawMetadata['anti-aliasing']),
   'black-hole': withThumbnails(rawMetadata['black-hole']),
