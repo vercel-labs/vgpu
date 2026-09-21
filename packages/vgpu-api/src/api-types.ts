@@ -12,7 +12,7 @@ export interface ComputeOptions {
   readonly set?: Record<string, unknown>;
   /** Values for WGSL `override` constants, keyed by name (or by numeric id as a string when the override has @id). Immutable after construction. */
   readonly constants?: Readonly<Record<string, number | boolean>>;
-  /** Compute entry point to use when the shader has several. Defaults to the first @compute entry point. */
+  /** Immutable compute entry selection. Defaults to cs_main when declared, otherwise the first @compute entry. */
   readonly entry?: string;
 }
 export interface DispatchOptions {

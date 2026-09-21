@@ -11,7 +11,7 @@ import { FRAME_DRAWABLE, type FrameDrawableProtocol } from "./frame-protocols.ts
 import { liveKernel } from "./live-kernel.ts";
 import { renderService } from "./render-service.ts";
 import { toWgsl } from "./shader-source.ts";
-import { unsupportedError } from "./errors.ts";
+import { entryInvalidError, unsupportedError } from "./errors.ts";
 import type { ShaderSource } from "@vgpu/wgsl";
 import type { Gpu } from "./kernel.ts";
 
@@ -45,6 +45,8 @@ export function effect(gpu: Gpu, source: string | ShaderSource, opts: EffectOpti
 export interface EffectOptions {
   readonly set?: SetBag;
   readonly label?: string;
+  /** Immutable fragment selection. Defaults to fs_main when declared, otherwise the first fragment entry. */
+  readonly entry?: { readonly fragment?: string };
   /** Blend state applied to every color target of this effect's pipelines. Preset or explicit components. Immutable after construction. */
   readonly blend?: BlendPreset | BlendOptions;
   /** Channels written to color targets. Omit to write all (rgba). Empty array writes nothing. */
@@ -67,8 +69,13 @@ export class InternalEffect implements Effect {
   get gpu(): GPURenderPipeline | undefined { return effectImpl(this).gpu; }
 
   constructor(device: Device, source: string, opts: EffectOptions = {}, cache?: BindGroupCache, defaultTarget?: Target, pipelineStore?: PipelineStore, shaderModules?: ShaderModuleCache, pipelineLayouts?: PipelineLayoutCache, errorSink?: ValidationErrorSink, trackSettled?: (promise: Promise<unknown>) => void) {
+    const entry = opts.entry;
+    if (entry && typeof entry === "object" && "vertex" in entry) {
+      throw entryInvalidError(opts.label ?? "effect", "effect does not support vertex entry overrides.", "effect");
+    }
+    // InternalDraw validates the entry container and fragment name, and resolves it at construction.
     const shader = fullscreenSource(source);
-    const impl = new InternalDraw(device, shader, { shader, set: opts.set, label: opts.label ?? "effect", blend: opts.blend, writeMask: opts.writeMask }, cache, defaultTarget, pipelineStore, shaderModules, pipelineLayouts, errorSink, trackSettled);
+    const impl = new InternalDraw(device, shader, { shader, entry, set: opts.set, label: opts.label ?? "effect", blend: opts.blend, writeMask: opts.writeMask }, cache, defaultTarget, pipelineStore, shaderModules, pipelineLayouts, errorSink, trackSettled);
     effectImpls.set(this, impl);
   }
 

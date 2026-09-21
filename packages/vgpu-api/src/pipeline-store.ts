@@ -119,13 +119,22 @@ export function computePipelineKeyOf(module: GPUShaderModule, layout: GPUPipelin
 }
 
 /**
- * Selects the entry point a pipeline stage compiles: the first entry point of the stage when no name is given
- * (exactly today's behavior), or the named one — validated to exist and to have the requested stage. Callers must
+ * Selects an explicitly named entry after validating its stage. Without a name, prefer the stage convention
+ * (vs_main/fs_main/cs_main), falling back to its first entry; a unique entry needs no particular name. Callers must
  * run this selection before deriving anything from the result (binding visibility, storage-stage limits, bind
  * group layouts, vertex input layouts), so the whole pipeline reflects the chosen variant.
  */
 export function selectEntryPoint(label: string, entryPoints: readonly EntryPointInfo[], stage: "vertex" | "fragment" | "compute", name: string | undefined, where: string): EntryPointInfo | undefined {
-  if (name === undefined) return entryPoints.find((entry) => entry.stage === stage);
+  if (name === undefined) {
+    const preferred = { vertex: "vs_main", fragment: "fs_main", compute: "cs_main" }[stage];
+    let first: EntryPointInfo | undefined;
+    for (const entry of entryPoints) {
+      if (entry.stage !== stage) continue;
+      first ??= entry;
+      if (entry.name === preferred) return entry;
+    }
+    return first;
+  }
   if (typeof name !== "string") {
     throw entryInvalidError(label, `${stage} received ${previewConstant(name)}; expected an entry point name string.`, where);
   }

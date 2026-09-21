@@ -211,7 +211,7 @@ export function entryInvalidError(label: string, reason: string, where = "draw")
   return new VGPUError({
     code: "VGPU-ENTRY-INVALID",
     message: `Invalid entry in '${label}': ${reason}`,
-    fix: `Name an entry point declared in the shader with the matching stage — { vertex?, fragment? } strings for draw, one @compute name string for compute. Omit entry (or a field) to use the first entry point of that stage.`,
+    fix: `Use a matching stage name: draw { vertex?, fragment? }, effect { fragment? }, compute string. Defaults prefer vs_main/fs_main/cs_main, otherwise first-in-stage.`,
     where,
   });
 }

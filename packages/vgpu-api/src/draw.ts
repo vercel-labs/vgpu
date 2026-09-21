@@ -144,7 +144,7 @@ export interface DrawOptions {
   };
   /** Values for WGSL `override` constants, keyed by name (or by numeric id as a string when the override has @id). Immutable after construction. */
   readonly constants?: Readonly<Record<string, number | boolean>>;
-  /** Entry points to use when the shader has several. Omitted fields use the first entry point of that stage. Immutable after construction. */
+  /** Immutable entry selection. Omitted fields prefer vs_main/fs_main for their stage, otherwise its first entry. */
   readonly entry?: { readonly vertex?: string; readonly fragment?: string };
 }
 
@@ -813,7 +813,8 @@ function normalizeEntryOptions(label: string, value: DrawOptions["entry"]): { re
   return value;
 }
 
-// Explicitly naming the first-of-stage entries behaves exactly like an absent option; pipeline cache keys stay byte-identical so they share pipelines.
+// Resolved entries determine cache identity, so explicit and automatic selections of the same functions share.
+// Keep the compact key for first-of-stage entries; other selections include their names.
 function entryKeyFor(reflection: Reflection, vertexEntry: EntryPointInfo | undefined, fragmentEntry: EntryPointInfo | undefined): string | undefined {
   const firstVertex = reflection.entryPoints.find((entry) => entry.stage === "vertex");
   const firstFragment = reflection.entryPoints.find((entry) => entry.stage === "fragment");

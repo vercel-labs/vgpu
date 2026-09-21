@@ -23,6 +23,7 @@ interface BlendOptions { readonly color: BlendComponentOptions; readonly alpha?:
 interface EffectOptions {
   readonly set?: SetBag;
   readonly label?: string;
+  readonly entry?: { readonly fragment?: string };
   readonly blend?: BlendPreset | BlendOptions;
   readonly writeMask?: readonly ("r" | "g" | "b" | "a")[];
 }
@@ -40,10 +41,11 @@ interface Effect {
 
 | Param | Type | Required | Default | Notes |
 |---|---|---:|---|---|
-| effect.source | `string \| ShaderSource` | ✔ | — | WGSL string or `ShaderSource`. If no `@vertex` entry exists, vgpu injects a fullscreen triangle vertex stage and provides `@location(0) uv`. |
-| effect.opts | `EffectOptions` | ✖ | `{}` | Initial options. Passing a `mesh` property is rejected; effects have no vertex buffers. |
+| effect.source | `string \| ShaderSource` | ✔ | — | WGSL string or `ShaderSource`. Fragment selection prefers `fs_main` when several fragment entries exist, otherwise uses the first; a single entry can have any name. If no `@vertex` entry exists, vgpu injects a fullscreen triangle vertex stage and provides `@location(0) uv`. |
+| effect.opts | `EffectOptions` | ✖ | `{}` | Initial options. Passing a `geometry` property is rejected; effects have no vertex buffers. |
 | opts.set | `Record<string, unknown>` | ✖ | `undefined` | Same as one initial `.set(opts.set)` call: establishes first-set binding ownership and validates reflected bindings. |
 | opts.label | `string` | ✖ | `"effect"` | Used in shader reflection labels, GPU object labels, and `VGPU-*` error `where` fields. |
+| opts.entry | `{ fragment?: string }` | ✖ | `fs_main` when declared, otherwise first fragment | Constructor-only selection. An explicit name overrides the default and must identify a declared `@fragment`. Omission, `{}`, and `{ fragment: undefined }` use automatic selection. Vertex overrides are not supported. |
 | opts.blend | `"alpha" \| "additive" \| "premultiplied" \| BlendOptions` | ✖ | `undefined` | Constructor-only blend state passed through to the fullscreen draw. Presets and defaults match `DrawOptions.blend`; omitted explicit `alpha` copies `color`, and `op` defaults to `"add"`. |
 | opts.writeMask | `readonly ("r" \| "g" \| "b" \| "a")[]` | ✖ | all channels | Constructor-only color channel mask. Omit for RGBA; `[]` writes no channels; `["r","g","b"]` skips alpha. |
 | effect.set.values | `Record<string, unknown>` | ✔ | — | Binding values by WGSL variable name. JS values are lib-owned; resources are user-owned. |
@@ -60,7 +62,7 @@ everything else flip-free.
 
 **Returns:** `effect(gpu)` returns `Effect`; `effect.set()` and `effect.compileSync()` return the same `Effect`; `effect.compile()` returns `Promise<this>`; `effect.draw()` returns `void` after starting a one-shot draw path.
 
-**Throws:** `VGPU-TARGET-REQUIRED` when `effect.draw()` or compile pre-warm is called without `target`; `VGPU-BLEND-INVALID` for an unknown blend preset or malformed blend object; `VGPU-WRITEMASK-INVALID` for a non-array or unknown write mask channel; `VGPU-RING1-UNSUPPORTED` when `effect(gpu)` receives mesh/vertex data; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`; `VGPU-SET-VALUE-INVALID` when a JS-owned binding has the wrong structure/vector/matrix/fixed-array shape or an out-of-range integer (structured detail contains `reason` and the complete `path`); `VGPU-R1-BINDING-NEVER-SET` when a reflected binding has no value at draw time; `VGPU-R1-OWNERSHIP-FLIP` when a binding switches between JS-value and resource ownership; `VGPU-SET-TEXTURE-FILTERABILITY` when an ordinarily sampled facade texture is not filterable (structured detail names its format/binding and paired sampler; use a filterable format, request `float32-filterable`, or use `textureLoad` without a sampler). Asynchronous draw validation errors are delivered through `gpu.onError`; tests can `await gpu.settled()`.
+**Throws:** `VGPU-ENTRY-INVALID` for malformed `entry`, a vertex override, or a fragment name that is not a string, does not exist, or belongs to another stage; `VGPU-TARGET-REQUIRED` when `effect.draw()` or compile pre-warm is called without `target`; `VGPU-BLEND-INVALID` for an unknown blend preset or malformed blend object; `VGPU-WRITEMASK-INVALID` for a non-array or unknown write mask channel; `VGPU-RING1-UNSUPPORTED` when `effect(gpu)` receives mesh/vertex data; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`; `VGPU-SET-VALUE-INVALID` when a JS-owned binding has the wrong structure/vector/matrix/fixed-array shape or an out-of-range integer (structured detail contains `reason` and the complete `path`); `VGPU-R1-BINDING-NEVER-SET` when a reflected binding has no value at draw time; `VGPU-R1-OWNERSHIP-FLIP` when a binding switches between JS-value and resource ownership; `VGPU-SET-TEXTURE-FILTERABILITY` when an ordinarily sampled facade texture is not filterable (structured detail names its format/binding and paired sampler; use a filterable format, request `float32-filterable`, or use `textureLoad` without a sampler). Asynchronous draw validation errors are delivered through `gpu.onError`; tests can `await gpu.settled()`.
 
 ## Examples
 
@@ -95,14 +97,31 @@ const copy = effect(gpu, `
 copy.draw(colorTarget);
 ```
 
+Select an alternative fragment from the same module:
+
+```ts
+import { effect, frame, init, target } from "vgpu/mock";
+
+const gpu = await init();
+const output = target(gpu, { size: [4, 4] });
+const shader = `
+  @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }
+  @fragment fn mask() -> @location(0) vec4f { return vec4f(0, 0, 0, 1); }
+`;
+const mask = effect(gpu, shader, { entry: { fragment: "mask" } });
+frame(gpu, f => f.pass(output, mask));
+gpu.dispose();
+```
+
 ## Pipeline pre-warm
 
 Effects compile lazily for the target signature they draw into. Use `await effect.compile(target)` during loading to pre-warm without blocking, or `effect.compileSync(target)` when synchronous creation is acceptable. Signature objects follow the same shape as draws: `{ colors: ["bgra8unorm"], depth?, sampleCount? }`.
 
 ## Notes
 
+- When the source already has vertex entries, the unique entry is used regardless of name; with several entries, `vs_main` is preferred, otherwise the first is used. These preferred names are vgpu conventions, not WGSL requirements.
 - A fragment-only effect is internally implemented as a `Draw` with an injected fullscreen triangle. Fragment-only resources receive fragment visibility only, so storage does not consume `maxStorageBuffersInVertexStage`.
-- `blend` and `writeMask` are immutable pipeline state, fixed at `effect(gpu)` construction, and apply uniformly to every color target. Use them for overlays, glow, UI, and other loaded-pass compositing. For explicit blends, `op` defaults to `"add"` and omitted `alpha` copies `color`.
+- `entry`, `blend`, and `writeMask` are immutable pipeline state, fixed at `effect(gpu)` construction, and apply uniformly to every color target. Use them for overlays, glow, UI, and other loaded-pass compositing. For explicit blends, `op` defaults to `"add"` and omitted `alpha` copies `color`.
 - One-shot `effect.draw()` does not join a surrounding frame. Inside `frame(gpu)`, draw through `frame.pass()`.
 - There is no implicit screen target. Browser code should create a `Surface` and pass it as `target`.
 - Do not rely on implicit uniforms like time or resolution; pass `clock(gpu).time`, `target.size`, or `target.texelSize` explicitly through `set()`.
