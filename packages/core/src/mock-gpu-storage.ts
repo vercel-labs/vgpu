@@ -4,6 +4,7 @@ export interface MockGPUBuffer extends GPUBuffer {
 
 export interface MockGPUTexture extends GPUTexture {
   readonly __vgpuMockBytes: Uint8Array;
+  readonly __vgpuMockMips?: readonly Uint8Array[];
 }
 
 export function isMockGPUBuffer(buffer: GPUBuffer): buffer is MockGPUBuffer {

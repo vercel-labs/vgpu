@@ -1,0 +1,47 @@
+.hero-glass-button {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* This layer contributes no color of its own. It only blurs pixels already
+   present behind the button, so a black backdrop stays black. */
+.hero-glass-button::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  content: "";
+  background: transparent;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  transform: translateZ(0);
+}
+
+.hero-glass-button::after {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  content: "";
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: inherit;
+}
+
+.hero-glass-button:hover {
+  background: transparent !important;
+}
+
+.hero-glass-button:hover::after {
+  border-color: rgba(255, 255, 255, 0.52);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .hero-glass-button::before {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}

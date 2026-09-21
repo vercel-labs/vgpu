@@ -2,6 +2,7 @@ import { copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
+import typegpu from 'unplugin-typegpu/esbuild';
 import { init, target } from 'vgpu/node';
 import { comparePngSnapshot, writePng } from '@vgpu/cli/lib/snapshot/png.js';
 import { transformWgsl } from '@vgpu/wgsl/loader-vite';
@@ -26,7 +27,6 @@ const compareOptions = {
   maxDiffRatio: 0.02,
 };
 const aaModeNames = new Map([[0, 'off'], [1, 'msaa-4x'], [2, 'ssaa-2x'], [3, 'fxaa']]);
-const postProcessingModeNames = ['all-off', 'bloom-only', 'ca-only'];
 
 await mkdir(outDir, { recursive: true });
 if (args.artifactDir) {
@@ -50,7 +50,7 @@ for (const example of selected) {
     const output = path.join(outDir, `${slug}.${kind}.png`);
     const result = await renderOne(renderers, example, size, metaThumb, output);
     const status = `${result.compare.status}${result.compare.ratio ? ` (${(result.compare.ratio * 100).toFixed(3)}%)` : ''}`;
-    console.log(`- ${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}, bytes=${result.bytes}${result.aaMetrics ? `, ${formatAaMetrics(result.aaMetrics)}` : ''}${result.postProcessingMetrics ? `, ${formatPostProcessingMetrics(result.postProcessingMetrics)}` : ''}${result.blackHoleMetrics ? `, black-hole=${JSON.stringify(result.blackHoleMetrics)}` : ''}${result.raymarchedFractalMetrics ? `, raymarched-fractal=${JSON.stringify(result.raymarchedFractalMetrics)}` : ''}${result.fftOceanMetrics ? `, fft-ocean=${JSON.stringify(result.fftOceanMetrics)}` : ''}${result.fluidMetrics ? `, fluid=${JSON.stringify(result.fluidMetrics)}` : ''}${result.fluidState ? `, state=${JSON.stringify(result.fluidState)}` : ''}${result.radianceStats ? `, radiance-cascades=${JSON.stringify(result.radianceStats)}` : ''}`);
+    console.log(`- ${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}, bytes=${result.bytes}${result.aaMetrics ? `, ${formatAaMetrics(result.aaMetrics)}` : ''}${result.blackHoleMetrics ? `, black-hole=${JSON.stringify(result.blackHoleMetrics)}` : ''}${result.raymarchedFractalMetrics ? `, raymarched-fractal=${JSON.stringify(result.raymarchedFractalMetrics)}` : ''}${result.fftOceanMetrics ? `, fft-ocean=${JSON.stringify(result.fftOceanMetrics)}` : ''}${result.atmosphereMetrics ? `, atmosphere=${JSON.stringify(result.atmosphereMetrics)}` : ''}${result.fluidMetrics ? `, fluid=${JSON.stringify(result.fluidMetrics)}` : ''}${result.fluidState ? `, state=${JSON.stringify(result.fluidState)}` : ''}${result.radianceStats ? `, radiance-cascades=${JSON.stringify(result.radianceStats)}` : ''}`);
     comparisonSummary.push(`${slug}.${kind}: ${status}, variance=${result.variance.toFixed(2)}`);
     if (args.fluidSoak && slug === 'fluid') {
       // State checkpoints are asserted by onStateValidated; the soak image is diagnostic only.
@@ -66,17 +66,17 @@ if ((args.check || !args.update) && failures > 0) process.exitCode = 1;
 
 async function renderOne(renderers, example, size, metaThumb, output) {
   const slug = example.meta.slug;
-  const gpu = await init();
+  const gpu = await init({ requiredLimits: metaThumb.requiredLimits });
   try {
     const colorTarget = target(gpu, { size, format: 'rgba8unorm', label: `docs-example-${slug}` });
     const renderer = renderers[slug];
     const aaModePixels = slug === 'anti-aliasing' ? new Map() : undefined;
-    const postProcessingModePixels = slug === 'post-processing' ? new Map() : undefined;
     const blackHoleVariantPixels = slug === 'black-hole' ? new Map() : undefined;
     const raymarchedFractalVariantPixels = slug === 'raymarched-fractal' ? new Map() : undefined;
     const fftOceanVariantPixels = slug === 'fft-ocean' ? new Map() : undefined;
-    const variantPixels = blackHoleVariantPixels ?? raymarchedFractalVariantPixels ?? fftOceanVariantPixels;
-    const modePixels = aaModePixels ?? postProcessingModePixels;
+    const atmosphereVariantPixels = slug === 'atmosphere' ? new Map() : undefined;
+    const variantPixels = blackHoleVariantPixels ?? raymarchedFractalVariantPixels ?? fftOceanVariantPixels ?? atmosphereVariantPixels;
+    const modePixels = aaModePixels;
     let fluidState;
     let radianceStats;
     await renderer(gpu, colorTarget, {
@@ -103,11 +103,8 @@ async function renderOne(renderers, example, size, metaThumb, output) {
           ? (stats) => { assertFluidState(stats); fluidState = stats; }
           : slug === 'radiance-cascades' ? (stats) => { radianceStats = stats; } : undefined,
       });
-    const pixels = await colorTarget.read();
+    const pixels = await colorTarget.color.read({ mipLevel: 0, region: "all" });
     const aaMetrics = aaModePixels && !args.proofDir ? assertAaMetrics(aaModePixels, size[0], size[1]) : undefined;
-    const postProcessingMetrics = postProcessingModePixels && !args.proofDir
-      ? assertPostProcessingMetrics(postProcessingModePixels, pixels, size[0], size[1])
-      : undefined;
     const fluidMetrics = slug === 'fluid' && !args.proofDir && !args.fluidSoak && !args.fluidDrag
       ? assertFluidMetrics(pixels, size[0], size[1])
       : undefined;
@@ -120,11 +117,11 @@ async function renderOne(renderers, example, size, metaThumb, output) {
     const fftOceanMetrics = fftOceanVariantPixels && !args.proofDir
       ? assertFftOceanMetrics(fftOceanVariantPixels, pixels, size[0], size[1])
       : undefined;
+    const atmosphereMetrics = atmosphereVariantPixels && !args.proofDir
+      ? assertAtmosphereMetrics(atmosphereVariantPixels, pixels, size[0], size[1])
+      : undefined;
     if (aaModePixels && process.env.VGPU_AA_MODE_OUTPUT_DIR) {
       await writeAaModePngs(aaModePixels, size, path.basename(output, '.png').replace('anti-aliasing.', ''));
-    }
-    if (postProcessingModePixels && process.env.VGPU_POST_PROCESSING_MODE_OUTPUT_DIR) {
-      await writePostProcessingModePngs(postProcessingModePixels, size, path.basename(output, '.png').replace('post-processing.', ''));
     }
     if (blackHoleVariantPixels && process.env.VGPU_BLACK_HOLE_VARIANT_OUTPUT_DIR) {
       await writeVariantPngs(blackHoleVariantPixels, pixels, size, path.basename(output, '.png').replace('black-hole.', ''), process.env.VGPU_BLACK_HOLE_VARIANT_OUTPUT_DIR);
@@ -144,7 +141,7 @@ async function renderOne(renderers, example, size, metaThumb, output) {
       : await comparePngSnapshot(output, pixels, size[0], size[1], { ...compareOptions, update: args.update && !diagnosticMode });
     await persistComparisonArtifacts(compare, pixels, size, output);
     const info = await stat(output).catch(() => undefined);
-    return { compare, variance, bytes: info?.size ?? 0, aaMetrics, postProcessingMetrics, blackHoleMetrics, raymarchedFractalMetrics, fftOceanMetrics, fluidMetrics, fluidState, radianceStats };
+    return { compare, variance, bytes: info?.size ?? 0, aaMetrics, blackHoleMetrics, raymarchedFractalMetrics, fftOceanMetrics, atmosphereMetrics, fluidMetrics, fluidState, radianceStats };
   } finally {
     gpu.dispose();
   }
@@ -177,6 +174,43 @@ function lumaVariance(bytes) {
   return sumSq / count - mean * mean;
 }
 
+/**
+ * Physical sanity checks on the golden-hour poster and its noon variant:
+ * the noon zenith is blue, the golden-hour horizon is warmer than the noon horizon, and the sun moved the sky.
+ */
+function assertAtmosphereMetrics(variantPixels, poster, width, height) {
+  const noon = variantPixels.get('noon');
+  if (!noon) throw new Error('Atmosphere validation did not capture the noon variant.');
+  const band = (pixels, y0, y1) => {
+    const sum = [0, 0, 0];
+    let count = 0;
+    for (let y = Math.floor(y0 * height); y < Math.floor(y1 * height); y++) for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      sum[0] += pixels[i]; sum[1] += pixels[i + 1]; sum[2] += pixels[i + 2];
+      count++;
+    }
+    return sum.map((v) => v / count);
+  };
+  let changed = 0;
+  for (let i = 0; i < poster.length; i += 4) {
+    if (Math.abs(poster[i] - noon[i]) + Math.abs(poster[i + 1] - noon[i + 1]) + Math.abs(poster[i + 2] - noon[i + 2]) > 24) changed++;
+  }
+  const noonZenith = band(noon, 0, 0.1);
+  const noonHorizon = band(noon, 0.36, 0.44);
+  const goldenHorizon = band(poster, 0.36, 0.44);
+  const metrics = {
+    noonZenithBlue: noonZenith[2] / Math.max(1, noonZenith[0]),
+    goldenWarmth: (goldenHorizon[0] - goldenHorizon[2]) - (noonHorizon[0] - noonHorizon[2]),
+    changedRatio: changed / (poster.length / 4),
+  };
+  const problems = [];
+  if (metrics.noonZenithBlue < 1.25) problems.push(`noon zenith blue/red ratio ${metrics.noonZenithBlue.toFixed(2)} (need >=1.25)`);
+  if (metrics.goldenWarmth < 15) problems.push(`golden-hour horizon warmth ${metrics.goldenWarmth.toFixed(1)} (need >=15 more red-minus-blue than the noon horizon)`);
+  if (metrics.changedRatio < 0.5) problems.push(`sun move changed only ${(metrics.changedRatio * 100).toFixed(1)}% of pixels (need >=50%)`);
+  if (problems.length) throw new Error(`Atmosphere validation failed (${width}x${height}):\n${problems.map((x) => `- ${x}`).join('\n')}`);
+  return metrics;
+}
+
 function assertFluidState(stats) {
   if (!stats.finite) throw new Error(`Fluid state contains NaN/Infinity after ${stats.steps} steps.`);
   if (stats.maxSpeed > 2.5001) throw new Error(`Fluid speed ${stats.maxSpeed} exceeds 2.5001 after ${stats.steps} steps.`);
@@ -205,33 +239,6 @@ function assertFluidMetrics(pixels, width, height) {
   return metrics;
 }
 
-function assertPostProcessingMetrics(modePixels, poster, width, height) {
-  for (const mode of postProcessingModeNames) {
-    if (!modePixels.has(mode)) throw new Error(`Post-processing validation did not capture mode ${mode}.`);
-  }
-  const off = modePixels.get('all-off');
-  const bloom = compareBloom(off, modePixels.get('bloom-only'), width, height);
-  const ca = compareChromaticAberration(off, modePixels.get('ca-only'), width, height);
-  const posterMetrics = postProcessingPosterMetrics(poster);
-  const metrics = { bloom, ca, poster: posterMetrics };
-  const problems = [];
-
-  if (bloom.growthRatio < .0015) problems.push(`Bloom bright-area growth ${(bloom.growthRatio * 100).toFixed(3)}% (need >=0.150%)`);
-  if (bloom.coreConcentration < .72) problems.push(`Bloom core/halo concentration ${(bloom.coreConcentration * 100).toFixed(1)}% (need >=72%)`);
-  if (ca.diffRatio < .008) problems.push(`Chromatic aberration changed only ${(ca.diffRatio * 100).toFixed(3)}% of pixels (need >=0.800%)`);
-  if (ca.outerConcentration < .72) problems.push(`Chromatic aberration outer concentration ${(ca.outerConcentration * 100).toFixed(1)}% (need >=72%)`);
-  if (ca.fringeRatio < .55) problems.push(`Chromatic aberration color-fringe ratio ${(ca.fringeRatio * 100).toFixed(1)}% (need >=55%)`);
-  if (posterMetrics.coverage < .025 || posterMetrics.coverage > .24) problems.push(`Poster geometry coverage ${(posterMetrics.coverage * 100).toFixed(1)}% (need 2.5–24%)`);
-  if (posterMetrics.highlightRatio < .0003 || posterMetrics.highlightRatio > .025) problems.push(`Poster highlight coverage ${(posterMetrics.highlightRatio * 100).toFixed(3)}% (need 0.030–2.500%)`);
-  if (posterMetrics.darkRatio < .72) problems.push(`Poster dark-background coverage ${(posterMetrics.darkRatio * 100).toFixed(1)}% (need >=72%)`);
-  if (problems.length) throw new Error([
-    `Post-processing semantic validation failed (${width}x${height}):`,
-    ...problems.map((problem) => `- ${problem}`),
-    'Set VGPU_POST_PROCESSING_MODE_OUTPUT_DIR and inspect all-off/bloom-only/ca-only captures.',
-  ].join('\n'));
-  return metrics;
-}
-
 function compareBloom(off, bloom, width, height) {
   const count = off.length / 4;
   const coreMask = new Uint8Array(count);
@@ -251,40 +258,6 @@ function compareBloom(off, bloom, width, height) {
     if (haloMask[pixel]) concentrated++;
   }
   return { growthRatio: growth / count, coreConcentration: growth ? concentrated / growth : 0 };
-}
-
-function compareChromaticAberration(off, ca, width, height) {
-  let changed = 0, outer = 0, fringed = 0;
-  const count = off.length / 4;
-  for (let pixel = 0; pixel < count; pixel++) {
-    const i = pixel * 4;
-    const dr = ca[i] - off[i], dg = ca[i + 1] - off[i + 1], db = ca[i + 2] - off[i + 2];
-    const delta = Math.max(Math.abs(dr), Math.abs(dg), Math.abs(db));
-    if (delta < 5) continue;
-    changed++;
-    const x = pixel % width, y = Math.floor(pixel / width);
-    const nx = (x + .5) / width - .5, ny = (y + .5) / height - .5;
-    if (Math.hypot(nx, ny) >= .30) outer++;
-    if (Math.max(Math.abs(dr - dg), Math.abs(dg - db), Math.abs(dr - db)) >= 5) fringed++;
-  }
-  return {
-    diffRatio: changed / count,
-    outerConcentration: changed ? outer / changed : 0,
-    fringeRatio: changed ? fringed / changed : 0,
-  };
-}
-
-function postProcessingPosterMetrics(pixels) {
-  let covered = 0, highlights = 0, dark = 0;
-  const count = pixels.length / 4;
-  for (let i = 0; i < pixels.length; i += 4) {
-    const max = Math.max(pixels[i], pixels[i + 1], pixels[i + 2]);
-    const luma = .2126 * pixels[i] + .7152 * pixels[i + 1] + .0722 * pixels[i + 2];
-    if (max >= 28) covered++;
-    if (luma >= 190) highlights++;
-    if (max <= 18) dark++;
-  }
-  return { coverage: covered / count, highlightRatio: highlights / count, darkRatio: dark / count };
 }
 
 function dilateSparseMask(mask, width, height, radius) {
@@ -531,17 +504,6 @@ function formatAaMetrics(metrics) {
   return `${pair('MSAA', metrics.msaa)}, ${pair('SSAA', metrics.ssaa)}, silhouette=${(metrics.silhouette * 100).toFixed(2)}%, ${pair('FXAA', metrics.fxaa)}`;
 }
 
-function formatPostProcessingMetrics(metrics) {
-  const { bloom, ca, poster } = metrics;
-  return `bloom growth=${(bloom.growthRatio * 100).toFixed(3)}% core=${(bloom.coreConcentration * 100).toFixed(1)}%, CA diff=${(ca.diffRatio * 100).toFixed(3)}% outer=${(ca.outerConcentration * 100).toFixed(1)}% fringe=${(ca.fringeRatio * 100).toFixed(1)}%, poster=${JSON.stringify(poster)}`;
-}
-
-async function writePostProcessingModePngs(modePixels, size, kind) {
-  const dir = process.env.VGPU_POST_PROCESSING_MODE_OUTPUT_DIR;
-  await mkdir(dir, { recursive: true });
-  await Promise.all(postProcessingModeNames.map((mode) => writePng(path.join(dir, `${kind}-${mode}.png`), modePixels.get(mode), size[0], size[1])));
-}
-
 async function writeAaModePngs(modePixels, size, kind) {
   const dir = process.env.VGPU_AA_MODE_OUTPUT_DIR;
   await mkdir(dir, { recursive: true });
@@ -567,7 +529,7 @@ async function loadRenderers(slugs) {
     format: 'esm',
     sourcemap: false,
     external: ['pngjs', 'vgpu', 'vgpu/node'],
-    plugins: [wgslPlugin()],
+    plugins: [typegpu(), wgslPlugin()],
     logLevel: 'silent',
   });
   const module = await import(pathToFileURL(rendererBundle).href);

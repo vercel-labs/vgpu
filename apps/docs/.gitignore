@@ -3,6 +3,7 @@ node_modules
 
 # generated content
 .source
+generated/examples-api
 
 # test and build output
 coverage
@@ -17,6 +18,7 @@ dist
 # mirrors apps/docs/.gitignore).
 public/ort
 public/models/depth
+public/prism-gpu-benchmarks
 
 # local environment
 .env*.local

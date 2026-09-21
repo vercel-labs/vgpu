@@ -1,7 +1,3 @@
-struct VSOut {
-  @builtin(position) pos: vec4f,
-  @location(0) uv: vec2f,
-};
 struct CompositeUniforms {
   bloomStrength: f32,
   bloomRadius: f32,
@@ -17,14 +13,6 @@ struct CompositeUniforms {
 @group(0) @binding(5) var blurTexture5: texture_2d<f32>;
 @group(0) @binding(6) var linearSampler: sampler;
 
-@vertex fn vs_main(@builtin(vertex_index) vi: u32) -> VSOut {
-  var p = array<vec2f, 3>(vec2f(-1.0, -3.0), vec2f(-1.0, 1.0), vec2f(3.0, 1.0));
-  var out: VSOut;
-  out.pos = vec4f(p[vi], 0.0, 1.0);
-  out.uv = vec2f(p[vi].x * 0.5 + 0.5, 0.5 - p[vi].y * 0.5);
-  return out;
-}
-
 fn factor(i: u32) -> f32 {
   let v = array<f32, 8>(
     uniforms.bloomFactors0.x, uniforms.bloomFactors0.y, uniforms.bloomFactors0.z, uniforms.bloomFactors0.w,
@@ -38,14 +26,14 @@ fn lerpBloomFactor(f: f32) -> f32 {
   return mix(f, mirrorFactor, uniforms.bloomRadius);
 }
 
-@fragment fn fs_main(in: VSOut) -> @location(0) vec4f {
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
   // UnrealBloomPass._getCompositeMaterial @ three 0.184.0. Tint colors are all white.
   let bloom = 3.0 * uniforms.bloomStrength * (
-    lerpBloomFactor(factor(0u)) * textureSample(blurTexture1, linearSampler, in.uv).rgb +
-    lerpBloomFactor(factor(1u)) * textureSample(blurTexture2, linearSampler, in.uv).rgb +
-    lerpBloomFactor(factor(2u)) * textureSample(blurTexture3, linearSampler, in.uv).rgb +
-    lerpBloomFactor(factor(3u)) * textureSample(blurTexture4, linearSampler, in.uv).rgb +
-    lerpBloomFactor(factor(4u)) * textureSample(blurTexture5, linearSampler, in.uv).rgb
+    lerpBloomFactor(factor(0u)) * textureSample(blurTexture1, linearSampler, uv).rgb +
+    lerpBloomFactor(factor(1u)) * textureSample(blurTexture2, linearSampler, uv).rgb +
+    lerpBloomFactor(factor(2u)) * textureSample(blurTexture3, linearSampler, uv).rgb +
+    lerpBloomFactor(factor(3u)) * textureSample(blurTexture4, linearSampler, uv).rgb +
+    lerpBloomFactor(factor(4u)) * textureSample(blurTexture5, linearSampler, uv).rgb
   );
   let bloomAlpha = max(bloom.r, max(bloom.g, bloom.b));
   return vec4f(bloom, bloomAlpha);

@@ -13,21 +13,32 @@ const V3 = vec3f(-0.47140452079, -0.33333333333, -0.81649658093);
 fn closestVertex(p: vec3f) -> vec3f {
   var vertex = V0;
   var score = dot(p, V0);
-  let score1 = dot(p, V1); if (score1 > score) { score = score1; vertex = V1; }
-  let score2 = dot(p, V2); if (score2 > score) { score = score2; vertex = V2; }
-  let score3 = dot(p, V3); if (score3 > score) { vertex = V3; }
+  let score1 = dot(p, V1);
+  if (score1 > score) {
+    score = score1;
+    vertex = V1;
+  }
+  let score2 = dot(p, V2);
+  if (score2 > score) {
+    score = score2;
+    vertex = V2;
+  }
+  let score3 = dot(p, V3);
+  if (score3 > score) {
+    vertex = V3;
+  }
   return vertex;
 }
 
 fn fractalDistance(point: vec3f) -> f32 {
   var p = point;
-  p = 2.0 * p - closestVertex(p);
-  p = 2.0 * p - closestVertex(p);
-  p = 2.0 * p - closestVertex(p);
-  p = 2.0 * p - closestVertex(p);
-  p = 2.0 * p - closestVertex(p);
-  p = 2.0 * p - closestVertex(p);
-  let d = max(max(dot(-V0, p), dot(-V1, p)), max(dot(-V2, p), dot(-V3, p))) - 0.33333333333;
+  for (var level = 0; level < 6; level++) {
+    p = 2.0 * p - closestVertex(p);
+  }
+  let d = max(
+    max(dot(-V0, p), dot(-V1, p)),
+    max(dot(-V2, p), dot(-V3, p)),
+  ) - 0.33333333333;
   return d / 64.0;
 }
 
@@ -35,11 +46,15 @@ fn clipPlane(ro: vec3f, rd: vec3f, normal: vec3f, interval: vec2f) -> vec2f {
   let a = dot(normal, ro) - 0.33333333333;
   let b = dot(normal, rd);
   if (abs(b) < 0.000001) {
-    if (a > 0.0) { return vec2f(1.0, -1.0); }
+    if (a > 0.0) {
+      return vec2f(1.0, -1.0);
+    }
     return interval;
   }
   let t = -a / b;
-  if (b < 0.0) { return vec2f(max(interval.x, t), interval.y); }
+  if (b < 0.0) {
+    return vec2f(max(interval.x, t), interval.y);
+  }
   return vec2f(interval.x, min(interval.y, t));
 }
 
@@ -72,8 +87,10 @@ fn ambientOcclusion(p: vec3f, n: vec3f) -> f32 {
 }
 
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-  let cp = cos(params.pitch); let sp = sin(params.pitch);
-  let cy = cos(params.yaw); let sy = sin(params.yaw);
+  let cp = cos(params.pitch);
+  let sp = sin(params.pitch);
+  let cy = cos(params.yaw);
+  let sy = sin(params.yaw);
   let orbitTarget = vec3f(0.0, 0.18, 0.0);
   let orbitOffset = vec3f(3.15 * sy * cp, 3.15 * sp, 3.15 * cy * cp);
   let ro = orbitTarget + orbitOffset;
@@ -85,24 +102,33 @@ fn ambientOcclusion(p: vec3f, n: vec3f) -> f32 {
   screen.x *= params.resolution.x / max(params.resolution.y, 1.0);
   let rd = normalize(forward + (right * screen.x + up * screen.y) * 0.32491969623);
   let bound = outerInterval(ro, rd);
-  if (bound.x > bound.y || bound.y < 0.0) { return vec4f(0.0, 0.0, 0.0, 1.0); }
+  if (bound.x > bound.y || bound.y < 0.0) {
+    return vec4f(0.0, 0.0, 0.0, 1.0);
+  }
 
   var t = max(bound.x, 0.0);
-  var eps = max(0.0008, 0.0003 * t);
+  var eps = 0.0;
   var hit = false;
   for (var step = 0; step < 96; step++) {
     let d = fractalDistance(ro + rd * t);
     eps = max(0.0008, 0.0003 * t);
-    if (d < eps) { hit = true; break; }
+    if (d < eps) {
+      hit = true;
+      break;
+    }
     t += max(d * 0.8, eps * 0.5);
-    if (t > bound.y || t > 6.0) { break; }
+    if (t > bound.y || t > 6.0) {
+      break;
+    }
   }
-  if (!hit || t > bound.y + eps || t > 6.0) { return vec4f(0.0, 0.0, 0.0, 1.0); }
+  if (!hit || t > bound.y + eps || t > 6.0) {
+    return vec4f(0.0, 0.0, 0.0, 1.0);
+  }
   let p = ro + rd * t;
   let n = normalAt(p, max(0.0015, 2.0 * eps));
   let light = normalize(vec3f(-0.55, 0.78, 0.30));
   let diffuse = max(dot(n, light), 0.0);
   let ao = ambientOcclusion(p, n);
-  let color = vec3f(1.0) * ao * (0.11 + 1.55 * diffuse);
+  let color = vec3f(ao * (0.11 + 1.55 * diffuse));
   return vec4f(color, 1.0);
 }

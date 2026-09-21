@@ -5,6 +5,7 @@ import { mockBufferDescriptor } from "./mock-gpu.ts";
 import { Queue } from "./queue.ts";
 import { Shader, type ShaderInput } from "./shader.ts";
 import { Texture, toGPUTextureDescriptor } from "./texture.ts";
+import { snapshotTextureOptions, validateTextureOptions } from "./texture-options.ts";
 import { Readback } from "./readback.ts";
 import { ValidationError, type VGPUError } from "./errors.ts";
 import type { BufferOptions, BufferUsageName, TextureOptions } from "./types.ts";
@@ -69,7 +70,9 @@ export class Device {
 
   createTexture(opts: TextureOptions): Texture {
     this.#assertUsable("Device.createTexture");
-    return new Texture(this, this.gpu.createTexture(toGPUTextureDescriptor(opts)), opts);
+    validateTextureOptions(opts, this.gpu);
+    const snapshot = snapshotTextureOptions(opts);
+    return new Texture(this, this.gpu.createTexture(toGPUTextureDescriptor(snapshot)), snapshot);
   }
 
   createBuffer(opts: BufferOptions): Buffer {

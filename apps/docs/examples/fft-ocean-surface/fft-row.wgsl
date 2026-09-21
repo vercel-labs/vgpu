@@ -1,6 +1,4 @@
-// Pass 1 of the 2D IFFT: one 256-point inverse transform per ROW.
-// dispatch(N, 1) -> workgroup_id.x = row. workgroup_size is 128 (the portable
-// max), so each of the 128 invocations handles TWO of the 256 elements.
+// Pass 1: one inverse transform per row.
 
 import { bitrev, fftStages3 } from "./fft-core.wgsl";
 import { N } from "./params.wgsl";
@@ -26,16 +24,23 @@ fn fftRow(
   let i0 = t;
   let i1 = t + 128u;
 
-  // Bit-reversed load of both elements this invocation owns.
   let r0 = bitrev(i0);
   let r1 = bitrev(i1);
-  shX[r0] = inX[base + i0]; shY[r0] = inY[base + i0]; shZ[r0] = inZ[base + i0];
-  shX[r1] = inX[base + i1]; shY[r1] = inY[base + i1]; shZ[r1] = inZ[base + i1];
+  shX[r0] = inX[base + i0];
+  shY[r0] = inY[base + i0];
+  shZ[r0] = inZ[base + i0];
+  shX[r1] = inX[base + i1];
+  shY[r1] = inY[base + i1];
+  shZ[r1] = inZ[base + i1];
   workgroupBarrier();
 
   fftStages3(&shX, &shY, &shZ, t);
 
   let norm = 1.0 / f32(N);
-  outX[base + i0] = shX[i0] * norm; outY[base + i0] = shY[i0] * norm; outZ[base + i0] = shZ[i0] * norm;
-  outX[base + i1] = shX[i1] * norm; outY[base + i1] = shY[i1] * norm; outZ[base + i1] = shZ[i1] * norm;
+  outX[base + i0] = shX[i0] * norm;
+  outY[base + i0] = shY[i0] * norm;
+  outZ[base + i0] = shZ[i0] * norm;
+  outX[base + i1] = shX[i1] * norm;
+  outY[base + i1] = shY[i1] * norm;
+  outZ[base + i1] = shZ[i1] * norm;
 }

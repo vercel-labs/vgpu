@@ -1,36 +1,50 @@
-import type { Gpu, Target } from 'vgpu';
+import type { Gpu, Target } from "vgpu";
 
-import type { ThumbnailOptions } from '../../lib/example-renderer';
-import { scaledSize } from './scene-size';
 import {
   createScene,
   destroyScene,
   prepareScene,
   presentScene,
   renderLighting,
-} from './simulation';
-import { AGENT_RADIANCE_QUALITY_SETTINGS, type AgentRadianceView } from './types';
+  scaledSize,
+  type AgentRadianceScene,
+  type AgentRadianceView,
+} from "./simulation";
 
-export interface AgentRadianceThumbnailOptions extends ThumbnailOptions {
+interface ThumbnailOptions {
+  readonly time?: number;
   readonly view?: AgentRadianceView;
 }
 
 export async function renderThumbnail(
   gpu: Gpu,
   output: Target,
-  options: AgentRadianceThumbnailOptions = {}
+  options: ThumbnailOptions = {}
 ): Promise<void> {
-  const quality = AGENT_RADIANCE_QUALITY_SETTINGS.web;
-  const size = scaledSize(output.size[0], output.size[1], 1, quality.maxSceneEdge);
-  const scene = createScene(gpu, size, 'agent-radiance-thumb', quality.directionBase);
+  let scene: AgentRadianceScene | undefined;
+  let failed = false;
   try {
+    scene = createScene(
+      gpu,
+      scaledSize(output.size[0], output.size[1], 1, 640),
+      2
+    );
     await prepareScene(scene, output.format);
-    const view = options.view ?? 'final';
+    const view = options.view ?? "final";
     renderLighting(scene, options.time ?? 1.5, view);
     presentScene(scene, output, view);
-    await gpu.gpu.queue.onSubmittedWorkDone();
-    await gpu.settled();
+  } catch (error) {
+    failed = true;
+    throw error;
   } finally {
-    destroyScene(scene);
+    await Promise.allSettled([
+      Promise.resolve().then(() => gpu.gpu.queue.onSubmittedWorkDone()),
+      Promise.resolve().then(() => gpu.settled()),
+    ]);
+    try {
+      if (scene) destroyScene(scene);
+    } catch (error) {
+      if (!failed) throw error;
+    }
   }
 }

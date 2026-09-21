@@ -1,107 +1,45 @@
 import type GUI from "lil-gui";
-import type { Draw, Effect, Geometry, Gpu, Surface, Target } from "vgpu";
+import type { Draw, Geometry, Gpu, Surface } from "vgpu";
 import { draw, frame, geometry, surface } from "vgpu";
 import { perspectiveCamera, sphere } from "vgpu/scene";
 import { loadHeroGlassAssets, type HeroGlassAssets } from "./hero-glass-assets";
 import {
+  createCameraControls,
   createHeroFractalScene,
-  destroyHeroFractalScene,
+  HERO_FLOOR_AO_DEFAULTS,
+  modelMatrix,
   renderHeroFractalScene,
+  resizeHeroFractalScene,
+  setHeroFractalSceneSettings,
+  type HeroFloorAo,
   type HeroFractalScene,
 } from "./scene";
 import heroDebugAxesWgsl from "./hero-debug-axes.wgsl";
 import heroGlassEnvironmentDebugWgsl from "./hero-glass-environment-debug.wgsl";
 import heroGlassWireframeWgsl from "./hero-glass-wireframe.wgsl";
 import heroFractalWireframeWgsl from "./hero-fractal-wireframe.wgsl";
+import {
+  HERO_FRACTAL_CAMERA,
+  HERO_FRACTAL_GLASS,
+  HERO_FRACTAL_MATERIAL,
+  HERO_ORB_MATERIAL,
+  type HeroFractalGlass,
+  type HeroFractalMaterial,
+} from "./settings";
 
 const HERO_LIGHT_CLEAR = 250 / 255;
-const ENVIRONMENT_SPHERE_MODEL = scaleTranslationMatrix(1, [0, 0, 0]);
-const GLASS_MODEL_MATRIX = scaleTranslationMatrix(1, [0, 0, 0]);
+const ENVIRONMENT_SPHERE_MODEL = modelMatrix(1, [0, 0, 0]);
+const GLASS_MODEL_MATRIX = modelMatrix(1, [0, 0, 0]);
 const ENVIRONMENT_DEBUG_CAMERA_POSITION = [0, 0, 3] as const;
-const WORLD_AXES_MODEL_MATRIX = scaleTranslationMatrix(1.45, [0, 0, 0]);
+const WORLD_AXES_MODEL_MATRIX = modelMatrix(1.45, [0, 0, 0]);
 const CAMERA_TARGET_AXES_SCALE = 0.22;
 const SPHERE_MORPH_DURATION_MS = 1040;
-const HERO_FLOOR_AO_DEFAULTS = {
-  glassAoScale: 0.54,
-  glassAoAmplitude: 0.41,
-  glassAoOpacity: 0.11,
-  fractalAoScale: 0.88,
-  fractalAoAmplitude: 0.18,
-  fractalAoOpacity: 0.57,
-  orbAoScale: 0.58,
-  orbAoAmplitude: 0.59,
-  orbAoOpacity: 0.73,
-};
 
-export interface HeroFractalCamera {
-  /** XYZ Euler rotation, in radians. */
-  readonly cameraRotation: readonly [number, number, number];
-  /** Local XYZ offset from the target before rotation. */
-  readonly cameraDistance: readonly [number, number, number];
-  /** World-space point the camera looks toward. */
-  readonly cameraTarget: readonly [number, number, number];
-  /** Vertical field of view, in degrees. */
-  readonly fov: number;
-  /** Maximum mouse-driven orbit angle in degrees. */
-  readonly maxMouseRotation: number;
-  /** Per-frame interpolation factor used to settle the mouse orbit. */
-  readonly mouseLerp: number;
-}
-
-export interface HeroFractalMaterial {
-  /** Linear RGB rubber body color. */
-  readonly baseColor: readonly [number, number, number];
-  /** Microsurface roughness used to select the prefiltered environment level. */
-  readonly roughness: number;
-  /** Strength of the rubber diffuse lobe. */
-  readonly diffuseStrength: number;
-  /** Strength of the rubber specular lobe. */
-  readonly specularStrength: number;
-  /** Strength of the broad diffuse contribution from the studio environment. */
-  readonly ambientStrength: number;
-}
-
-export interface HeroFractalGlass {
-  /** Uniform scale of the fractal mesh inside the fixed glass shell. */
-  readonly fractalScale: number;
-  /** Uniform scale of the orb inside the fixed glass shell. */
-  readonly orbScale: number;
-  /** Vertical world-space offset applied only as the fractal becomes an orb. */
-  readonly orbOffsetY: number;
-  /** Morph between the tetrahedral fractal and its normalized sphere target. */
-  readonly sphereMix: number;
-  /** Index of refraction used by front-surface transmission and Fresnel. */
-  readonly ior: number;
-  /** Multiplier for the static studio cubemap. */
-  readonly reflectionStrength: number;
-  /** Visibility of the directly rendered rear glass surfaces. */
-  readonly backOpacity: number;
-  /** Beer-Lambert absorption coefficients in linear RGB. */
-  readonly absorption: readonly [number, number, number];
-  /** Stable screen-space blur radius for the front glass, in pixels. */
-  readonly frostRadius: number;
-  /** Subtle red/blue separation derived from the shared frost samples. */
-  readonly dispersion: number;
-  /** Strength of the angle-dependent spectral tint on reflections. */
-  readonly iridescenceStrength: number;
-  /** Number of spectral tint cycles across the front-glass Fresnel range. */
-  readonly iridescenceFrequency: number;
-  /** XYZ rotation of the studio environment, in degrees. */
-  readonly environmentRotation: readonly [number, number, number];
-  /** Exposure applied to the studio environment before material response. */
-  readonly environmentExposure: number;
-}
-
-interface HeroFractalRendererOptions {
+interface RendererOptions {
   readonly canvas: HTMLCanvasElement;
-  readonly camera: Readonly<HeroFractalCamera>;
-  readonly fractalMaterial: Readonly<HeroFractalMaterial>;
-  readonly orbMaterial: Readonly<HeroFractalMaterial>;
-  readonly glass: Readonly<HeroFractalGlass>;
-  readonly onError?: (error: unknown) => void;
 }
 
-export interface HeroFractalRenderer {
+interface Renderer {
   readonly ready: Promise<void>;
   setSphereMix(value: number): void;
   dispose(): void;
@@ -109,24 +47,12 @@ export interface HeroFractalRenderer {
 
 type DebugView = "final" | "environment" | "reflection";
 
-interface HeroFractalEffects {
-  readonly present: Effect;
-}
-
 interface HeroFractalDraws {
-  readonly background: Draw;
-  readonly glassBack: Draw;
-  readonly fractal: Draw;
-  readonly glassFront: Draw;
   readonly glassWireframe: Draw;
   readonly fractalWireframe: Draw;
   readonly environmentSphere: Draw;
   readonly worldAxes: Draw;
   readonly cameraTargetAxes: Draw;
-}
-
-interface HeroFractalTargets {
-  readonly interior: Target;
 }
 
 interface MutableHeroFractalMaterial {
@@ -137,33 +63,9 @@ interface MutableHeroFractalMaterial {
   ambientStrength: number;
 }
 
-interface MutableHeroFloorAo {
-  glassAoScale: number;
-  glassAoAmplitude: number;
-  glassAoOpacity: number;
-  fractalAoScale: number;
-  fractalAoAmplitude: number;
-  fractalAoOpacity: number;
-  orbAoScale: number;
-  orbAoAmplitude: number;
-  orbAoOpacity: number;
-}
-
-interface CameraState {
-  readonly background: {
-    readonly resolution: readonly [number, number];
-    readonly cameraPosition: readonly [number, number, number];
-    readonly cameraTarget: readonly [number, number, number];
-    readonly cameraUp: readonly [number, number, number];
-    readonly tanHalfFov: number;
-    readonly floorGrid: number;
-  };
-  readonly viewProjection: Float32Array;
-  readonly position: readonly [number, number, number];
-}
-
 function createMaterialDebugGui(
   GuiConstructor: typeof GUI,
+  container: HTMLElement | undefined,
   camera: {
     position: [number, number, number];
     target: [number, number, number];
@@ -190,7 +92,7 @@ function createMaterialDebugGui(
     environmentRotation: [number, number, number];
     environmentExposure: number;
   },
-  floorAo: MutableHeroFloorAo,
+  floorAo: HeroFloorAo,
   debug: {
     view: DebugView;
     wireframe: boolean;
@@ -198,38 +100,47 @@ function createMaterialDebugGui(
     coloredAxes: boolean;
     cameraTarget: boolean;
   },
-  requestDraw: () => void,
+  requestDraw: () => void
 ): GUI {
   const gui = new GuiConstructor({
     title: "Glass fractal material",
+    container,
     width: 290,
   });
   gui.domElement.dataset.heroFractalMaterialGui = "";
-  gui.domElement.style.zIndex = "1000";
-  gui.domElement.style.left = "0";
-  gui.domElement.style.right = "auto";
+  Object.assign(gui.domElement.style, {
+    position: "absolute",
+    top: "16px",
+    left: "16px",
+    right: "auto",
+    zIndex: "10",
+  });
 
   const debugFolder = gui.addFolder("Debug");
   debugFolder
     .add(debug, "view", ["final", "environment", "reflection"])
     .name("view");
-  debugFolder.add(debug, "wireframe").name("Wireframe");
-  debugFolder.add(debug, "floorGrid").name("Floor grid");
-  debugFolder.add(debug, "coloredAxes").name("Colored axes");
-  debugFolder.add(debug, "cameraTarget").name("Camera target");
+  for (const [property, label] of [
+    ["wireframe", "Wireframe"],
+    ["floorGrid", "Floor grid"],
+    ["coloredAxes", "Colored axes"],
+    ["cameraTarget", "Camera target"],
+  ] as const) {
+    debugFolder.add(debug, property).name(label);
+  }
 
   const cameraFolder = gui.addFolder("Camera");
   addVector3Controllers(cameraFolder, camera.position, "position", -10, 10);
   addVector3Controllers(cameraFolder, camera.target, "target", -3, 3);
-  cameraFolder.add(camera, "fov", 10, 100, 0.1).name("FOV");
-  cameraFolder.add(camera, "maxMouseRotation", 0, 15, 0.1).name("max rotation");
-  cameraFolder.add(camera, "mouseLerp", 0.01, 1, 0.01).name("lerp");
+  addNumberControllers(cameraFolder, camera, [
+    ["fov", "FOV", 10, 100, 0.1],
+    ["maxMouseRotation", "max rotation", 0, 15, 0.1],
+    ["mouseLerp", "lerp", 0.01, 1, 0.01],
+  ]);
 
   const fractalFolder = gui.addFolder("Fractal material");
   addMaterialControllers(fractalFolder, fractalMaterial);
-  fractalFolder
-    .add(glass, "fractalScale", 0.35, 0.99, 0.005)
-    .name("scale");
+  fractalFolder.add(glass, "fractalScale", 0.35, 0.99, 0.005).name("scale");
 
   const orbFolder = gui.addFolder("Orb material");
   addMaterialControllers(orbFolder, orbMaterial);
@@ -237,47 +148,29 @@ function createMaterialDebugGui(
   orbFolder.add(glass, "orbOffsetY", -0.5, 0.5, 0.005).name("offset y");
 
   const glassFolder = gui.addFolder("Glass");
-  glassFolder.add(glass, "ior", 1.001, 2.2, 0.001).name("IOR");
-  glassFolder.add(glass, "reflectionStrength", 0, 4, 0.01).name("reflection");
-  glassFolder.add(glass, "backOpacity", 0, 1, 0.01).name("back opacity");
   glassFolder.addColor(glass, "absorption", 1).name("absorption");
-  glassFolder.add(glass, "frostRadius", 0, 3, 0.05).name("frost radius px");
-  glassFolder.add(glass, "dispersion", 0, 0.1, 0.0005).name("RGB shift");
-  glassFolder
-    .add(glass, "iridescenceStrength", 0, 0.25, 0.005)
-    .name("iridescence");
-  glassFolder
-    .add(glass, "iridescenceFrequency", 0.25, 6, 0.05)
-    .name("iridescence frequency");
+  addNumberControllers(glassFolder, glass, [
+    ["ior", "IOR", 1.001, 2.2, 0.001],
+    ["reflectionStrength", "reflection", 0, 4, 0.01],
+    ["backOpacity", "back opacity", 0, 1, 0.01],
+    ["frostRadius", "frost radius px", 0, 3, 0.05],
+    ["dispersion", "RGB shift", 0, 0.1, 0.0005],
+    ["iridescenceStrength", "iridescence", 0, 0.25, 0.005],
+    ["iridescenceFrequency", "iridescence frequency", 0.25, 6, 0.05],
+  ]);
 
   const floorAoFolder = gui.addFolder("Floor AO");
-  floorAoFolder
-    .add(floorAo, "glassAoScale", 0.25, 2, 0.01)
-    .name("glass scale");
-  floorAoFolder
-    .add(floorAo, "glassAoAmplitude", 0, 2, 0.01)
-    .name("glass amplitude");
-  floorAoFolder
-    .add(floorAo, "glassAoOpacity", 0, 1, 0.01)
-    .name("glass opacity");
-  floorAoFolder
-    .add(floorAo, "fractalAoScale", 0.25, 2, 0.01)
-    .name("fractal scale");
-  floorAoFolder
-    .add(floorAo, "fractalAoAmplitude", 0, 2, 0.01)
-    .name("fractal amplitude");
-  floorAoFolder
-    .add(floorAo, "fractalAoOpacity", 0, 1, 0.01)
-    .name("fractal opacity");
-  floorAoFolder
-    .add(floorAo, "orbAoScale", 0.25, 2, 0.01)
-    .name("orb scale");
-  floorAoFolder
-    .add(floorAo, "orbAoAmplitude", 0, 2, 0.01)
-    .name("orb amplitude");
-  floorAoFolder
-    .add(floorAo, "orbAoOpacity", 0, 1, 0.01)
-    .name("orb opacity");
+  addNumberControllers(floorAoFolder, floorAo, [
+    ["glassAoScale", "glass scale", 0.25, 2, 0.01],
+    ["glassAoAmplitude", "glass amplitude", 0, 2, 0.01],
+    ["glassAoOpacity", "glass opacity", 0, 1, 0.01],
+    ["fractalAoScale", "fractal scale", 0.25, 2, 0.01],
+    ["fractalAoAmplitude", "fractal amplitude", 0, 2, 0.01],
+    ["fractalAoOpacity", "fractal opacity", 0, 1, 0.01],
+    ["orbAoScale", "orb scale", 0.25, 2, 0.01],
+    ["orbAoAmplitude", "orb amplitude", 0, 2, 0.01],
+    ["orbAoOpacity", "orb opacity", 0, 1, 0.01],
+  ]);
 
   const environmentFolder = gui.addFolder("Environment");
   addVector3Controllers(
@@ -310,17 +203,29 @@ function addVector3Controllers(
   folder.add(vector, "2", min, max, step).name(`${label} z`);
 }
 
+function addNumberControllers(
+  folder: GUI,
+  target: object,
+  controls: readonly (readonly [string, string, number, number, number])[]
+): void {
+  for (const [property, label, min, max, step] of controls) {
+    folder
+      .add(target as Record<string, number>, property, min, max, step)
+      .name(label);
+  }
+}
+
 function addMaterialControllers(
   folder: GUI,
   material: MutableHeroFractalMaterial
 ): void {
   folder.addColor(material, "baseColor", 1).name("base color");
-  folder.add(material, "roughness", 0, 1, 0.01).name("roughness");
-  folder.add(material, "diffuseStrength", 0, 2, 0.01).name("diffuse strength");
-  folder
-    .add(material, "specularStrength", 0, 2, 0.01)
-    .name("specular strength");
-  folder.add(material, "ambientStrength", 0, 1, 0.01).name("ambient fill");
+  addNumberControllers(folder, material, [
+    ["roughness", "roughness", 0, 1, 0.01],
+    ["diffuseStrength", "diffuse strength", 0, 2, 0.01],
+    ["specularStrength", "specular strength", 0, 2, 0.01],
+    ["ambientStrength", "ambient fill", 0, 1, 0.01],
+  ]);
 }
 
 function copyMaterial(
@@ -336,22 +241,15 @@ function copyMaterial(
 }
 
 /** Static, event-driven renderer owned exclusively by the Glass Fractal example. */
-export function createHeroFractalRenderer(
-  options: HeroFractalRendererOptions
-): HeroFractalRenderer {
+export function createRenderer(options: RendererOptions): Renderer {
   let disposed = false;
-  let reportedError = false;
+  let failureStarted = false;
+  const abort = new AbortController();
   let gpu: Gpu | undefined;
   let canvasSurface: Surface | undefined;
-  let effects: HeroFractalEffects | undefined;
   let draws: HeroFractalDraws | undefined;
-  let targets: HeroFractalTargets | undefined;
   let coreScene: HeroFractalScene | undefined;
   let assets: HeroGlassAssets | undefined;
-  let environmentSphereGeometry: Geometry | undefined;
-  let debugAxesGeometry: Geometry | undefined;
-  let sceneSampler: GPUSampler | undefined;
-  let environmentSampler: GPUSampler | undefined;
   let debugGui: GUI | undefined;
   let observer: ResizeObserver | undefined;
   let resizeFrame = 0;
@@ -360,8 +258,8 @@ export function createHeroFractalRenderer(
   let morphFrame = 0;
   let orbFrame = 0;
   let morphStartTime = 0;
-  let morphStartMix = options.glass.sphereMix;
-  let morphTargetMix = options.glass.sphereMix;
+  let morphStartMix = HERO_FRACTAL_GLASS.sphereMix;
+  let morphTargetMix = HERO_FRACTAL_GLASS.sphereMix;
   let morphDirection = 1;
   const orbEpoch = performance.now();
   let orbTime = 0;
@@ -372,42 +270,19 @@ export function createHeroFractalRenderer(
   let pointerCurrentX = 0;
   let pointerCurrentY = 0;
   let lastDpr = typeof window === "undefined" ? 1 : window.devicePixelRatio;
-  const fractalMaterial = copyMaterial(options.fractalMaterial);
-  const orbMaterial = copyMaterial(options.orbMaterial);
-  const material = copyMaterial(options.fractalMaterial);
-  const floorAo: MutableHeroFloorAo = { ...HERO_FLOOR_AO_DEFAULTS };
+  const fractalMaterial = copyMaterial(HERO_FRACTAL_MATERIAL);
+  const orbMaterial = copyMaterial(HERO_ORB_MATERIAL);
+  const floorAo = { ...HERO_FLOOR_AO_DEFAULTS };
   const glass = {
-    fractalScale: options.glass.fractalScale,
-    orbScale: options.glass.orbScale,
-    orbOffsetY: options.glass.orbOffsetY,
-    sphereMix: options.glass.sphereMix,
-    ior: options.glass.ior,
-    reflectionStrength: options.glass.reflectionStrength,
-    backOpacity: options.glass.backOpacity,
-    absorption: [...options.glass.absorption] as [number, number, number],
-    frostRadius: options.glass.frostRadius,
-    dispersion: options.glass.dispersion,
-    iridescenceStrength: options.glass.iridescenceStrength,
-    iridescenceFrequency: options.glass.iridescenceFrequency,
-    environmentRotation: [...options.glass.environmentRotation] as [
+    ...HERO_FRACTAL_GLASS,
+    absorption: [...HERO_FRACTAL_GLASS.absorption] as [number, number, number],
+    environmentRotation: [...HERO_FRACTAL_GLASS.environmentRotation] as [
       number,
       number,
       number
     ],
-    environmentExposure: options.glass.environmentExposure,
   };
-  const initialPositionOffset = rotateCamera(
-    options.camera.cameraDistance,
-    options.camera.cameraRotation
-  );
-  const cameraControls = {
-    position: add3(options.camera.cameraTarget, initialPositionOffset),
-    target: [...options.camera.cameraTarget] as [number, number, number],
-    up: rotateCamera([0, 1, 0], options.camera.cameraRotation),
-    fov: options.camera.fov,
-    maxMouseRotation: options.camera.maxMouseRotation,
-    mouseLerp: options.camera.mouseLerp,
-  };
+  const cameraControls = createCameraControls(HERO_FRACTAL_CAMERA);
   const debugQuery = new URLSearchParams(window.location.search);
   const debug = {
     view: (debugQuery.get("debug") === "reflection"
@@ -418,74 +293,30 @@ export function createHeroFractalRenderer(
     coloredAxes: false,
     cameraTarget: false,
   };
-  const cameraState = (resolution: readonly [number, number]): CameraState => {
-    const fovRadians = (cameraControls.fov * Math.PI) / 180;
-    const cameraPosition = orbitCameraPosition(
-      cameraControls.position,
-      cameraControls.target,
-      cameraControls.up,
-      [pointerCurrentX, pointerCurrentY],
-      cameraControls.maxMouseRotation
-    );
-    const camera = perspectiveCamera({
-      fov: cameraControls.fov,
-      aspect: resolution[0] / Math.max(resolution[1], 1),
-      near: 0.05,
-      far: 20,
-      position: cameraPosition,
-      target: cameraControls.target,
-      up: cameraControls.up,
-    });
-    return {
-      background: {
-        resolution,
-        cameraPosition,
-        cameraTarget: cameraControls.target,
-        cameraUp: cameraControls.up,
-        tanHalfFov: Math.tan(fovRadians * 0.5),
-        floorGrid: debug.floorGrid ? 1 : 0,
-      },
-      viewProjection: camera.viewProjectionMatrix as Float32Array,
-      position: cameraPosition,
-    };
-  };
-
   const drawHero = () => {
-    if (
-      disposed ||
-      !gpu ||
-      !canvasSurface ||
-      !effects ||
-      !draws ||
-      !targets ||
-      !assets ||
-      !sceneSampler ||
-      !environmentSampler
-    )
+    if (disposed || !gpu || !canvasSurface || !draws || !coreScene || !assets)
       return;
 
-    const camera = cameraState(canvasSurface.size);
-    const materialMix = Math.min(1, Math.max(0, glass.sphereMix));
-    const shaderSphereMix = glass.sphereMix * morphDirection;
-    const innerScale =
-      glass.fractalScale * (1 - materialMix) + glass.orbScale * materialMix;
-    for (let channel = 0; channel < 3; channel++) {
-      material.baseColor[channel] =
-        fractalMaterial.baseColor[channel] * (1 - materialMix) +
-        orbMaterial.baseColor[channel] * materialMix;
-    }
-    material.roughness =
-      fractalMaterial.roughness * (1 - materialMix) +
-      orbMaterial.roughness * materialMix;
-    material.diffuseStrength =
-      fractalMaterial.diffuseStrength * (1 - materialMix) +
-      orbMaterial.diffuseStrength * materialMix;
-    material.specularStrength =
-      fractalMaterial.specularStrength * (1 - materialMix) +
-      orbMaterial.specularStrength * materialMix;
-    material.ambientStrength =
-      fractalMaterial.ambientStrength * (1 - materialMix) +
-      orbMaterial.ambientStrength * materialMix;
+    const state = setHeroFractalSceneSettings(
+      coreScene,
+      assets,
+      canvasSurface.size,
+      {
+        camera: HERO_FRACTAL_CAMERA,
+        fractalMaterial,
+        orbMaterial,
+        glass,
+        time: orbTime,
+        view: {
+          ...cameraControls,
+          pointer: [pointerCurrentX, pointerCurrentY],
+        },
+        floorAo,
+        floorGrid: debug.floorGrid,
+        morphDirection,
+        reflectionDebug: debug.view === "reflection",
+      }
+    );
     const environmentCamera = perspectiveCamera({
       fov: 45,
       aspect: canvasSurface.size[0] / Math.max(canvasSurface.size[1], 1),
@@ -494,107 +325,37 @@ export function createHeroFractalRenderer(
       position: ENVIRONMENT_DEBUG_CAMERA_POSITION,
       target: [0, 0, 0],
     });
-    draws.background.set({
-      params: {
-        ...camera.background,
-        fractalScale: glass.fractalScale,
-        orbScale: glass.orbScale,
-        sphereMix: materialMix,
-        ...floorAo,
-      },
-    });
-    const environmentRotation = environmentRotationMatrix(
-      glass.environmentRotation
-    );
-    const glassParams = {
-      viewProjection: camera.viewProjection,
-      model: GLASS_MODEL_MATRIX,
-      cameraPosition: camera.position,
-      meshMin: assets.meshMin,
-      meshMax: assets.meshMax,
-      resolution: canvasSurface.size,
-      fractalScale: innerScale,
-      ior: glass.ior,
-      reflectionStrength: glass.reflectionStrength,
-      backOpacity: glass.backOpacity,
-      absorption: glass.absorption,
-      frostRadius: glass.frostRadius,
-      dispersion: glass.dispersion,
-      iridescenceStrength: glass.iridescenceStrength,
-      iridescenceFrequency: glass.iridescenceFrequency,
-      environmentRotation,
-      environmentExposure: glass.environmentExposure,
-      reflectionDebug: debug.view === "reflection" ? 1 : 0,
-    };
-    // The vertex shader owns the staggered 120-degree Skill turn. The model's
-    // vertical translation starts at zero, preserving the authored fractal
-    // placement, and reaches the configurable optical correction only in orb
-    // mode. The glass shell remains fixed.
-    const fractalModel = scaleTranslationMatrix(innerScale, [
-      0,
-      glass.orbOffsetY * materialMix,
-      0,
-    ]);
-    draws.glassBack.set({
-      params: glassParams,
-      environmentTexture: assets.environmentView,
-      environmentSampler,
-    });
-    draws.glassFront.set({
-      params: glassParams,
-      environmentTexture: assets.environmentView,
-      environmentSampler,
-      sceneTexture: targets.interior,
-      sceneSampler,
-    });
-    draws.fractal.set({
-      params: {
-        viewProjection: camera.viewProjection,
-        model: fractalModel,
-        cameraPosition: camera.position,
-        meshMin: assets.fractalMeshMin,
-        meshMax: assets.fractalMeshMax,
-        sphereMix: shaderSphereMix,
-        time: orbTime,
-        material,
-        environmentRotation,
-        environmentExposure: glass.environmentExposure,
-      },
-      environmentTexture: assets.environmentView,
-      environmentSampler,
-    });
     draws.glassWireframe.set({
       params: {
-        viewProjection: camera.viewProjection,
-        model: glassParams.model,
+        viewProjection: state.viewProjection,
+        model: GLASS_MODEL_MATRIX,
         meshMin: assets.meshMin,
         meshMax: assets.meshMax,
       },
     });
     draws.fractalWireframe.set({
       params: {
-        viewProjection: camera.viewProjection,
-        model: fractalModel,
+        viewProjection: state.viewProjection,
+        model: state.fractalModel,
         meshMin: assets.fractalMeshMin,
         meshMax: assets.fractalMeshMax,
-        sphereMix: shaderSphereMix,
-        time: orbTime,
+        sphereMix: state.sphereMix,
+        time: state.time,
       },
     });
-    effects.present.set({ sceneTexture: targets.interior });
     draws.environmentSphere.set({
       params: {
         viewProjection: environmentCamera.viewProjectionMatrix,
         model: ENVIRONMENT_SPHERE_MODEL,
         cameraPosition: ENVIRONMENT_DEBUG_CAMERA_POSITION,
-        environmentRotation,
+        environmentRotation: state.environmentRotation,
         environmentExposure: glass.environmentExposure,
       },
       environmentTexture: assets.environmentView,
-      environmentSampler,
+      environmentSampler: coreScene.environmentSampler,
     });
     const debugAxesParams = {
-      viewProjection: camera.viewProjection,
+      viewProjection: state.viewProjection,
       resolution: canvasSurface.size,
       lineWidth: 2.5,
       opacity: 0.94,
@@ -608,10 +369,7 @@ export function createHeroFractalRenderer(
     draws.cameraTargetAxes.set({
       params: {
         ...debugAxesParams,
-        model: scaleTranslationMatrix(
-          CAMERA_TARGET_AXES_SCALE,
-          cameraControls.target
-        ),
+        model: modelMatrix(CAMERA_TARGET_AXES_SCALE, cameraControls.target),
         lineWidth: 3.5,
       },
     });
@@ -631,7 +389,6 @@ export function createHeroFractalRenderer(
       });
       return;
     }
-    if (!coreScene) return;
     const finalDebugDraws: Draw[] = [];
     if (debug.wireframe) {
       finalDebugDraws.push(
@@ -640,8 +397,7 @@ export function createHeroFractalRenderer(
       );
     }
     if (debug.coloredAxes) finalDebugDraws.push(currentDraws.worldAxes);
-    if (debug.cameraTarget)
-      finalDebugDraws.push(currentDraws.cameraTargetAxes);
+    if (debug.cameraTarget) finalDebugDraws.push(currentDraws.cameraTargetAxes);
     renderHeroFractalScene(
       currentGpu,
       currentSurface,
@@ -650,11 +406,19 @@ export function createHeroFractalRenderer(
     );
   };
 
+  const renderHero = () => {
+    try {
+      drawHero();
+    } catch (error) {
+      fail(error);
+    }
+  };
+
   const requestMaterialDraw = () => {
     if (materialFrame) return;
     materialFrame = requestAnimationFrame(() => {
       materialFrame = 0;
-      drawHero();
+      renderHero();
     });
   };
 
@@ -674,7 +438,7 @@ export function createHeroFractalRenderer(
     )
       return;
     orbTime = (time - orbEpoch) * 0.001;
-    drawHero();
+    renderHero();
     orbFrame = requestAnimationFrame(animateOrb);
   };
 
@@ -701,7 +465,7 @@ export function createHeroFractalRenderer(
     glass.sphereMix =
       morphStartMix + (morphTargetMix - morphStartMix) * easedProgress;
     if (glass.sphereMix > 0) orbTime = (time - orbEpoch) * 0.001;
-    drawHero();
+    renderHero();
     if (progress < 1) {
       morphFrame = requestAnimationFrame(animateSphereMorph);
     } else {
@@ -740,7 +504,7 @@ export function createHeroFractalRenderer(
     const remainingY = Math.abs(pointerTargetY - pointerCurrentY);
     if (remainingX < 0.0001) pointerCurrentX = pointerTargetX;
     if (remainingY < 0.0001) pointerCurrentY = pointerTargetY;
-    if (!morphFrame && !orbFrame) drawHero();
+    if (!morphFrame && !orbFrame) renderHero();
     if (remainingX >= 0.0001 || remainingY >= 0.0001) {
       cameraFrame = requestAnimationFrame(animateCamera);
     }
@@ -781,15 +545,19 @@ export function createHeroFractalRenderer(
   const resizeAndDraw = () => {
     resizeFrame = 0;
     if (disposed || !canvasSurface) return;
-    const rect = options.canvas.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return;
-    const dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
-    canvasSurface.resize([
-      Math.max(1, Math.round(rect.width * dpr)),
-      Math.max(1, Math.round(rect.height * dpr)),
-    ]);
-    targets?.interior.resize(canvasSurface.size);
-    drawHero();
+    try {
+      const rect = options.canvas.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      const dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+      canvasSurface.resize([
+        Math.max(1, Math.round(rect.width * dpr)),
+        Math.max(1, Math.round(rect.height * dpr)),
+      ]);
+      if (coreScene) resizeHeroFractalScene(coreScene, canvasSurface.size);
+      drawHero();
+    } catch (error) {
+      fail(error);
+    }
   };
 
   const requestResize = () => {
@@ -809,16 +577,10 @@ export function createHeroFractalRenderer(
     if (materialFrame) cancelAnimationFrame(materialFrame);
     if (cameraFrame) cancelAnimationFrame(cameraFrame);
     if (morphFrame) cancelAnimationFrame(morphFrame);
-    stopOrbAnimation();
-    resizeFrame = 0;
-    materialFrame = 0;
-    cameraFrame = 0;
-    morphFrame = 0;
-    orbFrame = 0;
+    if (orbFrame) cancelAnimationFrame(orbFrame);
+    abort.abort();
     observer?.disconnect();
-    observer = undefined;
     visibilityObserver?.disconnect();
-    visibilityObserver = undefined;
     window.removeEventListener("resize", onWindowResize);
     window.removeEventListener("pointermove", onPointerMove);
     window.removeEventListener("pointerout", onPointerOut);
@@ -828,24 +590,17 @@ export function createHeroFractalRenderer(
       onDocumentVisibilityChange
     );
     debugGui?.destroy();
-    debugGui = undefined;
-    draws = undefined;
-    effects = undefined;
-    if (coreScene) destroyHeroFractalScene(coreScene);
-    coreScene = undefined;
-    targets = undefined;
-    environmentSphereGeometry?.destroy();
-    environmentSphereGeometry = undefined;
-    debugAxesGeometry?.destroy();
-    debugAxesGeometry = undefined;
-    assets?.dispose();
-    assets = undefined;
-    sceneSampler = undefined;
-    environmentSampler = undefined;
-    canvasSurface?.dispose();
-    canvasSurface = undefined;
     gpu?.dispose();
-    gpu = undefined;
+  };
+
+  const fail = (error: unknown): never => {
+    failureStarted = true;
+    try {
+      dispose();
+    } catch {
+      // A cleanup failure must not hide the rendering failure.
+    }
+    throw error;
   };
 
   const initialize = async () => {
@@ -861,13 +616,10 @@ export function createHeroFractalRenderer(
     }
     gpu = nextGpu;
     canvasSurface = surface(gpu, options.canvas, { dpr: [1, 2] });
-    const loadedAssets = await loadHeroGlassAssets(gpu);
-    if (disposed) {
-      loadedAssets.dispose();
-      return;
-    }
+    const loadedAssets = await loadHeroGlassAssets(gpu, abort.signal);
+    if (disposed) return;
     assets = loadedAssets;
-    environmentSphereGeometry = geometry(
+    const environmentSphereGeometry = geometry(
       gpu,
       sphere({
         radius: 0.82,
@@ -875,21 +627,16 @@ export function createHeroFractalRenderer(
         heightSegments: 24,
       })
     );
-    debugAxesGeometry = createDebugAxesGeometry(gpu);
+    const debugAxesGeometry = createDebugAxesGeometry(gpu);
     const loadedScene = await createHeroFractalScene(
       gpu,
       canvasSurface,
       assets,
       "homepage-light"
     );
-    if (disposed) {
-      destroyHeroFractalScene(loadedScene);
-      return;
-    }
+    if (disposed) return;
     coreScene = loadedScene;
-    effects = coreScene.effects;
     draws = {
-      ...coreScene.draws,
       glassWireframe: draw(gpu, {
         shader: heroGlassWireframeWgsl,
         geometry: assets.wireframeGeometry,
@@ -931,30 +678,12 @@ export function createHeroFractalRenderer(
         label: "homepage-light-camera-target-axes-debug",
       }),
     };
-    targets = coreScene.targets;
-    sceneSampler = coreScene.sceneSampler;
-    environmentSampler = coreScene.environmentSampler;
     await Promise.all([
-      compileWithLabel(
-        "glass wireframe",
-        draws.glassWireframe.compile({ colors: [canvasSurface.format] })
-      ),
-      compileWithLabel(
-        "fractal wireframe",
-        draws.fractalWireframe.compile({ colors: [canvasSurface.format] })
-      ),
-      compileWithLabel(
-        "environment sphere",
-        draws.environmentSphere.compile({ colors: [canvasSurface.format] })
-      ),
-      compileWithLabel(
-        "world axes",
-        draws.worldAxes.compile({ colors: [canvasSurface.format] })
-      ),
-      compileWithLabel(
-        "camera target axes",
-        draws.cameraTargetAxes.compile({ colors: [canvasSurface.format] })
-      ),
+      draws.glassWireframe.compile({ colors: [canvasSurface.format] }),
+      draws.fractalWireframe.compile({ colors: [canvasSurface.format] }),
+      draws.environmentSphere.compile({ colors: [canvasSurface.format] }),
+      draws.worldAxes.compile({ colors: [canvasSurface.format] }),
+      draws.cameraTargetAxes.compile({ colors: [canvasSurface.format] }),
     ]);
     if (disposed) return;
     observer = new ResizeObserver(requestResize);
@@ -976,6 +705,7 @@ export function createHeroFractalRenderer(
     if (disposed) return;
     debugGui = createMaterialDebugGui(
       GuiConstructor,
+      options.canvas.parentElement ?? undefined,
       cameraControls,
       fractalMaterial,
       orbMaterial,
@@ -987,37 +717,12 @@ export function createHeroFractalRenderer(
   };
 
   const ready = initialize().catch((error: unknown) => {
+    if (failureStarted) throw error;
     if (disposed) return;
-    if (!reportedError) {
-      reportedError = true;
-      options.onError?.(error);
-    }
-    dispose();
-    throw error;
+    fail(error);
   });
 
   return { ready, setSphereMix, dispose };
-}
-
-async function compileWithLabel(
-  label: string,
-  compilation: Promise<unknown>
-): Promise<void> {
-  try {
-    await compilation;
-  } catch (error) {
-    const details: string[] = [];
-    let current: unknown = error;
-    while (current instanceof Error) {
-      details.push(current.message);
-      current = current.cause;
-    }
-    if (current !== undefined) details.push(String(current));
-    const detail = details.join(" Caused by: ");
-    throw new Error(`Hero ${label} pipeline compilation failed: ${detail}`, {
-      cause: error,
-    });
-  }
 }
 
 function createDebugAxesGeometry(gpu: Gpu): Geometry {
@@ -1057,174 +762,4 @@ function createDebugAxesGeometry(gpu: Gpu): Geometry {
       },
     ],
   });
-}
-
-function orbitCameraPosition(
-  position: readonly [number, number, number],
-  target: readonly [number, number, number],
-  up: readonly [number, number, number],
-  pointer: readonly [number, number],
-  maxRotationDegrees: number
-): readonly [number, number, number] {
-  if (maxRotationDegrees === 0 || (pointer[0] === 0 && pointer[1] === 0)) {
-    return position;
-  }
-
-  const maxRotation = (maxRotationDegrees * Math.PI) / 180;
-  const upAxis = normalize3(up, [0, 1, 0]);
-  const offset = subtract3(position, target);
-  const yaw = -pointer[0] * maxRotation;
-  const yawedOffset = rotateAroundAxis(offset, upAxis, yaw);
-  const forward = scale3(yawedOffset, -1);
-  const rightAxis = normalize3(cross3(forward, upAxis), [0, 0, 1]);
-  const pitch = pointer[1] * maxRotation;
-  const orbitOffset = rotateAroundAxis(yawedOffset, rightAxis, pitch);
-  return add3(target, orbitOffset);
-}
-
-function rotateAroundAxis(
-  vector: readonly [number, number, number],
-  axis: readonly [number, number, number],
-  angle: number
-): [number, number, number] {
-  const cosine = Math.cos(angle);
-  const sine = Math.sin(angle);
-  const projection = dot3(axis, vector) * (1 - cosine);
-  const perpendicular = cross3(axis, vector);
-  return [
-    vector[0] * cosine + perpendicular[0] * sine + axis[0] * projection,
-    vector[1] * cosine + perpendicular[1] * sine + axis[1] * projection,
-    vector[2] * cosine + perpendicular[2] * sine + axis[2] * projection,
-  ];
-}
-
-function normalize3(
-  vector: readonly [number, number, number],
-  fallback: readonly [number, number, number]
-): [number, number, number] {
-  const length = Math.hypot(vector[0], vector[1], vector[2]);
-  if (length < 0.000001) return [...fallback];
-  return [vector[0] / length, vector[1] / length, vector[2] / length];
-}
-
-function subtract3(
-  a: readonly [number, number, number],
-  b: readonly [number, number, number]
-): [number, number, number] {
-  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-}
-
-function scale3(
-  vector: readonly [number, number, number],
-  scale: number
-): [number, number, number] {
-  return [vector[0] * scale, vector[1] * scale, vector[2] * scale];
-}
-
-function cross3(
-  a: readonly [number, number, number],
-  b: readonly [number, number, number]
-): [number, number, number] {
-  return [
-    a[1] * b[2] - a[2] * b[1],
-    a[2] * b[0] - a[0] * b[2],
-    a[0] * b[1] - a[1] * b[0],
-  ];
-}
-
-function dot3(
-  a: readonly [number, number, number],
-  b: readonly [number, number, number]
-): number {
-  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-function rotateCamera(
-  vector: readonly [number, number, number],
-  rotation: readonly [number, number, number]
-): [number, number, number] {
-  const cz = Math.cos(rotation[2]);
-  const sz = Math.sin(rotation[2]);
-  const rolled: [number, number, number] = [
-    cz * vector[0] - sz * vector[1],
-    sz * vector[0] + cz * vector[1],
-    vector[2],
-  ];
-  const cx = Math.cos(rotation[0]);
-  const sx = Math.sin(rotation[0]);
-  const pitched: [number, number, number] = [
-    rolled[0],
-    cx * rolled[1] + sx * rolled[2],
-    -sx * rolled[1] + cx * rolled[2],
-  ];
-  const cy = Math.cos(rotation[1]);
-  const sy = Math.sin(rotation[1]);
-  return [
-    cy * pitched[0] + sy * pitched[2],
-    pitched[1],
-    -sy * pitched[0] + cy * pitched[2],
-  ];
-}
-
-function add3(
-  a: readonly [number, number, number],
-  b: readonly [number, number, number]
-): [number, number, number] {
-  return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
-}
-
-function scaleTranslationMatrix(
-  scale: number,
-  translation: readonly [number, number, number]
-): Float32Array {
-  return new Float32Array([
-    scale,
-    0,
-    0,
-    0,
-    0,
-    scale,
-    0,
-    0,
-    0,
-    0,
-    scale,
-    0,
-    translation[0],
-    translation[1],
-    translation[2],
-    1,
-  ]);
-}
-
-function environmentRotationMatrix(
-  rotationDegrees: readonly [number, number, number]
-): Float32Array {
-  const toRadians = -Math.PI / 180;
-  const rotation = rotationDegrees.map((value) => value * toRadians);
-  const cx = Math.cos(rotation[0]);
-  const sx = Math.sin(rotation[0]);
-  const cy = Math.cos(rotation[1]);
-  const sy = Math.sin(rotation[1]);
-  const cz = Math.cos(rotation[2]);
-  const sz = Math.sin(rotation[2]);
-
-  return new Float32Array([
-    cz * cy,
-    sz * cy,
-    -sy,
-    0,
-    cz * sy * sx - sz * cx,
-    sz * sy * sx + cz * cx,
-    cy * sx,
-    0,
-    cz * sy * cx + sz * sx,
-    sz * sy * cx - cz * sx,
-    cy * cx,
-    0,
-    0,
-    0,
-    0,
-    1,
-  ]);
 }

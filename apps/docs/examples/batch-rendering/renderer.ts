@@ -1,18 +1,165 @@
-import type { Effect, Gpu, Surface, Target } from 'vgpu';
-import { clock, frameLoop, surface, target } from 'vgpu';
+import {
+  clock,
+  frameLoop,
+  surface,
+  target,
+  type Effect,
+  type Gpu,
+  type Surface,
+  type Target,
+} from "vgpu";
 
-import type { BrowserRendererOptions, ExampleRenderer, RenderSize } from '../../lib/example-renderer';
-import { createBlit, createScene, renderScene, setBlitSource, type BatchScene } from './scene-pipeline';
+import {
+  createBlit,
+  createScene,
+  renderScene,
+  type BatchScene,
+} from "./scene-pipeline";
 
-export function createRenderer(options: BrowserRendererOptions): ExampleRenderer {
-  let disposed = false; let gpu: Gpu | undefined; let canvasSurface: Surface | undefined; let colorTarget: Target | undefined; let blit: Effect | undefined; let scene: BatchScene | undefined; let loop: { stop(): void } | undefined; let observer: ResizeObserver | undefined; let resizeFrame = 0; let pendingSize: RenderSize | undefined; let lastDpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio; let reportedError = false;
-  const applyResize = () => { resizeFrame = 0; const size = pendingSize; pendingSize = undefined; if (disposed || !size || !colorTarget || !blit || !canvasSurface) return; colorTarget.resize([Math.max(1, Math.round(size.width * size.dpr)), Math.max(1, Math.round(size.height * size.dpr))]); setBlitSource(blit, colorTarget, canvasSurface); };
-  const resize = (size: RenderSize) => { if (disposed || size.width <= 0 || size.height <= 0) return; pendingSize = size; if (!resizeFrame) resizeFrame = requestAnimationFrame(applyResize); };
-  const measure = () => { const rect = options.canvas.getBoundingClientRect(); resize({ width: rect.width, height: rect.height, dpr: Math.min(2, Math.max(1, window.devicePixelRatio || 1)) }); };
-  const onWindowResize = () => { if (window.devicePixelRatio === lastDpr) return; lastDpr = window.devicePixelRatio; measure(); };
-  const dispose = () => { if (disposed) return; disposed = true; loop?.stop(); loop = undefined; if (resizeFrame) cancelAnimationFrame(resizeFrame); resizeFrame = 0; pendingSize = undefined; observer?.disconnect(); observer = undefined; if (typeof window !== 'undefined') window.removeEventListener('resize', onWindowResize); scene?.geometry.destroy(); scene = undefined; (colorTarget as { destroy?: () => void } | undefined)?.destroy?.(); colorTarget = undefined; canvasSurface?.dispose(); canvasSurface = undefined; gpu?.dispose(); gpu = undefined; };
-  const initialize = async () => { const { init } = await import('vgpu'); if (disposed) return; const nextGpu = await init(); if (disposed) { nextGpu.dispose(); return; } gpu = nextGpu; canvasSurface = surface(gpu, options.canvas, { dpr: [1, 2] }); colorTarget = target(gpu, { size: canvasSurface.size, format: 'rgba8unorm', depth: true }); blit = createBlit(gpu, colorTarget, canvasSurface); const nextScene = await createScene(gpu, colorTarget); if (disposed) { nextScene.geometry.destroy(); return; } scene = nextScene; observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure); observer?.observe(options.canvas); window.addEventListener('resize', onWindowResize); measure(); const gpuClock = clock(gpu); loop = frameLoop(gpu, (currentFrame) => renderScene(currentFrame, scene!, blit!, colorTarget!, canvasSurface!, gpuClock.time)); };
-  function handleFailure(error: unknown): void { if (disposed) return; if (!reportedError) { reportedError = true; try { options.onError?.(error); } catch {} } dispose(); }
-  const ready = initialize().catch((error: unknown) => { if (disposed) return; handleFailure(error); throw error; });
-  return { ready, invalidate() {}, resize, dispose };
+type RenderState = Readonly<{ colorTarget: Target; blit: Effect }>;
+
+export function createRenderer({
+  canvas,
+}: {
+  readonly canvas: HTMLCanvasElement;
+}) {
+  let disposed = false;
+  let failed = false;
+  let gpu: Gpu | undefined;
+  let output: Surface | undefined;
+  let scene: BatchScene | undefined;
+  let state: RenderState | undefined;
+  let loop: { stop(): void } | undefined;
+  let unsubscribeResize: (() => void) | undefined;
+
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    runCleanups([
+      () => loop?.stop(),
+      () => unsubscribeResize?.(),
+      () => gpu?.dispose(),
+    ]);
+  };
+
+  const fail = (error: unknown): never => {
+    failed = true;
+    try {
+      dispose();
+    } catch {
+      // Teardown must not replace the live or initialization failure.
+    }
+    throw error;
+  };
+
+  const guard = <T>(work: () => T): T => {
+    try {
+      return work();
+    } catch (error) {
+      return fail(error);
+    }
+  };
+
+  const replaceTarget = (size: readonly [number, number]) => {
+    if (!gpu || !output || !state || sameSize(size, state.colorTarget.size))
+      return;
+    const previous = state;
+    const colorTarget = target(gpu, {
+      size,
+      format: "rgba8unorm",
+      depth: true,
+    });
+    try {
+      const blit = createBlit(gpu, colorTarget, output);
+      blit.compileSync({ colors: [output.format] });
+      state = { colorTarget, blit };
+    } catch (error) {
+      try {
+        destroyTarget(colorTarget);
+      } catch {
+        // Candidate cleanup must not replace the resize failure.
+      }
+      throw error;
+    }
+    destroyTarget(previous.colorTarget);
+  };
+
+  const initialize = async () => {
+    const { init } = await import("vgpu");
+    if (disposed) return;
+    const nextGpu = await init();
+    if (disposed) {
+      try {
+        nextGpu.dispose();
+      } catch {
+        // Intentional stale initialization is quiet.
+      }
+      return;
+    }
+
+    gpu = nextGpu;
+    output = surface(gpu, canvas, { dpr: [1, 2] });
+    const colorTarget = target(gpu, {
+      size: output.size,
+      format: "rgba8unorm",
+      depth: true,
+    });
+    const blit = createBlit(gpu, colorTarget, output);
+    const prepared = await Promise.allSettled([
+      Promise.resolve().then(() => createScene(gpu!, colorTarget)),
+      Promise.resolve().then(() => blit.compile({ colors: [output!.format] })),
+    ]);
+    if (prepared[0].status === "fulfilled") scene = prepared[0].value;
+    const preparationFailure = prepared.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected"
+    );
+    if (preparationFailure) throw preparationFailure.reason;
+    if (disposed) return;
+    state = { colorTarget, blit };
+
+    unsubscribeResize = output.onResize(({ width, height }) =>
+      guard(() => replaceTarget([width, height]))
+    );
+    const time = clock(gpu);
+    loop = frameLoop(gpu, (currentFrame) =>
+      guard(() => {
+        if (disposed || !scene || !state || !output) return;
+        renderScene(
+          currentFrame,
+          scene,
+          state.blit,
+          state.colorTarget,
+          output,
+          time.time
+        );
+      })
+    );
+  };
+
+  const ready = initialize().catch((error: unknown) => {
+    if (disposed && !failed) return;
+    fail(error);
+  });
+
+  return { ready, dispose };
+}
+
+function sameSize(a: readonly number[], b: readonly number[]): boolean {
+  return a[0] === b[0] && a[1] === b[1];
+}
+
+function destroyTarget(value: Target): void {
+  (value as Target & { destroy(): void }).destroy();
+}
+
+function runCleanups(cleanups: readonly (() => void)[]): void {
+  const errors: unknown[] = [];
+  for (const cleanup of cleanups) {
+    try {
+      cleanup();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length) throw errors[0];
 }

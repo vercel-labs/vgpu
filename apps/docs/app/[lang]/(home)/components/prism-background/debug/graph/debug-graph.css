@@ -1,0 +1,431 @@
+.prism-debug-graph {
+  --xy-background-color: transparent;
+  --xy-edge-stroke: rgba(255, 255, 255, 0.48);
+  --xy-edge-label-background-color: rgba(18, 18, 18, 0.92);
+  --xy-edge-label-color: rgba(255, 255, 255, 0.68);
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  overflow: hidden;
+  background: var(--xy-background-color);
+  backdrop-filter: none;
+  color: white;
+}
+
+.prism-debug-graph__title {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.875rem;
+  z-index: 5;
+  display: grid;
+  pointer-events: none;
+  font: 500 0.72rem/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.prism-debug-graph__title span {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.62rem;
+  font-weight: 400;
+}
+
+.prism-debug-graph__actions {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.75rem;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font: 500 0.62rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.prism-debug-graph__selectors {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.prism-debug-graph__selectors label {
+  display: grid;
+  grid-template-columns: auto minmax(5rem, auto);
+  align-items: center;
+  gap: 0.35rem;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.prism-debug-graph__selectors select {
+  height: 2rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 0.35rem;
+  outline: none;
+  background: rgba(24, 24, 24, 0.94);
+  color: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  padding: 0.35rem 1.6rem 0.35rem 0.5rem;
+  font: inherit;
+}
+
+.prism-debug-graph__selectors select:hover {
+  border-color: rgba(255, 255, 255, 0.56);
+  color: white;
+}
+
+.prism-debug-graph__selectors select:focus-visible {
+  outline: 2px solid #e5e5e5;
+  outline-offset: 2px;
+}
+
+.prism-debug-graph__selectors small {
+  grid-column: 2;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 0.55rem;
+  white-space: nowrap;
+}
+
+.prism-debug-graph__actions button {
+  min-height: 2rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 0.35rem;
+  background: rgba(24, 24, 24, 0.94);
+  color: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  padding: 0.35rem 0.6rem;
+  font: inherit;
+}
+
+.prism-debug-graph__actions button:hover {
+  border-color: rgba(255, 255, 255, 0.56);
+  color: white;
+}
+
+.prism-debug-graph__actions button:disabled {
+  border-color: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.36);
+  cursor: default;
+}
+
+.prism-debug-graph__actions .prism-debug-graph__icon-button {
+  display: grid;
+  width: 2rem;
+  padding: 0;
+  place-items: center;
+}
+
+.prism-debug-graph__actions button:focus-visible {
+  outline: 2px solid #e5e5e5;
+  outline-offset: 2px;
+}
+
+.prism-debug-graph__actions span {
+  max-width: 16rem;
+  color: #d4d4d4;
+  line-height: 1.35;
+}
+
+.prism-debug-graph[data-popout="true"] {
+  --xy-background-color: #000;
+  --xy-edge-stroke: rgba(255, 255, 255, 0.48);
+}
+
+.prism-debug-graph[data-mode="light"]:not([data-popout="true"]) {
+  --xy-edge-stroke: rgba(0, 0, 0, 0.62);
+}
+
+.prism-debug-node {
+  width: 17.5rem;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 0.5rem;
+  background: rgba(24, 24, 24, 0.96);
+  box-shadow: 0 0.5rem 1.25rem rgba(0, 0, 0, 0.24);
+  font: 500 0.68rem/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.prism-debug-node[data-kind="asset"] {
+  --prism-debug-kind: #a3a3a3;
+}
+
+.prism-debug-node[data-kind="geometry"] {
+  --prism-debug-kind: #93c5fd;
+}
+
+.prism-debug-node[data-kind="view"] {
+  --prism-debug-kind: #d4d4d4;
+}
+
+.prism-debug-node[data-kind="draw"] {
+  --prism-debug-kind: #f0abfc;
+}
+
+.prism-debug-node[data-kind="pass"] {
+  --prism-debug-kind: #fbbf24;
+}
+
+.prism-debug-node[data-kind="target"] {
+  --prism-debug-kind: #67e8f9;
+}
+
+.prism-debug-node[data-kind="output"] {
+  --prism-debug-kind: #86efac;
+}
+
+.prism-debug-node[data-kind="state"] {
+  --prism-debug-kind: #c4b5fd;
+}
+
+.prism-debug-node[data-kind="control"] {
+  --prism-debug-kind: #c5c5c5;
+}
+
+.prism-debug-node header,
+.prism-debug-node footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.45rem 0.55rem;
+}
+
+.prism-debug-node__controls {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  color-scheme: dark;
+  padding: 0.45rem 0.55rem 0.55rem;
+}
+
+.prism-debug-node__details {
+  display: grid;
+  gap: 0.28rem;
+  margin: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.45rem 0.55rem;
+  font-size: 0.58rem;
+}
+
+.prism-debug-node__details div {
+  display: grid;
+  grid-template-columns: 4.2rem minmax(0, 1fr);
+  gap: 0.4rem;
+}
+
+.prism-debug-node__details dt {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.prism-debug-node__details dd {
+  min-width: 0;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.76);
+  overflow-wrap: anywhere;
+}
+
+.prism-debug-node__controls fieldset {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.prism-debug-node__controls fieldset + fieldset {
+  margin-top: 0.55rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 0.5rem;
+}
+
+.prism-debug-node__controls legend {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 0.55rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.prism-debug-node__controls legend span {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  color: #d4d4d4;
+  padding: 0.05rem 0.28rem;
+}
+
+.prism-shadow-curve {
+  display: block;
+  width: 100%;
+  height: 5.5rem;
+  margin: 0.15rem 0 0.45rem;
+  overflow: visible;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.25rem;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.prism-shadow-curve path,
+.prism-shadow-curve line,
+.prism-shadow-curve polyline {
+  vector-effect: non-scaling-stroke;
+}
+
+.prism-shadow-curve__grid {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.07);
+  stroke-width: 1;
+}
+
+.prism-shadow-curve__reference {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.2);
+  stroke-dasharray: 3 3;
+  stroke-width: 1;
+}
+
+.prism-shadow-curve__pivot {
+  stroke: rgba(255, 255, 255, 0.24);
+  stroke-dasharray: 2 3;
+  stroke-width: 1;
+}
+
+.prism-shadow-curve__line {
+  fill: none;
+  stroke: #fff;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.prism-debug-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 4.5rem;
+  align-items: center;
+  gap: 0.18rem 0.45rem;
+  padding-block: 0.22rem;
+}
+
+.prism-debug-control > span {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.76);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prism-debug-control input,
+.prism-debug-control select {
+  min-width: 0;
+  font: inherit;
+}
+
+.prism-debug-control input[type="range"] {
+  width: 100%;
+  accent-color: var(--prism-debug-kind);
+}
+
+.prism-debug-control__number,
+.prism-debug-control select {
+  height: 1.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 0.25rem;
+  outline: none;
+  background: rgba(0, 0, 0, 0.28);
+  color: rgba(255, 255, 255, 0.86);
+  padding-inline: 0.3rem;
+}
+
+.prism-debug-control__number:focus,
+.prism-debug-control select:focus {
+  border-color: color-mix(in srgb, var(--prism-debug-kind), white 16%);
+}
+
+.prism-debug-control select {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.prism-debug-control input[type="color"] {
+  width: 100%;
+  height: 1.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 0.25rem;
+  background: transparent;
+  padding: 0;
+}
+
+.prism-debug-control output {
+  color: rgba(255, 255, 255, 0.56);
+  text-align: right;
+}
+
+.prism-debug-node header span {
+  border: 1px solid color-mix(in srgb, var(--prism-debug-kind), transparent 45%);
+  border-radius: 999px;
+  color: var(--prism-debug-kind);
+  padding: 0.08rem 0.3rem;
+  font-size: 0.54rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.prism-debug-node footer {
+  justify-content: flex-end;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 0.56rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.prism-debug-node__preview {
+  position: relative;
+  display: grid;
+  aspect-ratio: 16 / 9;
+  place-items: center;
+  overflow: hidden;
+  border-block: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.035) 25%,
+        transparent 25%
+      )
+      0 0 / 12px 12px,
+    linear-gradient(-45deg, rgba(255, 255, 255, 0.035) 25%, transparent 25%) 0
+      6px / 12px 12px,
+    #101010;
+}
+
+.prism-debug-node__preview span {
+  color: rgba(255, 255, 255, 0.28);
+  font-size: 0.58rem;
+}
+
+.prism-debug-node__preview canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.prism-debug-node__handle {
+  width: 0.5rem;
+  height: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: #181818;
+}
+
+.prism-debug-graph .react-flow__edge-text {
+  font: 500 0.55rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.prism-debug-graph .react-flow__edge-path {
+  stroke-width: 1.5;
+}
+
+.prism-debug-graph .react-flow__controls {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.35rem;
+}
+
+.prism-debug-graph .react-flow__controls-button {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+  background: #1a1a1a;
+  color: rgba(255, 255, 255, 0.72);
+}

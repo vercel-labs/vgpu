@@ -1,11 +1,16 @@
 import type { Gpu, Target } from 'vgpu';
 import { frame } from 'vgpu';
 
-import type { ThumbnailOptions } from '../../lib/example-renderer';
 import { createHeroRenderer } from './scene-renderer';
 import { DEFAULT_BRUSH } from './settings';
 import { brushState, heroStateForActiveClick } from './sim-sizing';
 import { DEFAULT_TRIANGLE_LED_CONTROLS } from './types';
+
+interface ThumbnailOptions {
+  readonly warmupFrames?: number;
+  readonly time?: number;
+  readonly dt?: number;
+}
 
 export async function renderThumbnail(
   gpu: Gpu,

@@ -153,7 +153,7 @@ test("unwraps vgpu and raw binding resources", () => {
   const vgpuBuffer = new Buffer({} as Device, rawBuffer, { size: 16, usage: ["uniform"] });
   const view = { view: true } as unknown as GPUTextureView;
   const rawTexture = { createView: () => view, destroy() {} } as unknown as GPUTexture;
-  const vgpuTexture = new Texture({} as Device, rawTexture, { size: [1, 1], format: "rgba8unorm", usage: ["texture_binding"] });
+  const vgpuTexture = new Texture({} as Device, rawTexture, { kind: "2d", size: [1, 1], format: "rgba8unorm", usage: ["texture_binding"] });
   const rawBinding = { buffer: rawBuffer, offset: 4 } as GPUBufferBinding;
   const sampler = { sampler: true } as unknown as GPUSampler;
 

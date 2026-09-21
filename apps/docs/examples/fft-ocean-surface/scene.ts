@@ -1,54 +1,33 @@
-// Environment-agnostic FFT ocean scene. It holds the storage buffers, the four
-// compute passes (spectrum init/update + the two IFFT passes), the skydome and
-// ocean draws, and the tone-mapping composite. The vgpu runtime functions are
-// injected as `api` so the exact same setup runs against `vgpu` (browser) and
-// `vgpu/node` (headless render + tests). WGSL sources are injected too.
-//
-// All the knobs a user tweaks live in `scene.params`. Render/sun params are read
-// live every frame; the spectrum params (wind/amplitude/patch) require rebuilding
-// h0, so call `rebuildSpectrum()` after changing them.
-
+import {
+  compute,
+  draw,
+  effect,
+  geometry,
+  sampler,
+  storage,
+  target,
+  type Gpu,
+} from "vgpu";
 import { sphere } from "vgpu/scene";
 
-export type OceanApi = {
-  compute: typeof import("vgpu").compute;
-  storage: typeof import("vgpu").storage;
-  draw: typeof import("vgpu").draw;
-  geometry: typeof import("vgpu").geometry;
-  effect: typeof import("vgpu").effect;
-  target: typeof import("vgpu").target;
-  sampler: typeof import("vgpu").sampler;
+import bakeShader from "./bake.wgsl";
+import compositeWgsl from "./composite.wgsl";
+import fftColWgsl from "./fft-col.wgsl";
+import fftRowWgsl from "./fft-row.wgsl";
+import oceanSurfaceWgsl from "./ocean-surface.wgsl";
+import skydomeWgsl from "./skydome.wgsl";
+import spectrumInitWgsl from "./spectrum-init.wgsl";
+import spectrumUpdateWgsl from "./spectrum-update.wgsl";
+
+export const OCEAN_CAMERA = {
+  fov: 48,
+  near: 1,
+  far: 8000,
+  position: [0, 24, 128] as const,
+  target: [0, 5, 0] as const,
 };
 
-type Gpu = Parameters<OceanApi["compute"]>[0];
-type ShaderSrc = Parameters<OceanApi["compute"]>[1];
-
-export type OceanShaders = {
-  spectrumInit: ShaderSrc;
-  spectrumUpdate: ShaderSrc;
-  fftRow: ShaderSrc;
-  fftCol: ShaderSrc;
-  bake: ShaderSrc;
-  oceanSurface: ShaderSrc;
-  skydome: ShaderSrc;
-  composite: ShaderSrc;
-};
-
-/** Everything the lil-gui panel drives. */
-export interface OceanParams {
-  windSpeed: number; // m/s (spectrum)
-  windAngle: number; // degrees (spectrum)
-  amplitude: number; // Phillips amplitude (spectrum)
-  patchSize: number; // meters per FFT tile (spectrum + render tiling)
-  heightScale: number; // vertical displacement gain (render)
-  choppyScale: number; // horizontal displacement gain (render)
-  foamScale: number; // foam Jacobian threshold (render)
-  sunElevation: number; // degrees above horizon (sky)
-  sunAzimuth: number; // degrees (sky)
-  timeScale: number; // simulation speed multiplier
-}
-
-export const DEFAULT_PARAMS: OceanParams = {
+export const DEFAULT_PARAMS = {
   windSpeed: 24,
   windAngle: 18,
   amplitude: 4,
@@ -61,197 +40,251 @@ export const DEFAULT_PARAMS: OceanParams = {
   timeScale: 1,
 };
 
-export interface OceanOptions {
-  size: readonly [number, number];
-  worldSize?: number;
-  skyRadius?: number;
-  params?: Partial<OceanParams>;
-  clear?: readonly [number, number, number, number];
-}
+export type OceanParams = typeof DEFAULT_PARAMS;
+type Destroyable = { destroy(): void };
+type Size = readonly [number, number];
 
 const N = 256;
-const CPLX_BYTES = N * N * 2 * 4; // array<vec2f>
-const VEC4_BYTES = N * N * 4 * 4; // array<vec4f>
-
-// Procedural ocean grid resolution (cells per side). 6 vertices per cell, no
-// vertex buffer, so this is not capped by 16-bit indices. Sent to the shader as
-// the `GRID` override to stay in sync with the draw's vertex count.
-const OCEAN_GRID = 512;
-
+const COMPLEX_BYTES = N * N * 2 * 4;
+const VEC4_BYTES = N * N * 4 * 4;
+const GRID = 512;
+const WORLD_SIZE = 1000;
+const SKY_RADIUS = 6000;
 const DEG = Math.PI / 180;
+const CLEAR = [0.02, 0.02, 0.04, 1] as const;
 
-export interface OceanScene {
-  readonly params: OceanParams;
-  /** Recompute the time-independent spectrum h0 (after wind/amplitude/patch changes). */
-  rebuildSpectrum(): void;
-  /** Advance the simulation by `dt` seconds (scaled by params.timeScale) and run the IFFT. */
-  simulate(dt: number): void;
-  /** Push camera + live render/sun params into the ocean and skydome uniforms. */
-  updateCamera(viewProj: Float32Array, camPos: Float32Array): void;
-  resize(size: readonly [number, number]): void;
-  dispose(): void;
-  readonly hdr: ReturnType<OceanApi["target"]>;
-  readonly skydome: ReturnType<OceanApi["draw"]>;
-  readonly ocean: ReturnType<OceanApi["draw"]>;
-  readonly composite: ReturnType<OceanApi["effect"]>;
-  readonly clear: readonly [number, number, number, number];
-}
-
-export function buildOcean(
-  gpu: Gpu,
-  api: OceanApi,
-  shaders: OceanShaders,
-  opts: OceanOptions,
-): OceanScene {
-  const worldSize = opts.worldSize ?? 1000;
-  const skyRadius = opts.skyRadius ?? 6000;
-  const clear = opts.clear ?? [0.02, 0.02, 0.04, 1];
-  const params: OceanParams = { ...DEFAULT_PARAMS, ...opts.params };
-
-  const windDir = (): [number, number] => {
-    const a = params.windAngle * DEG;
-    return [Math.cos(a), Math.sin(a)];
+export function buildOcean(gpu: Gpu, size: Size) {
+  const resources = new Set<object>();
+  const own = <T extends object>(resource: T): T => {
+    resources.add(resource);
+    return resource;
   };
-  const sunDir = (): [number, number, number] => {
-    const el = params.sunElevation * DEG;
-    const az = params.sunAzimuth * DEG;
-    return [Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az)];
+  const release = (resource: object): void => {
+    resources.delete(resource);
+    (resource as Destroyable).destroy();
   };
-  const simUniform = (time: number) => ({
-    windDir: windDir(),
-    windSpeed: params.windSpeed,
-    amplitude: params.amplitude,
-    patchSize: params.patchSize,
-    time,
-  });
 
-  // --- storage buffers -------------------------------------------------------
-  const h0 = api.storage(gpu, VEC4_BYTES, "read-write");
-  const specX = api.storage(gpu, CPLX_BYTES, "read-write");
-  const specY = api.storage(gpu, CPLX_BYTES, "read-write");
-  const specZ = api.storage(gpu, CPLX_BYTES, "read-write");
-  const tmpX = api.storage(gpu, CPLX_BYTES, "read-write");
-  const tmpY = api.storage(gpu, CPLX_BYTES, "read-write");
-  const tmpZ = api.storage(gpu, CPLX_BYTES, "read-write");
-  const disp = api.storage(gpu, VEC4_BYTES, "read-write");
+  try {
+    const params: OceanParams = { ...DEFAULT_PARAMS };
+    const windDir = (): [number, number] => {
+      const angle = params.windAngle * DEG;
+      return [Math.cos(angle), Math.sin(angle)];
+    };
+    const sunDir = (): [number, number, number] => {
+      const elevation = params.sunElevation * DEG;
+      const azimuth = params.sunAzimuth * DEG;
+      return [
+        Math.cos(elevation) * Math.cos(azimuth),
+        Math.sin(elevation),
+        Math.cos(elevation) * Math.sin(azimuth),
+      ];
+    };
+    const simUniform = (time: number) => ({
+      windDir: windDir(),
+      windSpeed: params.windSpeed,
+      amplitude: params.amplitude,
+      patchSize: params.patchSize,
+      time,
+      _pad: [0, 0],
+    });
+    const skyUniform = (
+      viewProj: Float32Array,
+      camPos: readonly [number, number, number],
+      sun = sunDir()
+    ) => ({ viewProj, camPos, radius: SKY_RADIUS, sunDir: sun, _pad: 0 });
 
-  // --- compute passes --------------------------------------------------------
-  const initPass = api.compute(gpu, shaders.spectrumInit, {
-    label: "spectrum-init",
-    set: { h0, sim: simUniform(0) },
-  });
-  const updatePass = api.compute(gpu, shaders.spectrumUpdate, {
-    label: "spectrum-update",
-    set: { h0, specX, specY, specZ, sim: simUniform(0) },
-  });
-  const rowPass = api.compute(gpu, shaders.fftRow, {
-    label: "fft-row",
-    set: { inX: specX, inY: specY, inZ: specZ, outX: tmpX, outY: tmpY, outZ: tmpZ },
-  });
-  const colPass = api.compute(gpu, shaders.fftCol, {
-    label: "fft-col",
-    set: { inX: tmpX, inY: tmpY, inZ: tmpZ, disp },
-  });
+    let h0 = own(storage(gpu, VEC4_BYTES, "read-write"));
+    const specX = own(storage(gpu, COMPLEX_BYTES, "read-write"));
+    const specY = own(storage(gpu, COMPLEX_BYTES, "read-write"));
+    const specZ = own(storage(gpu, COMPLEX_BYTES, "read-write"));
+    const tmpX = own(storage(gpu, COMPLEX_BYTES, "read-write"));
+    const tmpY = own(storage(gpu, COMPLEX_BYTES, "read-write"));
+    const tmpZ = own(storage(gpu, COMPLEX_BYTES, "read-write"));
+    const displacement = own(storage(gpu, VEC4_BYTES, "read-write"));
 
-  // Bake the IFFT storage buffer into a texture the render stages can sample —
-  // storage buffers are not available in the vertex stage on all adapters.
-  const dispTex = api.target(gpu, { size: [N, N], format: "rgba16float" });
-  const dispSamp = api.sampler(gpu, {
-    addressModeU: "repeat",
-    addressModeV: "repeat",
-    minFilter: "linear",
-    magFilter: "linear",
-  });
-  const bake = api.effect(gpu, shaders.bake, { label: "bake-displacement", set: { disp } });
+    const initPass = compute(gpu, spectrumInitWgsl, {
+      set: { h0, sim: simUniform(0) },
+    });
+    const updatePass = compute(gpu, spectrumUpdateWgsl, {
+      set: { h0, specX, specY, specZ, sim: simUniform(0) },
+    });
+    const rowPass = compute(gpu, fftRowWgsl, {
+      set: {
+        inX: specX,
+        inY: specY,
+        inZ: specZ,
+        outX: tmpX,
+        outY: tmpY,
+        outZ: tmpZ,
+      },
+    });
+    const colPass = compute(gpu, fftColWgsl, {
+      set: { inX: tmpX, inY: tmpY, inZ: tmpZ, disp: displacement },
+    });
 
-  // --- geometry / draws / composite -----------------------------------------
-  const skyGeo = api.geometry(gpu, sphere({ radius: 1 }));
-  const identityCam = new Float32Array(16);
+    const displacementTarget = own(
+      target(gpu, { size: [N, N], format: "rgba16float" })
+    );
+    const displacementSampler = sampler(gpu, {
+      addressModeU: "repeat",
+      addressModeV: "repeat",
+      minFilter: "linear",
+      magFilter: "linear",
+    });
+    const bake = effect(gpu, bakeShader, {
+      set: { disp: displacement },
+    });
 
-  const skydome = api.draw(gpu, {
-    label: "skydome",
-    shader: shaders.skydome,
-    geometry: skyGeo,
-    cull: "front",
-    set: { u: { viewProj: identityCam, camPos: [0, 0, 0], radius: skyRadius, sunDir: sunDir() } },
-  });
-  const ocean = api.draw(gpu, {
-    label: "ocean",
-    shader: shaders.oceanSurface,
-    cull: "none",
-    constants: { GRID: OCEAN_GRID },
-    vertices: 6 * OCEAN_GRID * OCEAN_GRID,
-    set: {
-      u: {
-        viewProj: identityCam,
-        camPos: [0, 0, 0],
-        worldSize,
-        sunDir: sunDir(),
+    const skyGeometry = own(geometry(gpu, sphere({ radius: 1 })));
+    const identity = new Float32Array(16);
+    const skydome = draw(gpu, {
+      shader: skydomeWgsl,
+      geometry: skyGeometry,
+      cull: "front",
+      set: { u: skyUniform(identity, [0, 0, 0]) },
+    });
+    const ocean = draw(gpu, {
+      shader: oceanSurfaceWgsl,
+      cull: "none",
+      constants: { GRID },
+      vertices: 6 * GRID * GRID,
+      set: {
+        u: oceanUniform(identity, [0, 0, 0]),
+        disp: displacementTarget,
+        dispSamp: displacementSampler,
+      },
+    });
+
+    let hdr = own(
+      target(gpu, {
+        size: [size[0], size[1]],
+        format: "rgba16float",
+        depth: true,
+      })
+    );
+    const linearSampler = sampler(gpu, {
+      minFilter: "linear",
+      magFilter: "linear",
+    });
+    const composite = effect(gpu, compositeWgsl, {
+      set: { src: hdr, samp: linearSampler },
+    });
+    let simTime = 0;
+    let destroyed = false;
+
+    initPass.set({ sim: simUniform(0) });
+    initPass.dispatch(N / 8, N / 8);
+
+    return {
+      params,
+      get hdr() {
+        return hdr;
+      },
+      skydome,
+      ocean,
+      composite,
+      clear: CLEAR,
+      rebuildSpectrum() {
+        const nextH0 = own(storage(gpu, VEC4_BYTES, "read-write"));
+        try {
+          const nextPass = compute(gpu, spectrumInitWgsl, {
+            set: { h0: nextH0, sim: simUniform(0) },
+          });
+          nextPass.dispatch(N / 8, N / 8);
+          updatePass.set({ h0: nextH0 });
+        } catch (error) {
+          rethrow(error, () => release(nextH0));
+        }
+        const previous = h0;
+        h0 = nextH0;
+        release(previous);
+      },
+      simulate(dt: number) {
+        simTime += dt * params.timeScale;
+        updatePass.set({ sim: simUniform(simTime) });
+        updatePass.dispatch(N / 8, N / 8);
+        rowPass.dispatch(N, 1);
+        colPass.dispatch(N, 1);
+        bake.draw(displacementTarget);
+      },
+      updateCamera(viewProj: Float32Array, camPos: Float32Array) {
+        const position: [number, number, number] = [
+          camPos[0],
+          camPos[1],
+          camPos[2],
+        ];
+        const sun = sunDir();
+        skydome.set({ u: skyUniform(viewProj, position, sun) });
+        ocean.set({ u: oceanUniform(viewProj, position, sun) });
+      },
+      resize(size: Size) {
+        if (hdr.size[0] === size[0] && hdr.size[1] === size[1]) return;
+        const next = own(
+          target(gpu, {
+            size: [size[0], size[1]],
+            format: "rgba16float",
+            depth: true,
+          })
+        );
+        try {
+          composite.set({ src: next, samp: linearSampler });
+        } catch (error) {
+          rethrow(error, () => release(next));
+        }
+        const previous = hdr;
+        hdr = next;
+        release(previous);
+      },
+      destroy() {
+        if (destroyed) return;
+        destroyed = true;
+        const owned = [...resources].reverse();
+        resources.clear();
+        destroyResources(owned);
+      },
+    };
+
+    function oceanUniform(
+      viewProj: Float32Array,
+      camPos: readonly [number, number, number],
+      sun = sunDir()
+    ) {
+      return {
+        viewProj,
+        camPos,
+        worldSize: WORLD_SIZE,
+        sunDir: sun,
         patchSize: params.patchSize,
         heightScale: params.heightScale,
         choppyScale: params.choppyScale,
         foamScale: params.foamScale,
-      },
-      disp: dispTex,
-      dispSamp,
-    },
-  });
-
-  const hdr = api.target(gpu, { size: [opts.size[0], opts.size[1]], format: "rgba16float", depth: true });
-  const samp = api.sampler(gpu, { minFilter: "linear", magFilter: "linear" });
-  const composite = api.effect(gpu, shaders.composite, {
-    label: "composite",
-    set: { src: hdr, samp },
-  });
-
-  let simTime = 0;
-
-  function rebuildSpectrum() {
-    initPass.set({ sim: simUniform(0) });
-    initPass.dispatch(N / 8, N / 8);
+        _pad: 0,
+      };
+    }
+  } catch (error) {
+    rethrow(error, () => destroyResources([...resources].reverse()));
   }
+}
 
-  rebuildSpectrum(); // build h0 once at startup
+export type OceanScene = ReturnType<typeof buildOcean>;
 
-  return {
-    params,
-    hdr,
-    skydome,
-    ocean,
-    composite,
-    clear,
-    rebuildSpectrum,
-    simulate(dt: number) {
-      simTime += dt * params.timeScale;
-      updatePass.set({ sim: simUniform(simTime) });
-      updatePass.dispatch(N / 8, N / 8);
-      rowPass.dispatch(N, 1);
-      colPass.dispatch(N, 1);
-      bake.draw(dispTex); // storage buffer -> sampleable displacement texture
-    },
-    updateCamera(viewProj: Float32Array, camPos: Float32Array) {
-      const cp = [camPos[0], camPos[1], camPos[2]] as [number, number, number];
-      const s = sunDir();
-      skydome.set({ u: { viewProj, camPos: cp, radius: skyRadius, sunDir: s } });
-      ocean.set({
-        u: {
-          viewProj,
-          camPos: cp,
-          worldSize,
-          sunDir: s,
-          patchSize: params.patchSize,
-          heightScale: params.heightScale,
-          choppyScale: params.choppyScale,
-          foamScale: params.foamScale,
-        },
-      });
-    },
-    resize(size: readonly [number, number]) {
-      hdr.resize([size[0], size[1]]);
-      composite.set({ src: hdr, samp });
-    },
-    dispose() {
-      // Buffers/targets are owned by the device; callers dispose `gpu` on teardown.
-    },
-  };
+function destroyResources(resources: readonly object[]): void {
+  const errors: unknown[] = [];
+  for (const resource of resources) {
+    try {
+      (resource as Destroyable).destroy();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length) throw errors[0];
+}
+
+function rethrow(error: unknown, cleanup: () => void): never {
+  try {
+    cleanup();
+  } catch {
+    // Cleanup must not replace the construction, rebuild, or resize error.
+  }
+  throw error;
 }

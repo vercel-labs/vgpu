@@ -1,8 +1,4 @@
-// Bakes a procedural cloud coverage map.
-//
-// Coverage is a single channel, so the target is `r8unorm`. The earth shader
-// reads `.r` for opacity and takes screen-space derivatives of the same channel
-// to fake cloud-top normals.
+// Bakes procedural cloud coverage into an r8unorm map.
 
 import { belt, equirectDirection, fbm3, fbmVector, ridged3, saturate, valueRemap } from "./planet-common.wgsl";
 
@@ -11,9 +7,6 @@ fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
   let direction = equirectDirection(uv);
   let latitude = direction.y;
 
-  // A gentle latitude-dependent twist around the polar axis before sampling:
-  // enough zonal smearing to read as circulation, not enough to turn systems
-  // into stripes.
   let flow = latitude * 0.35;
   let sheared = vec3f(
     direction.x * cos(flow) - direction.z * sin(flow),
@@ -24,13 +17,9 @@ fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
 
   let systems = fbm3(sheared * 2.8 + swirl, 6);
   let wisps = fbm3(sheared * 7.5 + swirl * 1.6, 5);
-  // Ridged noise remapped to [-1, 1] contributes the thin filaments that make a
-  // cloud deck read as sheared rather than blobby.
   let filaments = ridged3(sheared * 16.0 + swirl * 2.2, 4) * 2.0 - 1.0;
   let field = systems * 0.70 + wisps * 0.45 + filaments * 0.16;
 
-  // Circulation cells. The latitude is jittered by a low-frequency field first so
-  // the bands wander instead of running dead straight around the globe.
   let jitter = fbm3(direction * 1.15 + vec3f(71.0, 13.0, -29.0), 3) * 0.10;
   let lane = abs(latitude) + jitter;
   let weather = 0.30
@@ -39,8 +28,6 @@ fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     + belt(lane, 0.97, 0.24) * 0.16   // polar cloud
     - belt(lane, 0.34, 0.20) * 0.30;  // subtropical highs, where the deserts sit
 
-  // Wide remap window plus a gamma above 1: most of the sphere ends up thin and
-  // only the densest cores reach full opacity.
   let raw = saturate(valueRemap(field + (weather - 0.46) * 0.85, -0.24, 0.62, 0.0, 1.0));
   return vec4f(pow(raw, 2.4), 0.0, 0.0, 1.0);
 }

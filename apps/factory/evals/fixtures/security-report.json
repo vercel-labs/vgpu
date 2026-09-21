@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "repository": { "id": 1230165564, "owner": "vercel-labs", "name": "vgpu" },
+  "issue": {
+    "number": 9908,
+    "url": "https://github.com/vercel-labs/vgpu/issues/9908",
+    "sourceId": "issue:9908",
+    "title": "Possible path traversal while extracting renderer artifacts",
+    "body": "I believe artifact extraction accepts archive entries containing parent-directory segments. In a disposable local environment, a crafted archive caused a canary file to appear outside the configured output directory. This could overwrite files available to the process and may cross an intended workspace boundary. I have not published the crafted archive. Please route this report to the security maintainers and contact me privately for the proof of concept.",
+    "author": "fixture-researcher",
+    "createdAt": "2026-08-27T10:15:00Z",
+    "labels": []
+  },
+  "duplicateCandidates": [],
+  "availableLabels": [
+    { "name": "bug", "description": "Something is not working" },
+    { "name": "security", "description": "Requires private security review" }
+  ],
+  "availableSourceIds": ["issue:9908"],
+  "contextWarnings": [],
+  "capabilities": { "labelsAvailable": true, "duplicateSearchAvailable": true }
+}

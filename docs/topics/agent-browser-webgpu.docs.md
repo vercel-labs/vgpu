@@ -79,12 +79,12 @@ printf '%s' "$META" | sed 's/\\"/"/g' | grep -E 'Preview error|WebGPU is not ava
 
 ## Capture every vgpu preview
 
-With the documentation server already running from `apps/docs` on port 3001, this recipe rendered and captured all ten `/preview/<slug>` previews through SwiftShader. The simplified loop waits for initialization, requires a canvas, captures, and rejects uniform pixels:
+With the documentation server already running from `apps/docs` on port 3001, this recipe rendered and captured all nine `/preview/<slug>` previews in this sweep through SwiftShader. The simplified loop waits for initialization, requires a canvas, captures, and rejects uniform pixels:
 
 ```bash
 SESSION=vgpu-previews
 BASE_URL=http://localhost:3001
-for slug in gradient triangle-led-front anti-aliasing post-processing black-hole fluid instanced-rendering batch-rendering fft-ocean raymarched-fractal; do
+for slug in gradient triangle-led-front anti-aliasing black-hole fluid instanced-rendering batch-rendering fft-ocean raymarched-fractal; do
   agent-browser --session "$SESSION" --webgpu --headed open "$BASE_URL/preview/$slug"
   agent-browser --session "$SESSION" --webgpu --headed wait 6000
   agent-browser --session "$SESSION" --webgpu --headed eval 'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))'

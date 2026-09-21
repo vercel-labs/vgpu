@@ -168,7 +168,7 @@ function hasVendorVulkanIcd(): boolean {
 function shouldRetryAdapterRequestError(error: unknown): boolean { return !/AbortError/i.test(String(error)); }
 function sleep(ms: number): Promise<void> { return new Promise((resolve) => setTimeout(resolve, ms)); }
 function getDawnGPU(opts: RequestDeviceOptions, webgpu: WebGPUModule, forceSoftware = false): GPU {
-  const flags = forceSoftware ? [] : backendFlags(opts);
+  const flags = forceSoftware ? (process.platform === "linux" ? ["backend=vulkan"] : []) : backendFlags(opts);
   if (dawnGPU) {
     if (!flagsEqual(flags, dawnFlagsUsed)) console.warn(`[@vgpu/adapter-node] Dawn already initialized with flags [${dawnFlagsUsed?.join(",") ?? ""}], ignoring requested flags [${flags.join(",")}]. Re-init causes SIGSEGV in Dawn.`);
     return dawnGPU;
@@ -183,7 +183,9 @@ function backendFlags(opts: RequestDeviceOptions): readonly string[] {
   if (envFlags && envFlags.length > 0) return envFlags;
   if (opts.backendFlags) return opts.backendFlags;
   if (opts.backend === "opengl") return ["backend=opengl"];
-  if (process.platform === "linux" && opts.backend !== "webgpu" && (process.env.DISPLAY || process.env.WAYLAND_DISPLAY)) return ["backend=opengl"];
+  // Never select OpenGL just because a display exists: its restricted sampled mip views
+  // can corrupt subsequent storage writes (Dawn issue 392121637). Explicit opt-in remains.
+  if (process.platform === "linux" && opts.backend !== "webgpu") return ["backend=vulkan"];
   return [];
 }
 function adapterOptions(opts: RequestDeviceOptions): DawnAdapterOptions { return { powerPreference: opts.powerPreference, ...(process.platform === "linux" && opts.backend !== "webgpu" ? { featureLevel: "compatibility" as const } : {}) }; }

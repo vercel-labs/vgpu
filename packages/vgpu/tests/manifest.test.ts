@@ -1,16 +1,46 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { expect, test } from "vitest";
 import { buildIndex } from "../lib/docs/index.js";
 import { resolveDocsTarget } from "../lib/docs/commands/resolve.js";
 import { createManifest, parseAllowlist, serializeManifest, virtualPathFor } from "../lib/docs/generate/manifest.js";
-import { buildSkill } from "../lib/docs/generate/skill.js";
+import { loadManifest } from "../lib/docs/generate/generate.js";
 import { docsManifest } from "../lib/generated/docs-manifest.generated.js";
 
 const root = resolve(import.meta.dirname, "../../..");
 const allowlist = readFileSync(resolve(root, "docs/allowlist.txt"), "utf8");
 const gettingStartedSource = readFileSync(resolve(root, "docs/topics/getting-started.docs.md"), "utf8");
+
+test("versioned migrations are discoverable from the shared CLI/MCP corpus and website", () => {
+  const record = docsManifest.records.find(record => record.virtualPath === "/migrations/0.5.0.docs.md");
+  expect(record).toMatchObject({ package: "migrations", kind: "guide", symbol: "migration-0.5.0", websitePath: "/migrations/0.5.0" });
+  expect(record?.content).toBe(readFileSync(resolve(root, "docs/migrations/0.5.0.docs.md"), "utf8"));
+  expect(record?.content).toContain("## From the previous stable release");
+  expect(record?.content).toContain("## From release candidates");
+  expect(record?.content).toContain("Provide Vulkan for Node/Linux deployments");
+  const index = buildIndex(docsManifest);
+  expect(resolveDocsTarget(index, "/migrations/0.5.0.docs.md")).toBeTruthy();
+  expect(readFileSync(resolve(root, "apps/docs/content/docs/migrations/0.5.0.md"), "utf8")).toContain("## Verification");
+});
+
+test("the public texture reference ships on the website and in curated navigation", () => {
+  expect(docsManifest.records.find((record) => record.package === "vgpu" && record.symbol === "texture"))
+    .toMatchObject({ repoPath: "packages/vgpu-api/src/texture.docs.md", virtualPath: "/vgpu/texture.docs.md", topic: "texture" });
+  const page = readFileSync(resolve(root, "apps/docs/content/docs/reference/vgpu/texture.md"), "utf8");
+  expect(page).toContain("Write a selected mip from compute");
+  const nav = JSON.parse(readFileSync(resolve(root, "docs/nav.json"), "utf8"));
+  const topics = nav.topicOrder.vgpu;
+  expect(topics.indexOf("texture")).toBe(topics.indexOf("target") + 1);
+});
+
+test.each(["TextureReadOptions", "TextureShape", "TextureUsageName"])("new texture type %s has a real heading for its website deep link", (symbol) => {
+  const record = docsManifest.records.find((entry) => entry.package === "vgpu/core" && entry.symbol === symbol);
+  expect(record?.anchor).toBe(symbol.toLowerCase());
+  const page = readFileSync(resolve(root, "apps/docs/content/docs/reference/vgpu-core/texture.md"), "utf8");
+  expect(page).toContain(`### ${symbol}\n`);
+});
 
 test("parses allowlist entries and maps virtual paths", () => {
   const entries = parseAllowlist("@vgpu/core Buffer packages/core/src/buffer.docs.md\n");
@@ -53,6 +83,40 @@ test("includes guide docs as a first-class kind", () => {
     summary: "Summary for docs/topics/performance-model.docs.md.",
   });
   expect(manifest.records.find((record) => record.symbol === "Buffer")?.kind).toBe("api");
+});
+
+test("discovers nested guide docs without changing basename-derived identities", () => {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), "vgpu-nested-guides-"));
+  try {
+    mkdirSync(resolve(fixtureRoot, "docs/topics/native/macos"), { recursive: true });
+    writeFileSync(resolve(fixtureRoot, "docs/allowlist.txt"), "");
+    writeFileSync(
+      resolve(fixtureRoot, "docs/topics/native/macos/native-macos-rendering.docs.md"),
+      "# Rendering primitives\n\nNested guide.\n",
+    );
+
+    const guide = loadManifest(fixtureRoot).records.find((record) => record.kind === "guide");
+    expect(guide).toMatchObject({
+      symbol: "native-macos-rendering",
+      repoPath: "docs/topics/native/macos/native-macos-rendering.docs.md",
+      virtualPath: "/guides/native-macos-rendering.docs.md",
+    });
+  } finally {
+    rmSync(fixtureRoot, { recursive: true, force: true });
+  }
+});
+
+test("rejects duplicate guide basenames across topic directories", () => {
+  expect(() => createManifest("", {
+    exists: () => true,
+    read: (path) => `# ${path}\n\nGuide.\n`,
+    guides: [
+      "docs/topics/native/runtime/lifecycle.docs.md",
+      "docs/topics/native/tooling/lifecycle.docs.md",
+    ],
+  })).toThrow(
+    'Duplicate guide basename "lifecycle.docs.md": docs/topics/native/runtime/lifecycle.docs.md and docs/topics/native/tooling/lifecycle.docs.md',
+  );
 });
 
 test("extracts schema v3 topic metadata from symbol docs", () => {
@@ -119,7 +183,7 @@ test("manifest includes getting-started as a guide", () => {
   });
 });
 
-test("exports the CLI reference to the docs corpus and skill", () => {
+test("exports the CLI reference to the docs corpus", () => {
   expect(docsManifest.records.find((record) => record.symbol === "cli")).toMatchObject({
     package: "guides",
     symbol: "cli",
@@ -129,10 +193,6 @@ test("exports the CLI reference to the docs corpus and skill", () => {
     topicTitle: "CLI",
     websitePath: "/cli",
   });
-
-  const skill = buildSkill(docsManifest);
-  expect(skill.get("SKILL.md")).toContain("## CLI reference");
-  expect(skill.get("references/guides/cli.docs.md")).toContain("# CLI");
 });
 
 test("getting-started cat references resolve against the docs index", () => {
@@ -179,15 +239,6 @@ test("concept guides preserve canonical title and numeric website order", () => 
     topicTitle: title,
     order,
   })));
-
-  const router = buildSkill(manifest).get("SKILL.md");
-  expect(router).toBeDefined();
-  const concepts = router?.slice(router.indexOf("## Core concepts"), router.indexOf("## Performance guides"));
-  expect([...concepts?.matchAll(/^- \*\*([^*]+)\*\*/gmu) ?? []].map((match) => match[1])).toEqual([
-    "Context", "Draws", "Compilation", "Effects", "Passes", "Frames", "Render bundles",
-  ]);
-  expect(concepts).toContain("**Context** — Everything in vgpu starts from one call.");
-  expect(concepts).not.toContain("— ---");
 });
 
 test("rejects a non-numeric guide order", () => {

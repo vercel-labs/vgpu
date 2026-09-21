@@ -10,7 +10,6 @@ const forbiddenPackages = new Set([
   'fs', 'node:fs', 'path', 'node:path', 'child_process', 'node:child_process',
   'worker_threads', 'node:worker_threads', 'vgpu/node', '@vgpu/adapter-node',
 ]);
-
 async function exists(file) {
   try { await access(file); return true; } catch { return false; }
 }
@@ -24,7 +23,7 @@ async function resolveRelative(from, specifier) {
   return undefined;
 }
 
-async function checkGraph(entry, kind) {
+async function checkGraph(entry, kind, boundary) {
   const pending = [entry];
   const visited = new Set();
   const failures = [];
@@ -35,7 +34,7 @@ async function checkGraph(entry, kind) {
     const source = await readFile(file, 'utf8');
     const imports = ts.preProcessFile(source, true, true).importedFiles.map(({ fileName }) => fileName);
     for (const specifier of imports) {
-      if (forbiddenPackages.has(specifier) || specifier.startsWith('node:')) {
+      if (kind !== 'thumbnail' && (forbiddenPackages.has(specifier) || specifier.startsWith('node:'))) {
         failures.push(`${path.relative(docsDir, file)} imports forbidden module ${specifier}`);
         continue;
       }
@@ -46,6 +45,10 @@ async function checkGraph(entry, kind) {
       )) failures.push(`${path.relative(docsDir, file)} imports server/source module ${specifier}`);
       if (specifier.startsWith('.')) {
         const resolved = await resolveRelative(file, specifier);
+        if (resolved && boundary && resolved !== boundary && !resolved.startsWith(`${boundary}${path.sep}`)) {
+          failures.push(`${path.relative(docsDir, file)} imports outside its example: ${specifier}`);
+          continue;
+        }
         if (resolved) pending.push(resolved);
       }
     }
@@ -65,8 +68,11 @@ for (const entry of await (await import('node:fs/promises')).readdir(examplesDir
     failures.push(`${entry.name} has index.tsx but no renderer.ts`);
     continue;
   }
-  failures.push(...await checkGraph(index, 'component'));
-  failures.push(...await checkGraph(renderer, 'renderer'));
+  const boundary = path.dirname(index);
+  failures.push(...await checkGraph(index, 'component', boundary));
+  failures.push(...await checkGraph(renderer, 'renderer', boundary));
+  failures.push(...await checkGraph(path.join(boundary, 'meta.ts'), 'metadata', boundary));
+  failures.push(...await checkGraph(path.join(boundary, 'render-thumbnail.ts'), 'thumbnail', boundary));
 }
 
 if (failures.length) {

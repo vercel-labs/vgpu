@@ -12,14 +12,22 @@ export interface ComputeOptions {
   readonly set?: Record<string, unknown>;
   /** Values for WGSL `override` constants, keyed by name (or by numeric id as a string when the override has @id). Immutable after construction. */
   readonly constants?: Readonly<Record<string, number | boolean>>;
-  /** Compute entry point to use when the shader has several. Defaults to the first @compute entry point. */
+  /** Immutable compute entry selection. Defaults to cs_main when declared, otherwise the first @compute entry. */
   readonly entry?: string;
 }
 export interface DispatchOptions {
   /** GPU-driven dispatch: read the workgroup counts from a buffer instead of CPU-side counts. */
   readonly indirect: StorageBuffer | { readonly buffer: StorageBuffer; readonly offset?: number };
 }
-export interface Compute { set(values: Record<string, unknown>): this; dispatch(x: number, y?: number, z?: number): void; dispatch(opts: DispatchOptions): void }
+export interface Compute {
+  set(values: Record<string, unknown>): this;
+  /** Asynchronously prepares and validates this pipeline. Rejections belong to this promise. */
+  compile(): Promise<this>;
+  /** Creates synchronously; native asynchronous validation is reported through gpu.onError. */
+  compileSync(): this;
+  dispatch(x: number, y?: number, z?: number): void;
+  dispatch(opts: DispatchOptions): void;
+}
 export type StorageAccess = "read" | "read-write";
 export interface StorageOptions {
   /** Binding access for shader reflection. Defaults to "read-write". */

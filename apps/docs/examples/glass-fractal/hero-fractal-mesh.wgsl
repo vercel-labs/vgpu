@@ -1,6 +1,4 @@
-import {
-  presentCeramic,
-} from "./hero-fractal-ceramic.wgsl";
+import { presentCeramic } from "./hero-fractal-presentation.wgsl";
 import {
   heroFractalFaceNormal,
   heroFractalFacePosition,

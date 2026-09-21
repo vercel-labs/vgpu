@@ -7,9 +7,6 @@ struct AgentDots {
   time: f32,
   spacing: f32,
   radius: f32,
-  base_radiance: f32,
-  peak_radiance: f32,
-  edge_softness: f32,
   animation_mode: u32,
 };
 
@@ -30,10 +27,18 @@ fn smootherstep01(value: f32) -> f32 {
 }
 
 fn perimeter_index(row: i32, column: i32) -> i32 {
-  if (row == 0) { return 0; }
-  if (column == row) { return row; }
-  if (row == 3) { return 6 - column; }
-  if (column == 0) { return 9 - row; }
+  if (row == 0) {
+    return 0;
+  }
+  if (column == row) {
+    return row;
+  }
+  if (row == 3) {
+    return 6 - column;
+  }
+  if (column == 0) {
+    return 9 - row;
+  }
   return -1;
 }
 
@@ -56,7 +61,9 @@ fn center_out_strength(center: vec2f) -> f32 {
 
 fn edge_orbit_strength(row: i32, column: i32) -> f32 {
   let index = perimeter_index(row, column);
-  if (index < 0) { return 0.0; }
+  if (index < 0) {
+    return 0.0;
+  }
 
   // Exactly one stationary dot is active while the head steps clockwise through
   // the nine perimeter positions. No position or geometry is animated.
@@ -76,8 +83,12 @@ fn edge_then_center_strength(row: i32, column: i32) -> f32 {
 }
 
 fn animation_strength(row: i32, column: i32, center: vec2f) -> f32 {
-  if (agent.animation_mode == 1u) { return edge_orbit_strength(row, column); }
-  if (agent.animation_mode == 2u) { return edge_then_center_strength(row, column); }
+  if (agent.animation_mode == 1u) {
+    return edge_orbit_strength(row, column);
+  }
+  if (agent.animation_mode == 2u) {
+    return edge_then_center_strength(row, column);
+  }
   return center_out_strength(center);
 }
 
@@ -90,8 +101,8 @@ fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     for (var column = 0; column <= row; column = column + 1) {
       let center = dot_center(row, column);
       let signed_distance = distance(pixel, center) - agent.radius;
-      let mask = 1.0 - smoothstep(-agent.edge_softness, agent.edge_softness, signed_distance);
-      let emission = mix(agent.base_radiance, agent.peak_radiance, animation_strength(row, column, center));
+      let mask = 1.0 - smoothstep(-0.8, 0.8, signed_distance);
+      let emission = mix(0.065, 8.5, animation_strength(row, column, center));
       let cool_white = vec3f(emission * 0.96, emission * 0.985, emission);
       result = max(result, vec4f(cool_white * mask, mask));
     }

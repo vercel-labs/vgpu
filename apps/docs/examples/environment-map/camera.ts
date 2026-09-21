@@ -1,26 +1,9 @@
-import { perspectiveCamera, type SceneCamera } from 'vgpu/scene';
+import { perspectiveCamera } from "vgpu/scene";
 
 export const FOV_DEGREES = 42;
 export const ORBIT_RADIUS = 3.35;
 
-export interface CameraView {
-  /** View-projection consumed by the cube draw. */
-  readonly camera: SceneCamera;
-  readonly position: readonly [number, number, number];
-  /** Orthonormal basis + tangent, used by the background pass to rebuild primary rays. */
-  readonly forward: readonly [number, number, number];
-  readonly right: readonly [number, number, number];
-  readonly up: readonly [number, number, number];
-  readonly tanHalfFov: number;
-  readonly aspect: number;
-}
-
-/**
- * Builds one camera in two forms that must agree: a view-projection matrix for
- * rasterizing the cube, and a ray basis for sampling the environment behind it.
- * `camera.test.ts` pins them together.
- */
-export function cameraView(yaw: number, pitch: number, aspect: number): CameraView {
+export function cameraView(yaw: number, pitch: number, aspect: number) {
   const clampedPitch = Math.max(-1.2, Math.min(1.2, pitch));
   const cosPitch = Math.cos(clampedPitch);
   const position: [number, number, number] = [
@@ -50,7 +33,8 @@ export function cameraView(yaw: number, pitch: number, aspect: number): CameraVi
   };
 }
 
-/** Column-major rotation (Y then X) for the cube's own spin. */
+export type CameraView = ReturnType<typeof cameraView>;
+
 export function spinMatrix(time: number): Float32Array {
   const yaw = 0.85 + time * 0.35;
   const pitch = Math.sin(time * 0.23) * 0.35 + 0.42;
@@ -58,6 +42,7 @@ export function spinMatrix(time: number): Float32Array {
   const sy = Math.sin(yaw);
   const cp = Math.cos(pitch);
   const sp = Math.sin(pitch);
+  // prettier-ignore
   return new Float32Array([
     cy, 0, -sy, 0,
     sy * sp, cp, cy * sp, 0,
@@ -69,7 +54,11 @@ export function spinMatrix(time: number): Float32Array {
 type Vec3 = readonly [number, number, number];
 
 function cross(a: Vec3, b: Vec3): [number, number, number] {
-  return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  return [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0],
+  ];
 }
 
 function normalize(v: Vec3): [number, number, number] {

@@ -1,302 +1,432 @@
-/**
- * Browser coordinator: ONNX Runtime Web owns the WebGPU device, vgpu adopts it,
- * and each run's ten GPU-resident logits are visualized through a non-owning
- * wrap.
- *
- * Per run, serialized and latest-wins:
- *   create input tensor -> session.run -> retain output -> wrapBuffer ->
- *   submit -> await queue.flush() -> wrapper.dispose() -> tensor.dispose()
- *
- * The 40 bytes of output are never read back or copied; the shader computes the
- * softmax. That is an API and lifetime demonstration, not a speedup: see the
- * example copy.
- */
-import type { Buffer, Gpu, Surface } from 'vgpu';
-import { surface as createSurface } from 'vgpu';
-import type { BrowserRendererOptions, ExampleRenderer, RenderSize } from '../../lib/example-renderer';
+import GUI from "lil-gui";
+import type { Buffer, Gpu, Surface } from "vgpu";
+import { surface } from "vgpu";
 import {
   assertGpuTensor,
   createSharedDeviceSession,
+  FirstError,
   OrtEnvironmentError,
   OrtInitCancelled,
   withWrappedTensor,
   type OrtTensor,
   type SharedDeviceSession,
-} from '../../lib/ort-webgpu';
-import { LOGIT_COUNT, MODEL_INPUT_NAME, MODEL_OUTPUT_NAME, MODEL_URL } from './fixtures';
-import { INPUT_SIZE } from './preprocess';
-import {
-  createDigitBuffer,
-  createIdleLogitsBuffer,
-  createVisualizer,
-  writeDigit,
-  type Visualizer,
-} from './renderer';
+} from "./ort-webgpu";
+import { foregroundFromRgba, preprocessDigit } from "./preprocess";
+import { createChart, createLogitsBuffer } from "./renderer";
 
-export interface MnistStatus {
-  readonly phase: 'initializing' | 'ready' | 'classifying' | 'unsupported' | 'error';
-  readonly detail?: string;
-  /** Number of completed inferences; useful for tests and the status line. */
-  readonly runs?: number;
-}
+type Phase = "initializing" | "ready" | "classifying" | "unsupported" | "error";
+type Point = { x: number; y: number };
 
-export interface MnistRendererOptions extends BrowserRendererOptions {
-  readonly onStatus?: (status: MnistStatus) => void;
-}
+const STAGE_LABELS: Record<string, string> = {
+  runtime: "Loading ONNX Runtime Web…",
+  model: "Fetching the 26 kB model…",
+  session: "Creating the WebGPU session…",
+  device: "Adopting the runtime device…",
+};
+const DRAW_DEBOUNCE_MS = 120;
+const FIXTURE_SURFACE = 280;
+const STROKE_RADIUS = 11;
+const MODEL_URL = "/models/mnist/mnist-12.onnx";
+const MODEL_INPUT_NAME = "Input3";
+const MODEL_OUTPUT_NAME = "Plus214_Output_0";
+const INPUT_SHAPE = [1, 1, 28, 28] as const;
+const FIXTURE_STROKE = [
+  [74, 68],
+  [208, 62],
+  [168, 132],
+  [120, 232],
+] as const;
 
-export interface MnistRenderer extends ExampleRenderer {
-  /**
-   * Queues a normalized 28x28 input. Runs are serialized and only the newest
-   * pending input survives, so rapid drawing never overlaps inference.
-   */
-  classify(pixels: Float32Array): void;
-  /** Clears the bars and the input preview without running the model. */
-  clear(): void;
-}
+export function createRenderer(root: HTMLElement) {
+  const ui = getUi(root);
+  const drawingContext = ui.draw.getContext("2d", {
+    willReadFrequently: true,
+  });
+  if (!drawingContext) throw new Error("MNIST drawing canvas is unavailable.");
+  const context: CanvasRenderingContext2D = drawingContext;
 
-export function createRenderer(options: MnistRendererOptions): MnistRenderer {
   let disposed = false;
-  let reportedError = false;
   let shared: SharedDeviceSession | undefined;
   let gpu: Gpu | undefined;
-  let surface: Surface | undefined;
-  let visualizer: Visualizer | undefined;
-  let digitBuffer: Buffer | undefined;
+  let output: Surface | undefined;
+  let chart: ReturnType<typeof createChart> | undefined;
   let idleLogits: Buffer | undefined;
-  let drain: Promise<void> | undefined;
-  let shutdown: Promise<void> | undefined;
   let observer: ResizeObserver | undefined;
   let resizeFrame = 0;
-  let pendingSize: RenderSize | undefined;
-  let lastDpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio;
-  let loggedEvidence = false;
-  let runs = 0;
-
-  /** Newest queued input; older ones are dropped on purpose. */
+  let drain: Promise<void> | undefined;
+  let closing: Promise<void> | undefined;
   let pending: Float32Array | undefined;
-  /** Monotonic request id so stale completions never repaint. */
+  let currentInput: Float32Array | undefined;
   let requested = 0;
-  /** Last input actually classified, replayed on resize. */
-  let lastInput: Float32Array | undefined;
-  let hasResult = false;
+  let runs = 0;
+  const abort = new AbortController();
 
-  const status = (next: MnistStatus) => {
-    try {
-      options.onStatus?.({ runs, ...next });
-    } catch {
-      // Status reporting must never break rendering.
-    }
-  };
+  function updateStatus(phase: Phase, detail?: string): void {
+    ui.loading.hidden = phase !== "initializing";
+    ui.loadingDetail.textContent =
+      (detail && STAGE_LABELS[detail]) ?? "Preparing inference…";
+    const failed = phase === "unsupported" || phase === "error";
+    ui.failure.hidden = !failed;
+    ui.failureTitle.textContent =
+      phase === "unsupported"
+        ? "WebGPU inference is required"
+        : "Inference failed";
+    ui.failureDetail.textContent = failed ? detail ?? "" : "";
+    ui.failureDetail.hidden = !failed || !detail;
+    ui.dot.className = `inline-block h-1.5 w-1.5 rounded-full ${
+      phase === "classifying"
+        ? "bg-blue-9"
+        : phase === "ready"
+        ? "bg-gray-8"
+        : "bg-gray-6"
+    }`;
+    ui.status.textContent =
+      phase === "classifying" ? "running inference…" : `inferences: ${runs}`;
+  }
 
-  const applyResize = () => {
-    resizeFrame = 0;
-    const size = pendingSize;
-    pendingSize = undefined;
-    if (disposed || !size || !surface) return;
-    try {
-      surface.resize([
-        Math.max(1, Math.round(size.width * size.dpr)),
-        Math.max(1, Math.round(size.height * size.dpr)),
-      ]);
-      // The borrowed output cannot be retained across frames, so re-run the
-      // cached input rather than redrawing from a freed buffer.
-      if (lastInput) classify(lastInput);
-      else drawIdle();
-    } catch (error) {
-      handleFailure(error);
-    }
-  };
-  const resize = (size: RenderSize) => {
-    if (disposed || size.width <= 0 || size.height <= 0) return;
-    pendingSize = size;
-    if (!resizeFrame) resizeFrame = requestAnimationFrame(applyResize);
-  };
-  const measure = () => {
-    const rect = options.canvas.getBoundingClientRect();
-    resize({
-      width: rect.width,
-      height: rect.height,
-      dpr: Math.min(2, Math.max(1, window.devicePixelRatio || 1)),
-    });
-  };
-  const onWindowResize = () => {
-    if (window.devicePixelRatio === lastDpr) return;
-    lastDpr = window.devicePixelRatio;
-    measure();
-  };
-
-  /** Draws the current state with vgpu-owned buffers only. */
   function drawIdle(): void {
-    if (disposed || !gpu || !surface || !visualizer || !digitBuffer || !idleLogits) return;
-    visualizer.render(gpu, surface, idleLogits, digitBuffer, false);
+    if (!disposed && gpu && output && chart && idleLogits)
+      chart(gpu, output, idleLogits, false);
   }
 
   function classify(pixels: Float32Array): void {
     if (disposed) return;
-    if (pixels.length !== INPUT_SIZE * INPUT_SIZE) {
-      handleFailure(new Error(`Expected ${INPUT_SIZE * INPUT_SIZE} input values, received ${pixels.length}.`));
-      return;
-    }
+    currentInput = pixels;
     pending = pixels;
-    requested++;
-    drain ??= runDrainLoop().finally(() => {
-      drain = undefined;
+    requested += 1;
+    startDrain();
+  }
+
+  function startDrain(): void {
+    if (drain || disposed) return;
+    const task = runDrainLoop();
+    drain = task;
+    void task.catch(fail).then(() => {
+      if (drain === task) drain = undefined;
+      if (pending) startDrain();
     });
   }
 
-  /** One loop at a time; it consumes the newest pending input until none is left. */
   async function runDrainLoop(): Promise<void> {
     while (!disposed && pending) {
       const pixels = pending;
       pending = undefined;
-      const generation = requested;
-      await runOnce(pixels, generation);
+      await runOnce(pixels, requested);
     }
   }
 
-  async function runOnce(pixels: Float32Array, generation: number): Promise<void> {
-    if (disposed || !shared || !gpu || !surface || !visualizer || !digitBuffer) return;
-    const { ort, session } = shared;
-    status({ phase: 'classifying' });
+  async function runOnce(pixels: Float32Array, generation: number) {
+    const active = shared;
+    const activeGpu = gpu;
+    const activeOutput = output;
+    const activeChart = chart;
+    if (disposed || !active || !activeGpu || !activeOutput || !activeChart)
+      return;
 
-    const inputName = session.inputNames[0] ?? MODEL_INPUT_NAME;
-    const outputName = session.outputNames[0] ?? MODEL_OUTPUT_NAME;
-    const input = new ort.Tensor('float32', pixels, [1, 1, INPUT_SIZE, INPUT_SIZE]);
-    let output: OrtTensor | undefined;
+    updateStatus("classifying");
+    const inputName = active.session.inputNames[0] ?? MODEL_INPUT_NAME;
+    const outputName = active.session.outputNames[0] ?? MODEL_OUTPUT_NAME;
+    let input: OrtTensor | undefined;
+    let tensors: Record<string, OrtTensor> | undefined;
+    const errors = new FirstError();
     try {
-      const outputs = await session.run({ [inputName]: input });
-      output = outputs[outputName];
-      const raw = assertGpuTensor(output, {
-        dataType: 'float32',
-        dims: [1, LOGIT_COUNT],
-        label: 'mnist-classifier logits',
-      });
-      // A newer request arrived while this one ran: drop the result instead of
-      // repainting stale bars. The lifetime below still runs in `finally`.
-      if (disposed || generation !== requested) return;
-
-      writeDigit(digitBuffer, pixels);
-      lastInput = pixels;
-      await withWrappedTensor(gpu, raw, (wrapped) => {
-        if (!loggedEvidence) {
-          loggedEvidence = true;
-          // One-time diagnostic: makes the interop contract observable without
-          // reading any logits back to the CPU.
-          console.info('[mnist-classifier] interop', {
-            deviceIdentity: gpu!.gpu === shared!.device,
-            outputLocation: 'gpu-buffer',
-            outputBytes: raw.size,
-            wrapperRawIdentity: wrapped.gpu === raw,
-            dims: [1, LOGIT_COUNT],
-          });
-        }
-        visualizer!.render(gpu!, surface!, wrapped, digitBuffer!, true);
-      });
-      hasResult = true;
-      runs++;
-      status({ phase: 'ready' });
-    } finally {
-      output?.dispose();
-      input.dispose();
+      input = new active.ort.Tensor("float32", pixels, INPUT_SHAPE);
+      tensors = await active.session.run({ [inputName]: input });
+      const logits = assertGpuTensor(tensors[outputName]);
+      if (!disposed && generation === requested && shared === active) {
+        await withWrappedTensor(activeGpu, logits, (wrapped) => {
+          activeChart(activeGpu, activeOutput, wrapped, true);
+        });
+        runs += 1;
+        updateStatus("ready");
+      }
+    } catch (error) {
+      errors.capture(error);
     }
+
+    for (const tensor of new Set([
+      ...Object.values(tensors ?? {}),
+      ...(input ? [input] : []),
+    ])) {
+      errors.run(() => tensor.dispose());
+    }
+    errors.throwIfAny();
   }
 
-  function clear(): void {
+  function clearResult(): void {
     if (disposed) return;
     pending = undefined;
-    requested++;
-    lastInput = undefined;
-    hasResult = false;
-    if (digitBuffer) writeDigit(digitBuffer, new Float32Array(INPUT_SIZE * INPUT_SIZE));
+    requested += 1;
+    currentInput = undefined;
     drawIdle();
-    status({ phase: 'ready' });
+    updateStatus("ready");
   }
 
-  const dispose = () => {
-    if (disposed) return;
-    disposed = true;
-    pending = undefined;
-    if (resizeFrame) cancelAnimationFrame(resizeFrame);
-    resizeFrame = 0;
-    pendingSize = undefined;
-    observer?.disconnect();
-    observer = undefined;
-    if (typeof window !== 'undefined') window.removeEventListener('resize', onWindowResize);
-    const active = drain;
-    // One idempotent async shutdown: let the in-flight run finish its own
-    // cleanup (flush, wrapper, tensor) before releasing what it borrowed.
-    shutdown ??= (async () => {
-      await Promise.allSettled([active ?? Promise.resolve()]);
-      visualizer?.dispose();
-      visualizer = undefined;
-      idleLogits?.dispose();
-      idleLogits = undefined;
-      digitBuffer?.dispose();
-      digitBuffer = undefined;
-      surface?.dispose();
-      surface = undefined;
-      // vgpu facade first, ORT session last; the adopted device is never destroyed.
-      await shared?.release();
-      shared = undefined;
-      gpu = undefined;
-    })().catch(() => undefined);
+  function submit(): void {
+    const size = FIXTURE_SURFACE;
+    const { data } = context.getImageData(0, 0, size, size);
+    const field = foregroundFromRgba(data, size, size);
+    const pixels = preprocessDigit(field, size, size);
+    if (pixels) classify(pixels);
+    else clearResult();
+  }
+
+  const drawing = installDrawing(ui.draw, context, submit);
+  paintBackground(context);
+  context.beginPath();
+  FIXTURE_STROKE.forEach(([x, y], index) =>
+    index === 0 ? context.moveTo(x, y) : context.lineTo(x, y)
+  );
+  context.stroke();
+
+  const controls = {
+    clear() {
+      drawing.cancel();
+      paintBackground(context);
+      clearResult();
+    },
   };
-
-  const initialize = async () => {
-    status({ phase: 'initializing' });
-    shared = await createSharedDeviceSession({
-      modelUrl: MODEL_URL,
-      label: 'mnist-classifier',
-      isCancelled: () => disposed,
-      onStage: (stage) => status({ phase: 'initializing', detail: stage }),
+  let gui: GUI | undefined;
+  try {
+    gui = new GUI({ title: "MNIST Classifier", container: root, width: 180 });
+    Object.assign(gui.domElement.style, {
+      position: "absolute",
+      top: "16px",
+      right: "16px",
+      zIndex: "10",
     });
-    if (disposed) return;
-    gpu = shared.gpu;
-    surface = createSurface(gpu, options.canvas, { dpr: [1, 2] });
-    visualizer = createVisualizer(gpu);
-    digitBuffer = createDigitBuffer(gpu);
-    idleLogits = createIdleLogitsBuffer(gpu);
+    gui.add(controls, "clear").name("Clear");
+  } catch (error) {
+    try {
+      drawing.dispose();
+    } catch {}
+    try {
+      gui?.destroy();
+    } catch {}
+    throw error;
+  }
 
-    observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure);
-    observer?.observe(options.canvas);
-    window.addEventListener('resize', onWindowResize);
+  function measure(): void {
+    if (disposed || resizeFrame) return;
+    resizeFrame = requestAnimationFrame(() => {
+      resizeFrame = 0;
+      if (!output) return;
+      const { width, height } = ui.chart.getBoundingClientRect();
+      if (width <= 0 || height <= 0) return;
+      const dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+      try {
+        output.resize([
+          Math.max(1, Math.round(width * dpr)),
+          Math.max(1, Math.round(height * dpr)),
+        ]);
+        if (currentInput) classify(currentInput);
+        else drawIdle();
+      } catch (error) {
+        fail(error);
+      }
+    });
+  }
+
+  const onWindowResize = () => measure();
+
+  async function initialize(): Promise<void> {
+    updateStatus("initializing");
+    const next = await createSharedDeviceSession({
+      modelUrl: MODEL_URL,
+      label: "mnist-classifier",
+      signal: abort.signal,
+      isCancelled: () => disposed,
+      onStage: (stage) => updateStatus("initializing", stage),
+    });
+    if (disposed) {
+      await next.release().catch(() => undefined);
+      return;
+    }
+
+    shared = next;
+    gpu = next.gpu;
+    output = surface(gpu, ui.chart, { dpr: [1, 2] });
+    chart = createChart(gpu);
+    idleLogits = createLogitsBuffer(gpu);
+    if (typeof ResizeObserver !== "undefined")
+      observer = new ResizeObserver(measure);
+    observer?.observe(ui.chart);
+    window.addEventListener("resize", onWindowResize);
     measure();
     drawIdle();
-    status({ phase: 'ready' });
-  };
+    updateStatus("ready");
+    submit();
+  }
 
-  function handleFailure(error: unknown): void {
+  function fail(error: unknown): void {
     if (disposed || error instanceof OrtInitCancelled) return;
-    if (!reportedError) {
-      reportedError = true;
-      status({
-        phase: error instanceof OrtEnvironmentError ? 'unsupported' : 'error',
-        detail: error instanceof Error ? error.message : String(error),
+    showFailure(error);
+    void shutdown(error, true).catch((failure) => {
+      queueMicrotask(() => {
+        throw failure;
       });
+    });
+  }
+
+  function showFailure(error: unknown): void {
+    try {
+      updateStatus(
+        error instanceof OrtEnvironmentError ? "unsupported" : "error",
+        error instanceof Error ? error.message : String(error)
+      );
+    } catch {}
+  }
+
+  function shutdown(primary?: unknown, hasPrimary = false): Promise<void> {
+    if (closing) return closing;
+    disposed = true;
+    pending = undefined;
+    requested += 1;
+    const activeDrain = drain;
+    const errors = new FirstError(primary, hasPrimary);
+    const clean = (cleanup: () => void) => {
       try {
-        options.onError?.(error);
-      } catch {
-        // Error reporting must not block teardown.
+        cleanup();
+      } catch (error) {
+        if (hasPrimary) errors.capture(error);
       }
-    }
-    dispose();
+    };
+
+    clean(() => abort.abort());
+    clean(drawing.dispose);
+    if (resizeFrame) clean(() => cancelAnimationFrame(resizeFrame));
+    clean(() => observer?.disconnect());
+    clean(() => window.removeEventListener("resize", onWindowResize));
+    clean(() => gui?.destroy());
+
+    closing = (async () => {
+      if (hasPrimary) await errors.wait(activeDrain);
+      else await Promise.allSettled([activeDrain]);
+      if (hasPrimary) await errors.wait(shared?.release());
+      else await shared?.release().catch(() => undefined);
+      errors.throwIfAny();
+    })();
+    return closing;
   }
 
   const ready = initialize().catch((error: unknown) => {
     if (disposed || error instanceof OrtInitCancelled) return;
-    handleFailure(error);
-    throw error;
+    showFailure(error);
+    return shutdown(error, true);
   });
 
   return {
     ready,
-    invalidate() {
-      if (hasResult && lastInput) classify(lastInput);
-      else drawIdle();
+    dispose() {
+      void shutdown();
     },
-    resize,
-    dispose,
-    classify,
-    clear,
+  };
+}
+
+function paintBackground(context: CanvasRenderingContext2D): void {
+  context.fillStyle = "#000000";
+  context.fillRect(0, 0, FIXTURE_SURFACE, FIXTURE_SURFACE);
+  context.strokeStyle = "#ffffff";
+  context.lineWidth = STROKE_RADIUS * 2;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+}
+
+export function installDrawing(
+  canvas: HTMLCanvasElement,
+  context: CanvasRenderingContext2D,
+  submit: () => void
+) {
+  let drawing = false;
+  let last: Point | undefined;
+  let pointerId: number | undefined;
+  let debounce = 0;
+
+  const position = (event: PointerEvent) => {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: ((event.clientX - rect.left) / rect.width) * FIXTURE_SURFACE,
+      y: ((event.clientY - rect.top) / rect.height) * FIXTURE_SURFACE,
+    };
+  };
+  const stroke = (from: Point, to: Point) => {
+    context.beginPath();
+    context.moveTo(from.x, from.y);
+    context.lineTo(to.x, to.y);
+    context.stroke();
+  };
+  const schedule = () => {
+    if (debounce) return;
+    debounce = window.setTimeout(() => {
+      debounce = 0;
+      submit();
+    }, DRAW_DEBOUNCE_MS);
+  };
+  const down = (event: PointerEvent) => {
+    canvas.setPointerCapture(event.pointerId);
+    pointerId = event.pointerId;
+    drawing = true;
+    const point = position(event);
+    last = point;
+    stroke(point, { x: point.x + 0.01, y: point.y });
+    schedule();
+  };
+  const move = (event: PointerEvent) => {
+    if (!drawing || !last) return;
+    const point = position(event);
+    stroke(last, point);
+    last = point;
+    schedule();
+  };
+  const cancel = () => {
+    drawing = false;
+    last = undefined;
+    if (debounce) window.clearTimeout(debounce);
+    debounce = 0;
+    if (pointerId !== undefined) {
+      try {
+        canvas.releasePointerCapture(pointerId);
+      } catch {}
+      pointerId = undefined;
+    }
+  };
+  const end = () => {
+    if (!drawing) return;
+    cancel();
+    submit();
+  };
+
+  canvas.addEventListener("pointerdown", down);
+  canvas.addEventListener("pointermove", move);
+  const endEvents = ["pointerup", "pointercancel", "pointerleave"] as const;
+  endEvents.forEach((event) => canvas.addEventListener(event, end));
+
+  return {
+    cancel,
+    dispose() {
+      cancel();
+      canvas.removeEventListener("pointerdown", down);
+      canvas.removeEventListener("pointermove", move);
+      endEvents.forEach((event) => canvas.removeEventListener(event, end));
+    },
+  };
+}
+
+function getUi(root: HTMLElement) {
+  const find = <T extends Element>(name: string): T => {
+    const element = root.querySelector<T>(`[data-mnist="${name}"]`);
+    if (!element) throw new Error(`Missing MNIST ${name} element.`);
+    return element;
+  };
+  return {
+    draw: find<HTMLCanvasElement>("draw"),
+    chart: find<HTMLCanvasElement>("chart"),
+    loading: find<HTMLElement>("loading"),
+    loadingDetail: find<HTMLElement>("loading-detail"),
+    failure: find<HTMLElement>("failure"),
+    failureTitle: find<HTMLElement>("failure-title"),
+    failureDetail: find<HTMLElement>("failure-detail"),
+    dot: find<HTMLElement>("dot"),
+    status: find<HTMLElement>("status"),
   };
 }

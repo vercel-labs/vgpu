@@ -70,7 +70,7 @@ function renderPair(gpu: Awaited<ReturnType<typeof init>>, waveTarget: ReturnTyp
 }
 
 async function centerPixel(colorTarget: ReturnType<Awaited<ReturnType<typeof init>>["target"]>): Promise<readonly number[]> {
-  const pixels = await colorTarget.read();
+  const pixels = await colorTarget.color.read({ mipLevel: 0, region: "all" });
   return [...pixels.slice(4 * (4 * 8 + 4), 4 * (4 * 8 + 4) + 4)];
 }
 

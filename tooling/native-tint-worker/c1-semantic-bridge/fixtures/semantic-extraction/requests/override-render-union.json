@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "contractId": "vgpu-native-tint-semantic-extraction/v1",
+  "source": {
+    "virtualPath": "resolved/override-render-union.wgsl",
+    "sha256": "e306077ae05073e3bd57f7a89843a556930e51d1282a1577da99fbc3103860eb",
+    "text": "override SHARED: f32 = 0.25f;\noverride VERTEX_ONLY: f32 = 0.5f;\noverride FRAGMENT_ONLY: f32 = 0.75f;\n\n@vertex fn vs_main() -> @builtin(position) vec4f {\n  return vec4f(VERTEX_ONLY + SHARED, 0.0, 0.0, 1.0);\n}\n\n@fragment fn fs_main() -> @location(0) vec4f {\n  return vec4f(FRAGMENT_ONLY, SHARED, 0.0, 1.0);\n}\n"
+  },
+  "originMap": {
+    "schemaVersion": 1,
+    "contractId": "vgpu-native-origin-map/v1",
+    "generatedSource": {
+      "virtualPath": "resolved/override-render-union.wgsl",
+      "sha256": "e306077ae05073e3bd57f7a89843a556930e51d1282a1577da99fbc3103860eb"
+    },
+    "sources": [
+      {
+        "input": "override-render-union-wgsl",
+        "sha256": "e306077ae05073e3bd57f7a89843a556930e51d1282a1577da99fbc3103860eb"
+      }
+    ],
+    "segments": [
+      {
+        "generated": {
+          "startByte": 0,
+          "endByte": 307
+        },
+        "origin": {
+          "input": "override-render-union-wgsl"
+        },
+        "precision": "module"
+      }
+    ]
+  },
+  "originMapSha256": "ade112ebc963f325235cfc82d6d9e17f7deee588502a85d3f9b8c1b3089f8211",
+  "entryPoints": [
+    {
+      "stage": "vertex",
+      "wgsl": "vs_main"
+    },
+    {
+      "stage": "fragment",
+      "wgsl": "fs_main"
+    }
+  ],
+  "overrideConfiguration": [
+    {
+      "identifier": "FRAGMENT_ONLY",
+      "value": 0.125
+    },
+    {
+      "identifier": "SHARED",
+      "value": 0.375
+    },
+    {
+      "identifier": "VERTEX_ONLY",
+      "value": 0.625
+    }
+  ],
+  "languageFeatures": []
+}

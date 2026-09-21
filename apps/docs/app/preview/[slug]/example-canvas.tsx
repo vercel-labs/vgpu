@@ -1,6 +1,6 @@
 'use client';
 
-import { Component, lazy, Suspense, useMemo, useState, type ErrorInfo, type ReactNode } from 'react';
+import { Component, lazy, Suspense, useEffect, useMemo, useState, type ErrorInfo, type ReactNode } from 'react';
 import { getExampleComponentLoader } from '@/lib/example-components';
 import { createDeduplicatedExampleErrorReporter, ExampleErrorReporterProvider } from '@/lib/example-error-reporter';
 import { type ExampleSlug } from '@/lib/example-slugs';
@@ -74,6 +74,19 @@ function PreviewHost({ slug }: { slug: ExampleSlug }) {
     (error) => setAsyncError(messageOf(error)),
     (error) => postPreviewError(slug, messageOf(error)),
   ), [slug]);
+
+  useEffect(() => {
+    const reportWindowError = (event: ErrorEvent) => {
+      if (event.error || event.message) reportError(event.error ?? event.message);
+    };
+    const reportUnhandledRejection = (event: PromiseRejectionEvent) => reportError(event.reason);
+    window.addEventListener('error', reportWindowError);
+    window.addEventListener('unhandledrejection', reportUnhandledRejection);
+    return () => {
+      window.removeEventListener('error', reportWindowError);
+      window.removeEventListener('unhandledrejection', reportUnhandledRejection);
+    };
+  }, [reportError]);
 
   if (asyncError) return <ErrorDisplay message={asyncError} />;
   return (

@@ -38,11 +38,7 @@ export interface HeroSettings {
   centerX: number;
   centerY: number;
   cameraRoll: number;
-  debugView: number;
-  aa: number;
-  diskLayers: number;
   mouseYaw: number;
-  sideFade: number;
   centerFade: number;
   bloom: BloomLook;
   disk: DiskLook;
@@ -59,11 +55,7 @@ export function defaultHeroSettings(): HeroSettings {
     centerX: 0.8,
     centerY: 0.3,
     cameraRoll: -0.27,
-    debugView: 0,
-    diskLayers: 2,
-    aa: 1,
     mouseYaw: 0.15,
-    sideFade: 1,
     centerFade: 0,
     bloom: { strength: 1, threshold: 0, knee: 0.18, radius: 1.5 },
     disk: {

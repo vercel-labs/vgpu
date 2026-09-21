@@ -13,8 +13,3 @@ export fn wrapCoord(coord: vec2i, N: i32) -> vec2u {
 export fn wrapLoad(tex: texture_2d<f32>, coord: vec2i, N: i32) -> vec4f {
   return textureLoad(tex, wrapCoord(coord, N), 0);
 }
-
-export fn fullscreenPosition(vi: u32) -> vec4f {
-  var p = array<vec2f, 3>(vec2f(-1.0, -3.0), vec2f(-1.0, 1.0), vec2f(3.0, 1.0));
-  return vec4f(p[vi], 0.0, 1.0);
-}

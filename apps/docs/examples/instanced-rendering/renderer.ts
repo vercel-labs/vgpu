@@ -1,25 +1,264 @@
-import type { Effect, Gpu, Surface, Target } from 'vgpu';
-import { clock, frameLoop, surface, target } from 'vgpu';
+import GUI from "lil-gui";
+import {
+  clock,
+  frameLoop,
+  surface,
+  target,
+  type Effect,
+  type Gpu,
+  type Surface,
+  type Target,
+} from "vgpu";
 
-import type { BrowserRendererOptions, ExampleRenderer, RenderSize } from '../../lib/example-renderer';
-import { createBlit, createScene, renderScene, setBlitSource, type InstancedScene } from './scene-pipeline';
-import { DEFAULT_INSTANCED_RENDERING_CONTROLS, type InstanceCount, type InstancedRenderingControls } from './types';
+import {
+  createBlit,
+  createScene,
+  DEFAULT_INSTANCE_COUNT,
+  INSTANCE_COUNT_OPTIONS,
+  isInstanceCount,
+  renderScene,
+  type InstanceCount,
+  type InstancedScene,
+} from "./scene-pipeline";
 
-const validCount = (count: number): count is InstanceCount => count === 50 || count === 100;
+interface RendererOptions {
+  readonly canvas: HTMLCanvasElement;
+  readonly container?: HTMLElement;
+}
 
-export function createRenderer(options: BrowserRendererOptions<InstancedRenderingControls>): ExampleRenderer<InstancedRenderingControls> {
-  let disposed = false, reportedError = false, generation = 0, initializing = true; let controls = { ...(options.initialControls ?? DEFAULT_INSTANCED_RENDERING_CONTROLS) }; if (!validCount(controls.count)) controls = { ...DEFAULT_INSTANCED_RENDERING_CONTROLS };
-  let gpu: Gpu | undefined, canvasSurface: Surface | undefined, colorTarget: Target | undefined, blit: Effect | undefined, scene: InstancedScene | undefined, loop: { stop(): void } | undefined, observer: ResizeObserver | undefined;
-  let resizeFrame = 0, pendingSize: RenderSize | undefined, lastDpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio;
-  const fail = (error: unknown) => { if (disposed) return; try { if (!reportedError) { reportedError = true; try { options.onError?.(error); } catch {} } } finally { dispose(); } };
-  const applyResize = () => { resizeFrame = 0; const size = pendingSize; pendingSize = undefined; if (disposed || !size || !colorTarget || !blit || !canvasSurface) return; try { colorTarget.resize([Math.max(1, Math.round(size.width * size.dpr)), Math.max(1, Math.round(size.height * size.dpr))]); setBlitSource(blit, colorTarget, canvasSurface); } catch (error) { fail(error); } };
-  const resize = (size: RenderSize) => { if (disposed || size.width <= 0 || size.height <= 0) return; pendingSize = size; if (!resizeFrame) resizeFrame = requestAnimationFrame(applyResize); };
-  const measure = () => { const rect = options.canvas.getBoundingClientRect(); resize({ width: rect.width, height: rect.height, dpr: Math.min(2, Math.max(1, window.devicePixelRatio || 1)) }); };
-  const onWindowResize = () => { if (window.devicePixelRatio === lastDpr) return; lastDpr = window.devicePixelRatio; measure(); };
-  const rebuild = (count: InstanceCount, buildGeneration: number) => { if (!gpu || !colorTarget || disposed) return; void createScene(gpu, colorTarget, count).then((next) => { if (disposed || buildGeneration !== generation) { next.geometry.destroy(); return; } scene?.geometry.destroy(); scene = next; }, (error: unknown) => { if (disposed || buildGeneration !== generation) return; fail(error); }); };
-  const setControls = (next: Readonly<InstancedRenderingControls>) => { if (disposed || !validCount(next.count) || next.count === controls.count) return; controls = { count: next.count }; const buildGeneration = ++generation; if (!initializing) rebuild(controls.count, buildGeneration); };
-  const dispose = () => { if (disposed) return; disposed = true; generation++; loop?.stop(); loop = undefined; if (resizeFrame) cancelAnimationFrame(resizeFrame); resizeFrame = 0; pendingSize = undefined; observer?.disconnect(); observer = undefined; if (typeof window !== 'undefined') window.removeEventListener('resize', onWindowResize); scene?.geometry.destroy(); scene = undefined; (colorTarget as { destroy?: () => void } | undefined)?.destroy?.(); colorTarget = undefined; canvasSurface?.dispose(); canvasSurface = undefined; gpu?.dispose(); gpu = undefined; };
-  const initialize = async () => { const { init } = await import('vgpu'); if (disposed) return; const nextGpu = await init(); if (disposed) { nextGpu.dispose(); return; } gpu = nextGpu; canvasSurface = surface(gpu, options.canvas, { dpr: [1, 2] }); colorTarget = target(gpu, { size: canvasSurface.size, format: 'rgba8unorm', depth: true }); blit = createBlit(gpu, colorTarget, canvasSurface); while (!disposed) { const buildGeneration = generation; let nextScene: InstancedScene; try { nextScene = await createScene(gpu, colorTarget, controls.count); } catch (error) { if (disposed) return; if (buildGeneration !== generation) continue; throw error; } if (disposed) { nextScene.geometry.destroy(); return; } if (buildGeneration !== generation) { nextScene.geometry.destroy(); continue; } scene = nextScene; break; } if (disposed) return; initializing = false; observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure); observer?.observe(options.canvas); window.addEventListener('resize', onWindowResize); measure(); const time = clock(gpu); loop = frameLoop(gpu, (currentFrame) => { if (!disposed && scene && blit && colorTarget && canvasSurface && gpu) renderScene(currentFrame, scene, blit, colorTarget, canvasSurface, time.time); }); };
-  const ready = initialize().catch((error: unknown) => { if (disposed) return; fail(error); throw error; });
-  return { ready, setControls, invalidate() {}, resize, dispose };
+interface Generation {
+  readonly colorTarget: Target;
+  readonly blit: Effect;
+  readonly scene: InstancedScene;
+  readonly size: readonly [number, number];
+  readonly count: InstanceCount;
+}
+
+export function createRenderer({
+  canvas,
+  container = canvas.parentElement ?? undefined,
+}: RendererOptions) {
+  let disposed = false;
+  let failed = false;
+  let revision = 0;
+  let count = DEFAULT_INSTANCE_COUNT;
+  let size: readonly [number, number] | undefined;
+  let gpu: Gpu | undefined;
+  let output: Surface | undefined;
+  let active: Generation | undefined;
+  let loop: { stop(): void } | undefined;
+  let unsubscribeResize: (() => void) | undefined;
+  let gui: GUI | undefined;
+
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    revision++;
+    for (const cleanup of [
+      () => loop?.stop(),
+      () => unsubscribeResize?.(),
+      () => gui?.destroy(),
+      () => gpu?.dispose(),
+    ])
+      bestEffort(cleanup);
+  };
+
+  const fail = (error: unknown): never => {
+    failed = true;
+    dispose();
+    throw error;
+  };
+
+  const guard = <T>(work: () => T): T => {
+    try {
+      return work();
+    } catch (error) {
+      return fail(error);
+    }
+  };
+
+  const requestBuild = () => {
+    if (
+      !gpu ||
+      !output ||
+      !active ||
+      !size ||
+      (sameSize(size, active.size) && count === active.count)
+    )
+      return;
+    const token = revision;
+    return createGeneration(gpu, output, size, count).then(
+      (next) => {
+        if (disposed || token !== revision) {
+          cleanupGeneration(next);
+          return;
+        }
+        const previous = active;
+        active = next;
+        const retirementFailure = cleanupGeneration(previous);
+        if (retirementFailure) fail(retirementFailure.reason);
+      },
+      (error: unknown) => {
+        if (!disposed && token === revision) fail(error);
+      }
+    );
+  };
+
+  const setCount = (value: unknown) => {
+    const next = Number(value);
+    if (!isInstanceCount(next) || next === count) return;
+    count = next;
+    revision++;
+    return requestBuild();
+  };
+
+  const setSize = (next: readonly [number, number]) => {
+    if (next[0] <= 0 || next[1] <= 0) return;
+    if (sameSize(next, size)) return;
+    size = next;
+    revision++;
+    return requestBuild();
+  };
+
+  const initialize = async () => {
+    const { init } = await import("vgpu");
+    if (disposed) return;
+
+    const nextGpu = await init();
+    gpu = nextGpu;
+    if (disposed) {
+      bestEffort(() => nextGpu.dispose());
+      return;
+    }
+
+    output = surface(gpu, canvas, { dpr: [1, 2] });
+    size = output.size;
+    const initial = await createGeneration(gpu, output, size, count);
+    if (disposed) {
+      cleanupGeneration(initial);
+      return;
+    }
+    active = initial;
+
+    gui = createGui(container, count, setCount);
+    unsubscribeResize = output.onResize(({ width, height }) =>
+      setSize([width, height])
+    );
+    const time = clock(gpu);
+    loop = frameLoop(gpu, (currentFrame) =>
+      guard(() => {
+        if (!disposed && active && output) {
+          renderScene(
+            currentFrame,
+            active.scene,
+            active.blit,
+            active.colorTarget,
+            output,
+            time.time
+          );
+        }
+      })
+    );
+  };
+
+  const ready = initialize().catch((error: unknown) => {
+    if (disposed && !failed) return;
+    fail(error);
+  });
+
+  return { ready, dispose };
+}
+
+function createGui(
+  container: HTMLElement | undefined,
+  count: InstanceCount,
+  onChange: (value: unknown) => unknown
+): GUI {
+  if (!container) throw new Error("Instanced Rendering needs a GUI container");
+
+  let gui: GUI | undefined;
+  try {
+    gui = new GUI({ title: "Instanced Rendering", container, width: 210 });
+    Object.assign(gui.domElement.style, {
+      position: "absolute",
+      top: "16px",
+      right: "16px",
+      zIndex: "10",
+    });
+    gui
+      .add({ count }, "count", INSTANCE_COUNT_OPTIONS)
+      .name("Instances")
+      .onChange(onChange);
+    return gui;
+  } catch (error) {
+    bestEffort(() => gui?.destroy());
+    throw error;
+  }
+}
+
+async function createGeneration(
+  gpu: Gpu,
+  output: Surface,
+  size: readonly [number, number],
+  count: InstanceCount
+): Promise<Generation> {
+  const colorTarget = target(gpu, { size, format: "rgba8unorm", depth: true });
+  let scene: InstancedScene | undefined;
+
+  try {
+    scene = await createScene(gpu, colorTarget, count);
+    const blit = createBlit(gpu, colorTarget, output);
+
+    return {
+      colorTarget,
+      blit,
+      scene,
+      size,
+      count,
+    };
+  } catch (error) {
+    if (scene) {
+      const partialScene = scene;
+      bestEffort(() => partialScene.geometry.destroy());
+    }
+    bestEffort(() => destroyTarget(colorTarget));
+    throw error;
+  }
+}
+
+function cleanupGeneration(
+  generation: Generation | undefined
+): { reason: unknown } | undefined {
+  if (!generation) return;
+  let failure: { reason: unknown } | undefined;
+  for (const cleanup of [
+    () => generation.scene.geometry.destroy(),
+    () => destroyTarget(generation.colorTarget),
+  ]) {
+    try {
+      cleanup();
+    } catch (reason) {
+      failure ??= { reason };
+    }
+  }
+  return failure;
+}
+
+function destroyTarget(value: Target): void {
+  (value as Target & { destroy(): void }).destroy();
+}
+
+function sameSize(
+  a: readonly number[] | undefined,
+  b: readonly number[] | undefined
+): boolean {
+  return !!a && !!b && a[0] === b[0] && a[1] === b[1];
+}
+
+function bestEffort(cleanup: () => void): void {
+  try {
+    cleanup();
+  } catch {
+    // Cleanup must not replace the primary operation or failure.
+  }
 }

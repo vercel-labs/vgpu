@@ -1,18 +1,18 @@
 import { index_of } from "./fluid-common.wgsl";
 
 struct DisplayConfig {
-  dye_size: vec2u,
   output_size: vec2f,
 }
+const DYE_SIZE = vec2u(512, 288);
 @group(0) @binding(0) var<uniform> config: DisplayConfig;
 @group(0) @binding(1) var<storage, read> dye: array<vec4f>;
 
 fn sample_dye(p: vec2f) -> vec3f {
-  let grid = clamp(p * vec2f(config.dye_size) - 0.5, vec2f(0), vec2f(config.dye_size) - 1.0);
+  let grid = clamp(p * vec2f(DYE_SIZE) - 0.5, vec2f(0), vec2f(DYE_SIZE) - 1.0);
   let cell = vec2i(floor(grid));
   let f = fract(grid);
-  let bottom = mix(dye[index_of(cell, config.dye_size)].rgb, dye[index_of(cell + vec2i(1, 0), config.dye_size)].rgb, f.x);
-  let top = mix(dye[index_of(cell + vec2i(0, 1), config.dye_size)].rgb, dye[index_of(cell + vec2i(1, 1), config.dye_size)].rgb, f.x);
+  let bottom = mix(dye[index_of(cell, DYE_SIZE)].rgb, dye[index_of(cell + vec2i(1, 0), DYE_SIZE)].rgb, f.x);
+  let top = mix(dye[index_of(cell + vec2i(0, 1), DYE_SIZE)].rgb, dye[index_of(cell + vec2i(1, 1), DYE_SIZE)].rgb, f.x);
   return mix(bottom, top, f.y);
 }
 

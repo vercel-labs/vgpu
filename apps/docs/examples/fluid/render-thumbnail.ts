@@ -1,7 +1,6 @@
-import type { Gpu, Target } from 'vgpu';
+import type { Gpu, Target } from "vgpu";
 
-import type { ThumbnailOptions } from '../../lib/example-renderer';
-import type { StirInput } from './pointer-input';
+import type { StirInput } from "./pointer-input";
 import {
   createFluid,
   destroyFluid,
@@ -9,7 +8,7 @@ import {
   renderFluid,
   stepFluid,
   type Fluid,
-} from './simulation';
+} from "./simulation";
 
 export interface FluidValidationStats {
   steps: number;
@@ -19,7 +18,8 @@ export interface FluidValidationStats {
   averageDye: number;
 }
 
-export interface FluidThumbnailOptions extends ThumbnailOptions {
+export interface FluidThumbnailOptions {
+  warmupFrames?: number;
   scriptedDrag?: boolean;
   soak?: boolean;
   onStateValidated?: (stats: FluidValidationStats) => void;
@@ -44,8 +44,12 @@ export async function renderThumbnail(
         }
       }
     } else {
-      const pointer = options.scriptedDrag ? scriptedInput(0.08, 0.28, 0.24, 40) : undefined;
-      for (let i = 0; i < (options.warmupFrames ?? 120); i++) stepFluid(fluid, pointer);
+      const pointer = options.scriptedDrag
+        ? scriptedInput(0.08, 0.28, 0.24, 40)
+        : undefined;
+      for (let i = 0; i < (options.warmupFrames ?? 120); i++) {
+        stepFluid(fluid, pointer);
+      }
     }
 
     renderFluid(fluid, target);
@@ -53,11 +57,11 @@ export async function renderThumbnail(
     await gpu.settled();
     options.onStateValidated?.(await readStats(fluid));
   } finally {
-    try {
-      await gpu.gpu.queue.onSubmittedWorkDone();
-    } finally {
-      destroyFluid(fluid);
-    }
+    await Promise.allSettled([
+      Promise.resolve().then(() => gpu.gpu.queue.onSubmittedWorkDone()),
+      Promise.resolve().then(() => gpu.settled()),
+    ]);
+    destroyFluid(fluid);
   }
 }
 
@@ -83,11 +87,13 @@ function scriptedInput(
       return point(step);
     },
     get velocity() {
-      const from = point(step - 1),
-        to = point(step);
-      return [(to[0] - from[0]) * 60, (to[1] - from[1]) * 60] as [number, number];
+      const from = point(step - 1);
+      const to = point(step);
+      return [(to[0] - from[0]) * 60, (to[1] - from[1]) * 60] as [
+        number,
+        number
+      ];
     },
-    stroke: 1,
     consumeStep() {
       step++;
     },
@@ -102,10 +108,10 @@ async function readStats(fluid: Fluid): Promise<FluidValidationStats> {
   ]);
   const velocity = new Float32Array(velocityBytes);
   const dye = new Float32Array(dyeBytes);
-  let finite = true,
-    maxSpeed = 0,
-    maxDye = 0,
-    dyeSum = 0;
+  let finite = true;
+  let maxSpeed = 0;
+  let maxDye = 0;
+  let dyeSum = 0;
   for (let i = 0; i < velocity.length; i += 2) {
     finite &&= Number.isFinite(velocity[i]) && Number.isFinite(velocity[i + 1]);
     maxSpeed = Math.max(maxSpeed, Math.hypot(velocity[i]!, velocity[i + 1]!));
@@ -115,5 +121,11 @@ async function readStats(fluid: Fluid): Promise<FluidValidationStats> {
     maxDye = Math.max(maxDye, value);
     dyeSum += value;
   }
-  return { steps: fluid.step, finite, maxSpeed, maxDye, averageDye: dyeSum / dye.length };
+  return {
+    steps: fluid.step,
+    finite,
+    maxSpeed,
+    maxDye,
+    averageDye: dyeSum / dye.length,
+  };
 }

@@ -11,3 +11,15 @@
     text-align: left;
   }
 }
+
+/* Ease only the bottom of the GPU scene into the regular page surface. */
+[data-hero-foot-fade] {
+  background: linear-gradient(
+    to top,
+    var(--home-page-background) 0%,
+    color-mix(in srgb, var(--home-page-background) 72%, transparent) 24%,
+    color-mix(in srgb, var(--home-page-background) 38%, transparent) 52%,
+    color-mix(in srgb, var(--home-page-background) 14%, transparent) 76%,
+    transparent 100%
+  );
+}

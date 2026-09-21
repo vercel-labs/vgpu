@@ -1,27 +1,50 @@
-import type { Draw, Frame, Geometry, Gpu, Target } from 'vgpu';
-import { draw, geometry } from 'vgpu';
-import { disk, icosphere, perspectiveCamera } from 'vgpu/scene';
+import type { Draw, Frame, Geometry, Gpu, Target } from "vgpu";
+import { draw, geometry } from "vgpu";
+import { disk, icosphere, perspectiveCamera } from "vgpu/scene";
 
-import clippedWgsl from './clipped.wgsl';
+import clippedWgsl from "./clipped.wgsl";
 
 export interface ClippingScene {
-  geometries: Geometry[];
-  body: Draw;
-  cap: Draw;
+  readonly geometries: readonly [Geometry, Geometry];
+  readonly body: Draw;
+  readonly cap: Draw;
 }
 
 export function createScene(gpu: Gpu): ClippingScene {
-  const geometries = [
-    geometry(gpu, icosphere({ radius: 1, subdivisions: 4, shading: 'flat' })),
-    geometry(gpu, disk({ radius: 1, segments: 64 })),
-  ];
-  const body = draw(gpu, { shader: clippedWgsl, geometry: geometries[0], cull: 'back' });
-  const cap = draw(gpu, { shader: clippedWgsl, geometry: geometries[1], cull: 'back' });
-  return { geometries, body, cap };
+  const geometries: Geometry[] = [];
+  try {
+    const bodyGeometry = geometry(
+      gpu,
+      icosphere({ radius: 1, subdivisions: 4, shading: "flat" })
+    );
+    geometries.push(bodyGeometry);
+    const capGeometry = geometry(gpu, disk({ radius: 1, segments: 64 }));
+    geometries.push(capGeometry);
+
+    // Draws are GPU-owned and have no separate destroy method.
+    const body = draw(gpu, {
+      shader: clippedWgsl,
+      geometry: bodyGeometry,
+      cull: "back",
+    });
+    const cap = draw(gpu, {
+      shader: clippedWgsl,
+      geometry: capGeometry,
+      cull: "back",
+    });
+    return { geometries: [bodyGeometry, capGeometry], body, cap };
+  } catch (error) {
+    try {
+      destroyGeometries(geometries);
+    } catch {
+      // Geometry rollback must not replace the construction failure.
+    }
+    throw error;
+  }
 }
 
 export function destroyScene(scene: ClippingScene): void {
-  scene.geometries.forEach((item) => item.destroy());
+  destroyGeometries(scene.geometries);
 }
 
 export function renderScene(
@@ -46,4 +69,16 @@ export function renderScene(
     pass.draw(scene.body);
     pass.draw(scene.cap);
   });
+}
+
+function destroyGeometries(geometries: readonly Geometry[]): void {
+  let firstError: unknown;
+  for (const item of geometries) {
+    try {
+      item.destroy();
+    } catch (error) {
+      firstError ??= error;
+    }
+  }
+  if (firstError) throw firstError;
 }

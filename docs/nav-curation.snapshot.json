@@ -3,6 +3,7 @@
   "curation": {
     "packageOrder": [
       "vgpu",
+      "vgpu/three",
       "vgpu/scene",
       "@vgpu/wgsl",
       "@vgpu/wgsl-std",
@@ -11,6 +12,10 @@
       "..."
     ],
     "topicOrder": {
+      "@vgpu/adapter-node": [
+        "create-node-adapter",
+        "..."
+      ],
       "@vgpu/render": [
         "wireframe-material",
         "normal-debug-material",
@@ -43,6 +48,7 @@
         "gpu",
         "surface",
         "target",
+        "texture",
         "frame",
         "effect",
         "draw",
@@ -66,6 +72,10 @@
         "uniform-pool",
         "..."
       ],
+      "vgpu/mock": [
+        "create-mock-adapter",
+        "..."
+      ],
       "vgpu/scene": [
         "camera",
         "orthographic-camera",
@@ -73,6 +83,10 @@
         "deg-to-rad",
         "srgb",
         "orbit",
+        "..."
+      ],
+      "vgpu/three": [
+        "tsl-exports",
         "..."
       ]
     },
@@ -84,6 +98,15 @@
         ]
       },
       {
+        "title": "Integrations",
+        "slugs": [
+          "threejs",
+          "nextjs",
+          "no-bundler",
+          "external-ticker"
+        ]
+      },
+      {
         "title": "Performance",
         "slugs": [
           "performance-model",
@@ -92,7 +115,9 @@
           "measuring",
           "optimize-pass",
           "shader-fix-its",
-          "performance-playbook"
+          "performance-playbook",
+          "adaptive-quality",
+          "shipping-to-production"
         ]
       },
       {
@@ -112,6 +137,7 @@
       "Concepts @ /concepts",
       "  ",
       "    Context @ /concepts/context",
+      "    WGSL modules @ /concepts/wgsl-modules",
       "    Draws @ /concepts/draws",
       "    Compilation @ /concepts/compilation",
       "    Effects @ /concepts/effects",
@@ -122,18 +148,41 @@
       "  ",
       "    Overview @ /guides",
       "  General",
+      "  Integrations",
       "  Performance",
       "  Testing",
+      "  ...",
+      "Migrations @ /migrations",
       "  ...",
       "Examples @ /examples",
       "  ...",
       "CLI @ /cli",
+      "MCP @ /mcp",
       "ML @ /ml",
       "  ",
       "    Overview @ /ml",
       "    Quickstart: Browser @ /ml/browser",
       "    Quickstart: Node @ /ml/node",
       "    Buffers & ownership @ /ml/buffers",
+      "Native @ /native",
+      "  ",
+      "    Overview @ /native",
+      "  macOS",
+      "    Get started @ /native/macos",
+      "    Load Metal functions @ /native/macos/metal/functions",
+      "    Render WGSL with Metal @ /native/macos/metal/rendering",
+      "    Pack uniforms for Metal @ /native/macos/metal/uniforms",
+      "    Bind Metal buffers @ /native/macos/metal/bindings",
+      "    Render to multiple textures @ /native/macos/metal/render/targets",
+      "    Dispatch WGSL compute @ /native/macos/metal/compute/dispatch",
+      "    Use prepared compute bindings @ /native/macos/metal/compute/prepared-bindings",
+      "    Encode native indirect dispatch @ /native/macos/metal/compute/indirect-dispatch",
+      "    Render computed data @ /native/macos/metal/compute/rendering",
+      "    Configure a Metal package @ /native/macos/metal/tooling/configuration",
+      "    Resolve shader inputs @ /native/macos/metal/tooling/sources",
+      "    Check the native toolchain @ /native/macos/metal/tooling/doctor",
+      "    Build and verify a Metal package @ /native/macos/metal/tooling/build",
+      "    Publish generated packages @ /native/macos/metal/tooling/publication",
       "API Reference @ /reference",
       "  ..."
     ]

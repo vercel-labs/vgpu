@@ -40,6 +40,18 @@ const budgetsFile = process.env.VGPU_EXAMPLE_BUDGETS_FILE
   : new URL('./example-chunk-budgets.json', import.meta.url);
 const budgets = JSON.parse(await readFile(budgetsFile, 'utf8'));
 const slugs = Object.keys(budgets.examples);
+const slugSource = await readFile(path.join(sourceDir, 'lib', 'example-slugs.ts'), 'utf8');
+const slugTuple = slugSource.match(/export const exampleSlugs\s*=\s*\[([\s\S]*?)\]\s*as const/u)?.[1];
+if (!slugTuple) throw new Error('Could not parse the canonical exampleSlugs tuple.');
+const canonicalSlugs = [...slugTuple.matchAll(/(['"])(.*?)\1/gu)].map((match) => match[2]);
+const missingBudgets = canonicalSlugs.filter((slug) => !slugs.includes(slug));
+const staleBudgets = slugs.filter((slug) => !canonicalSlugs.includes(slug));
+if (missingBudgets.length || staleBudgets.length) {
+  throw new Error(
+    `Example budget coverage must exactly match exampleSlugs. Missing: ${missingBudgets.join(', ') || 'none'}. `
+    + `Stale: ${staleBudgets.join(', ') || 'none'}.`,
+  );
+}
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -134,8 +146,9 @@ for (const slug of slugs) {
     // it is what keeps the isolation assertion from silently becoming a no-op during the dual-run
     // window. Turbopack bakes the app-relative source path of inlined WGSL into the chunk, so in
     // `apps/docs-next` the markers read `apps/docs-next/examples/<slug>/`. Measured on this build:
-    // 8 example slugs still carry markers (fluid, radiance-cascades, transmission, fft-ocean,
-    // fft-ocean-surface, earth, environment-map, triangle-led-front) and the hardcoded
+    // 11 example slugs still carry markers (agent-radiance-cascades, earth, environment-map,
+    // fft-ocean, fft-ocean-surface, fluid, glass-fractal, optimized-black-hole,
+    // radiance-cascades, transmission, triangle-led-front) and the hardcoded
     // `apps/docs/examples/` pattern matched exactly ZERO of them -- both the foreign-renderer check
     // and the `chunkOwners` shared-chunk check below are gated on `markerSlugs`, so they would have
     // passed vacuously on every build until cutover. The check itself is unchanged (same markers,

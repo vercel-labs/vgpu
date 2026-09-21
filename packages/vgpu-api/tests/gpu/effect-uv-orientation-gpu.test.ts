@@ -42,7 +42,7 @@ describe.skipIf(!dockerTest)("fragment-only effect UV orientation", () => {
       const colorTarget = target(gpu, { size: [SIZE, SIZE], format: "rgba8unorm" });
       effect(gpu, UV_PATTERN).draw(colorTarget);
 
-      const pixels = await colorTarget.read();
+      const pixels = await colorTarget.color.read({ mipLevel: 0, region: "all" });
       const top = pixelAt(pixels, 0, 0);
       const bottom = pixelAt(pixels, 0, SIZE - 1);
       expect(top[0]).toBeLessThan(32);
@@ -69,7 +69,7 @@ describe.skipIf(!dockerTest)("fragment-only effect UV orientation", () => {
         },
       }).draw(output);
 
-      expect(await output.read()).toEqual(await source.read());
+      expect(await output.color.read({ mipLevel: 0, region: "all" })).toEqual(await source.color.read({ mipLevel: 0, region: "all" }));
     } finally {
       gpu.dispose();
     }
@@ -83,7 +83,7 @@ describe.skipIf(!dockerTest)("fragment-only effect UV orientation", () => {
       effect(gpu, UV_PATTERN).draw(injected);
       draw(gpu, { shader: WGSL_STD_ORIENTATION, vertices: 3 }).draw(helper);
 
-      expect(await injected.read()).toEqual(await helper.read());
+      expect(await injected.color.read({ mipLevel: 0, region: "all" })).toEqual(await helper.color.read({ mipLevel: 0, region: "all" }));
     } finally {
       gpu.dispose();
     }

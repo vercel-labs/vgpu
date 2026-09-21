@@ -1,6 +1,5 @@
-import Image from "next/image";
-
 import { CiRunOutput } from "./ci-run-output";
+import { DeferredImage } from "./deferred-image";
 import { EveVideo } from "./eve-video";
 
 const eveBillboardImage = "/examples/eve/eve-billboard.png";
@@ -23,10 +22,12 @@ function FrameLabel({ detail, name }: { detail: string; name: string }) {
 
 function EveMark({ alt }: { alt: string }) {
   return (
-    <Image
+    <DeferredImage
       alt={alt}
       className="object-contain"
+      fetchPriority="low"
       fill
+      loading="lazy"
       sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 34vw"
       src={eveBillboardImage}
     />
@@ -38,10 +39,12 @@ function WebOutput() {
     <article className={outputFrameClass}>
       <FrameLabel detail="interactive · canvas" name="Web" />
       <div className="relative aspect-video">
-        <Image
+        <DeferredImage
           alt="Eve homepage using the Eve shader in an interactive web canvas"
           className="object-cover object-top"
+          fetchPriority="low"
           fill
+          loading="lazy"
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 34vw"
           src={eveHomepageImage}
         />
@@ -56,19 +59,23 @@ function ImageOutput() {
       <FrameLabel detail="png · 8192 × 4608" name="Image" />
       <div className="relative flex aspect-video items-center bg-black">
         <div className="relative aspect-[48/14] w-full overflow-hidden">
-          <Image
+          <DeferredImage
             alt="Hudson Yards billboard layout for Eve"
             className="object-fill"
+            fetchPriority="low"
             fill
+            loading="lazy"
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 34vw"
             src={eveBillboardLayout}
             unoptimized
           />
           <div className="absolute left-[30.1%] top-[15.6%] h-[68.8%] w-[64.3%] overflow-hidden">
-            <Image
+            <DeferredImage
               alt="High-resolution Eve shader render on the Hudson Yards billboard"
               className="object-contain"
+              fetchPriority="low"
               fill
+              loading="lazy"
               sizes="(max-width: 640px) 64vw, (max-width: 1024px) 32vw, 22vw"
               src={eveBillboardRender}
             />
@@ -154,7 +161,7 @@ export function OneShaderEverySurfaceSection() {
     <section aria-labelledby="one-shader-heading" className="mb-36">
       <div className="mb-12 flex flex-col items-center text-center sm:mb-14">
         <h2
-          className="text-pretty text-4xl font-normal leading-tight tracking-[-0.045em] text-gray-1000 sm:text-5xl"
+          className="text-pretty text-3xl font-normal leading-[1.05] tracking-[-0.045em] text-gray-1000 sm:text-5xl sm:leading-tight"
           id="one-shader-heading"
         >
           One shader. Render everywhere.

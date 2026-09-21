@@ -1,11 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useExampleErrorReporter } from "../../lib/example-error-reporter";
-import {
-  createHeroFractalRenderer,
-} from "./renderer";
-import { HERO_FRACTAL_CAMERA, HERO_FRACTAL_GLASS, HERO_FRACTAL_MATERIAL, HERO_ORB_MATERIAL } from "./settings";
+import { createRenderer } from "./renderer";
 
 type Shape = "fractal" | "orb";
 
@@ -19,45 +15,26 @@ const SHAPES = [
 }[];
 
 export function Example() {
-  const reportError = useExampleErrorReporter();
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rendererRef =
-    useRef<ReturnType<typeof createHeroFractalRenderer>>(null);
+  const rendererRef = useRef<ReturnType<typeof createRenderer>>(null);
   const [shape, setShape] = useState<Shape>("fractal");
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     const canvas = canvasRef.current;
     if (!canvas) return;
-
-    let cancelled = false;
-    const renderer = createHeroFractalRenderer({
-      canvas,
-      camera: HERO_FRACTAL_CAMERA,
-      fractalMaterial: HERO_FRACTAL_MATERIAL,
-      orbMaterial: HERO_ORB_MATERIAL,
-      glass: HERO_FRACTAL_GLASS,
-      onError: (error) => {
-        reportError(error);
-        if (!cancelled) setIsReady(false);
-      },
-    });
+    const renderer = createRenderer({ canvas });
     rendererRef.current = renderer;
-
-    void renderer.ready
-      .then(() => {
-        if (!cancelled) setIsReady(true);
-      })
-      .catch(() => {
-        // The example error reporter owns initialization failures.
-      });
-
+    void renderer.ready.then(() => {
+      if (!cancelled) setIsReady(true);
+    });
     return () => {
       cancelled = true;
       if (rendererRef.current === renderer) rendererRef.current = null;
       renderer.dispose();
     };
-  }, [reportError]);
+  }, []);
 
   const selectShape = (nextShape: Shape, sphereMix: number) => {
     setShape(nextShape);
@@ -106,3 +83,5 @@ export function Example() {
     </div>
   );
 }
+
+export default Example;

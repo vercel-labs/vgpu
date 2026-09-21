@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 
-export type HeroTab = "Prompt" | "Skill";
+export type HeroTab = "Prompt" | "CLI" | "Skill" | "MCP";
 
 interface HeroTabState {
   readonly activeTab: HeroTab;

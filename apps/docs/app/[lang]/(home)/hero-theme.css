@@ -1,0 +1,89 @@
+/* The GPU wall keeps its photographic base while the sticky navbar uses the
+   regular page surface once content starts scrolling underneath it. */
+:root {
+  --home-hero-foreground: #ffffff;
+  --home-page-background: #000000;
+}
+
+html.light {
+  --home-hero-foreground: #111111;
+  --home-page-background: #fafafa;
+}
+
+[data-hero-theme] {
+  background-color: var(--home-page-background);
+}
+
+[data-prism-background] {
+  background-color: var(--home-page-background);
+}
+
+[data-hero-theme] {
+  color: var(--home-hero-foreground);
+}
+
+body:has([data-hero-theme]) {
+  background-color: var(--home-page-background);
+}
+
+/* The package navbar is outside the home layout, so the home marker cannot
+   pass it a class directly. `:has()` scopes the full-width surface to this route
+   without changing the shared navbar on docs and examples pages. */
+body:has([data-hero-theme]) [data-geistdocs-container] > header {
+  border-bottom-color: transparent;
+  background-color: transparent;
+  transition:
+    background-color 200ms ease,
+    border-color 200ms ease;
+}
+
+html[data-scrolled]
+  body:has([data-hero-theme])
+  [data-geistdocs-container]
+  > header,
+body:has([data-hero-theme])
+  [data-geistdocs-container]
+  > header:has(
+    [data-slot="navigation-menu-trigger"][data-state="open"]
+  ) {
+  background-color: var(--home-page-background);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body:has([data-hero-theme]) [data-geistdocs-container] > header {
+    transition: none;
+  }
+}
+
+/* The Search / Ask AI buttons use the outline variant, whose light-mode fill
+   (`bg-background-100`) reads as an out-of-place solid white chip over the
+   textured hero. Soften it to 50% on the home route in light mode; hover still
+   restores a surface, and dark mode's translucent outline is left untouched. */
+html.light
+  body:has([data-hero-theme])
+  [data-geistdocs-container]
+  > header
+  [data-slot="button"] {
+  background-color: color-mix(
+    in srgb,
+    var(--ds-background-100) 50%,
+    transparent
+  );
+}
+
+[data-hero-tabs-rule] {
+  --hero-tabs-rule-peak: 50%;
+
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--home-hero-foreground) var(--hero-tabs-rule-peak),
+    transparent
+  );
+}
+
+@media (min-width: 1100px) {
+  [data-hero-tabs-rule] {
+    --hero-tabs-rule-peak: 10%;
+  }
+}

@@ -1,35 +1,34 @@
-import type { Gpu, Target } from 'vgpu';
+import type { Buffer, Gpu, Target } from "vgpu";
+import { createChart, createLogitsBuffer, writeLogits } from "./renderer";
 
-import type { ThumbnailOptions } from '../../lib/example-renderer';
-import { createFixtureDigit, GOLDEN_LOGITS } from './fixtures';
-import {
-  createDigitBuffer,
-  createIdleLogitsBuffer,
-  createVisualizer,
-  writeDigit,
-  writeLogits,
-} from './renderer';
+export const GOLDEN_LOGITS = new Float32Array([
+  -7.533131, 7.212919, 5.826909, 6.00873, -12.431555, -8.755082, -21.573675,
+  29.645443, -8.709205, 1.797541,
+]);
 
-/** Deterministic, ORT-free render of the seeded digit and golden logits. */
-export async function renderThumbnail(
-  gpu: Gpu,
-  target: Target,
-  _options: ThumbnailOptions = {}
-): Promise<void> {
-  const visualizer = createVisualizer(gpu, 'mnist-classifier-thumb');
-  const digit = createDigitBuffer(gpu, 'mnist-classifier-thumb');
-  const logits = createIdleLogitsBuffer(gpu, 'mnist-classifier-thumb');
+export async function renderThumbnail(gpu: Gpu, target: Target): Promise<void> {
+  let logits: Buffer | undefined;
+  let failure: { error: unknown } | undefined;
   try {
-    writeDigit(digit, createFixtureDigit());
+    const chart = createChart(gpu, "mnist-classifier-thumb");
+    logits = createLogitsBuffer(gpu, "mnist-classifier-thumb");
     writeLogits(logits, GOLDEN_LOGITS);
-    visualizer.render(gpu, target, logits, digit, true);
-  } finally {
-    await Promise.allSettled([
-      Promise.resolve().then(() => gpu.gpu.queue.onSubmittedWorkDone()),
-      Promise.resolve().then(() => gpu.settled()),
-    ]);
-    visualizer.dispose();
-    logits.dispose();
-    digit.dispose();
+    chart(gpu, target, logits, true);
+  } catch (error) {
+    failure = { error };
   }
+
+  const barriers = await Promise.allSettled([
+    Promise.resolve().then(() => gpu.gpu.queue.onSubmittedWorkDone()),
+    Promise.resolve().then(() => gpu.settled()),
+  ]);
+  for (const result of barriers) {
+    if (result.status === "rejected") failure ??= { error: result.reason };
+  }
+  try {
+    logits?.dispose();
+  } catch (error) {
+    failure ??= { error };
+  }
+  if (failure) throw failure.error;
 }

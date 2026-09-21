@@ -1,84 +1,121 @@
-import type { Effect, Gpu, Surface, Target } from 'vgpu';
-import { effect, frame, sampler, target } from 'vgpu';
-
-import agentDotsWgsl from './agent-dots.wgsl';
-import jfaInitWgsl from './jfa-init.wgsl';
-import jfaPassWgsl from './jfa-pass.wgsl';
-import radianceCascadeWgsl from './radiance-cascade.wgsl';
-import sdfFinalizeWgsl from './sdf-finalize.wgsl';
-import presentWgsl from './present.wgsl';
-import { atlasSizeFor, cascadeCountForSize, jfaJumps, RC_INTERVAL0, RC_OVERLAP, type Vec2 } from './math';
 import {
-  AGENT_RADIANCE_ANIMATION_MODES,
-  resolveView,
-  type AgentRadianceAnimation,
-  type AgentRadianceView,
-} from './types';
+  effect,
+  frame,
+  sampler,
+  target,
+  type Effect,
+  type Gpu,
+  type Surface,
+  type Target,
+} from "vgpu";
+
+import agentDotsWgsl from "./agent-dots.wgsl";
+import jfaInitWgsl from "./jfa-init.wgsl";
+import jfaPassWgsl from "./jfa-pass.wgsl";
+import presentWgsl from "./present.wgsl";
+import radianceCascadeWgsl from "./radiance-cascade.wgsl";
+import sdfFinalizeWgsl from "./sdf-finalize.wgsl";
 
 type Output = Surface | Target;
+type Vec2 = readonly [number, number];
 
-const HDR_FORMAT: GPUTextureFormat = 'rgba16float';
-const SEED_FORMAT: GPUTextureFormat = 'rgba32float';
+export type AgentRadianceAnimation =
+  | "center-out"
+  | "edge-orbit"
+  | "edge-then-center";
+export type AgentRadianceView =
+  | "final"
+  | "emitters"
+  | "jfa"
+  | "sdf"
+  | `cascade-${0 | 1 | 2 | 3 | 4 | 5}`;
+
+const HDR_FORMAT: GPUTextureFormat = "rgba16float";
+// Seeds store absolute pixel coordinates, which need f32 precision past 2048.
+const SEED_FORMAT: GPUTextureFormat = "rgba32float";
+const RC_INTERVAL0 = 2;
 const DOT_SPACING = 0.105;
 const DOT_RADIUS = 0.0295;
-const BASE_RADIANCE = 0.065;
-const PEAK_RADIANCE = 8.5;
-const EXPOSURE = 0.92;
-const BACKDROP_ALBEDO = 0.075;
-const AMBIENT = 0.004;
-const SDF_DEBUG_PERIOD = 48;
+const ANIMATION_MODE: Record<AgentRadianceAnimation, number> = {
+  "center-out": 0,
+  "edge-orbit": 1,
+  "edge-then-center": 2,
+};
 
-export interface AgentRadianceScene {
-  readonly gpu: Gpu;
-  readonly label: string;
-  readonly size: Vec2;
-  readonly atlas: Vec2;
-  readonly directionBase: number;
-  readonly cascadeCount: number;
-  readonly jumps: readonly number[];
-  readonly emitter: Target;
-  jfa: [Target, Target];
-  readonly sdf: Target;
-  cascades: [Target, Target];
-  readonly effects: {
-    readonly dots: Effect;
-    readonly jfaInit: Effect;
-    readonly jfaSteps: readonly Effect[];
-    readonly sdfFinalize: Effect;
-    readonly cascade: readonly Effect[];
-    readonly present: Effect;
-  };
-  readonly sampler: GPUSampler;
+export function scaledSize(
+  width: number,
+  height: number,
+  requestedScale: number,
+  maxEdge: number
+): Vec2 {
+  const scale = Math.min(requestedScale, maxEdge / Math.max(width, height, 1));
+  return [
+    Math.max(1, Math.round(width * scale)),
+    Math.max(1, Math.round(height * scale)),
+  ];
 }
 
-export function createScene(gpu: Gpu, size: Vec2, label: string, directionBase = 2): AgentRadianceScene {
-  const width = Math.max(1, Math.floor(size[0]));
-  const height = Math.max(1, Math.floor(size[1]));
-  const cascadeCount = cascadeCountForSize(width, height);
-  const atlas = atlasSizeFor(width, height, cascadeCount, directionBase);
-  const jumps = jfaJumps(Math.max(width, height));
+function resolveView(view: AgentRadianceView, cascadeCount: number) {
+  if (view === "emitters") return { mode: 1, stage: 0, stopAt: cascadeCount };
+  if (view === "jfa") return { mode: 4, stage: 1, stopAt: cascadeCount };
+  if (view === "sdf") return { mode: 2, stage: 2, stopAt: cascadeCount };
+  if (view.startsWith("cascade-")) {
+    return {
+      mode: 3,
+      stage: 3,
+      stopAt: Math.min(Number(view.slice(8)), cascadeCount - 1),
+    };
+  }
+  return { mode: 0, stage: 3, stopAt: 0 };
+}
+
+export function createScene(gpu: Gpu, requestedSize: Vec2, directionBase = 2) {
+  const width = Math.max(1, Math.floor(requestedSize[0]));
+  const height = Math.max(1, Math.floor(requestedSize[1]));
+  const size: Vec2 = [width, height];
+  const cascadeCount = Math.min(
+    6,
+    Math.max(
+      5,
+      Math.ceil(
+        Math.log(1 + (3 * Math.hypot(width, height)) / RC_INTERVAL0) /
+          Math.log(4)
+      )
+    )
+  );
+  const coarsest = 2 ** (cascadeCount - 1);
+  const atlas: Vec2 = [
+    Math.ceil(width / coarsest) * coarsest * directionBase,
+    Math.ceil(height / coarsest) * coarsest * directionBase,
+  ];
+  const jumpCount = Math.ceil(Math.log2(Math.max(width, height, 2)));
+  const jumps = [
+    ...Array.from({ length: jumpCount }, (_, index) =>
+      Math.max(1, 2 ** (jumpCount - index - 1))
+    ),
+    1,
+    1,
+  ];
   const created: Target[] = [];
+  const own = (resource: Target) => {
+    created.push(resource);
+    return resource;
+  };
 
   try {
-    const emitter = target(gpu, { size: [width, height], format: HDR_FORMAT, label: `${label}-emitters` });
-    created.push(emitter);
+    const emitter = own(target(gpu, { size, format: HDR_FORMAT }));
     const jfa: [Target, Target] = [
-      target(gpu, { size: [width, height], format: SEED_FORMAT, label: `${label}-jfa-a` }),
-      target(gpu, { size: [width, height], format: SEED_FORMAT, label: `${label}-jfa-b` }),
+      own(target(gpu, { size, format: SEED_FORMAT })),
+      own(target(gpu, { size, format: SEED_FORMAT })),
     ];
-    created.push(...jfa);
-    const sdf = target(gpu, { size: [width, height], format: HDR_FORMAT, label: `${label}-sdf` });
-    created.push(sdf);
+    const sdf = own(target(gpu, { size, format: HDR_FORMAT }));
     const cascades: [Target, Target] = [
-      target(gpu, { size: [atlas[0], atlas[1]], format: HDR_FORMAT, label: `${label}-cascade-a` }),
-      target(gpu, { size: [atlas[0], atlas[1]], format: HDR_FORMAT, label: `${label}-cascade-b` }),
+      own(target(gpu, { size: atlas, format: HDR_FORMAT })),
+      own(target(gpu, { size: atlas, format: HDR_FORMAT })),
     ];
-    created.push(...cascades);
-
     return {
       gpu,
-      label,
-      size: [width, height],
+      size,
       atlas,
       directionBase,
       cascadeCount,
@@ -88,113 +125,124 @@ export function createScene(gpu: Gpu, size: Vec2, label: string, directionBase =
       sdf,
       cascades,
       effects: {
-        dots: effect(gpu, agentDotsWgsl, { label: `${label}-dots` }),
-        jfaInit: effect(gpu, jfaInitWgsl, { label: `${label}-jfa-init` }),
-        jfaSteps: jumps.map((_, index) => effect(gpu, jfaPassWgsl, { label: `${label}-jfa-${index}` })),
-        sdfFinalize: effect(gpu, sdfFinalizeWgsl, { label: `${label}-sdf-finalize` }),
-        cascade: Array.from({ length: cascadeCount }, (_, index) =>
-          effect(gpu, radianceCascadeWgsl, { label: `${label}-cascade-${index}` })),
-        present: effect(gpu, presentWgsl, { label: `${label}-present` }),
+        dots: effect(gpu, agentDotsWgsl),
+        jfaInit: effect(gpu, jfaInitWgsl),
+        // Uniforms upload immediately, so each encoded pass needs its own effect.
+        jfaSteps: jumps.map(() => effect(gpu, jfaPassWgsl)),
+        sdfFinalize: effect(gpu, sdfFinalizeWgsl),
+        cascade: Array.from({ length: cascadeCount }, () =>
+          effect(gpu, radianceCascadeWgsl)
+        ),
+        present: effect(gpu, presentWgsl),
       },
       sampler: sampler(gpu, {
-        minFilter: 'linear',
-        magFilter: 'linear',
-        addressModeU: 'clamp-to-edge',
-        addressModeV: 'clamp-to-edge',
+        minFilter: "linear",
+        magFilter: "linear",
+        addressModeU: "clamp-to-edge",
+        addressModeV: "clamp-to-edge",
       }),
     };
   } catch (error) {
-    for (const colorTarget of created) destroyTarget(colorTarget);
+    try {
+      destroyTargets(created);
+    } catch {
+      // Preserve the allocation error after best-effort rollback.
+    }
     throw error;
   }
 }
 
-export async function prepareScene(scene: AgentRadianceScene, outputFormat: GPUTextureFormat): Promise<void> {
+export type AgentRadianceScene = ReturnType<typeof createScene>;
+
+export async function prepareScene(
+  scene: AgentRadianceScene,
+  outputFormat: GPUTextureFormat
+): Promise<void> {
   await Promise.all([
     scene.effects.dots.compile({ colors: [HDR_FORMAT] }),
     scene.effects.jfaInit.compile({ colors: [SEED_FORMAT] }),
-    ...scene.effects.jfaSteps.map((shader) => shader.compile({ colors: [SEED_FORMAT] })),
+    ...scene.effects.jfaSteps.map((shader) =>
+      shader.compile({ colors: [SEED_FORMAT] })
+    ),
     scene.effects.sdfFinalize.compile({ colors: [HDR_FORMAT] }),
-    ...scene.effects.cascade.map((shader) => shader.compile({ colors: [HDR_FORMAT] })),
+    ...scene.effects.cascade.map((shader) =>
+      shader.compile({ colors: [HDR_FORMAT] })
+    ),
     scene.effects.present.compile({ colors: [outputFormat] }),
   ]);
 }
 
 export function destroyScene(scene: AgentRadianceScene): void {
-  for (const colorTarget of [scene.emitter, ...scene.jfa, scene.sdf, ...scene.cascades]) destroyTarget(colorTarget);
+  destroyTargets([scene.emitter, ...scene.jfa, scene.sdf, ...scene.cascades]);
 }
 
-function destroyTarget(colorTarget: Target): void {
-  (colorTarget as Target & { destroy?: () => void }).destroy?.();
-}
-
-interface ChainPass {
-  readonly target: Target;
-  readonly effect: Effect;
+function destroyTargets(targets: readonly Target[]): void {
+  let firstError: unknown;
+  for (let index = targets.length - 1; index >= 0; index--) {
+    try {
+      (targets[index] as Target & { destroy?: () => void }).destroy?.();
+    } catch (error) {
+      firstError ??= error;
+    }
+  }
+  if (firstError) throw firstError;
 }
 
 function buildChain(
   scene: AgentRadianceScene,
   time: number,
   view: AgentRadianceView,
-  animation: AgentRadianceAnimation,
-): ChainPass[] {
-  const { size, atlas, effects } = scene;
+  animation: AgentRadianceAnimation
+) {
+  const { size, effects } = scene;
   const resolved = resolveView(view, scene.cascadeCount);
-  const scale = Math.min(size[0], size[1]);
-  const passes: ChainPass[] = [];
+  const passes: { readonly target: Target; readonly effect: Effect }[] = [];
 
   effects.dots.set({
     agent: {
       size: [size[0], size[1]],
       time,
-      spacing: scale * DOT_SPACING,
-      radius: scale * DOT_RADIUS,
-      base_radiance: BASE_RADIANCE,
-      peak_radiance: PEAK_RADIANCE,
-      edge_softness: 0.8,
-      animation_mode: AGENT_RADIANCE_ANIMATION_MODES[animation],
+      spacing: Math.min(size[0], size[1]) * DOT_SPACING,
+      radius: Math.min(size[0], size[1]) * DOT_RADIUS,
+      animation_mode: ANIMATION_MODE[animation],
     },
   });
   passes.push({ target: scene.emitter, effect: effects.dots });
-  if (!resolved.needsJfa) return passes;
+  if (resolved.stage === 0) return passes;
 
-  effects.jfaInit.set({ jfa: { size: [size[0], size[1]], threshold: 0.5, _pad: 0 }, emitter: scene.emitter });
+  effects.jfaInit.set({ emitter: scene.emitter });
   passes.push({ target: scene.jfa[0], effect: effects.jfaInit });
-
   let seedRead = scene.jfa[0];
   let seedWrite = scene.jfa[1];
   scene.jumps.forEach((jump, index) => {
     const shader = effects.jfaSteps[index]!;
-    shader.set({ jfa: { size: [size[0], size[1]], jump, _pad: 0 }, seeds: seedRead });
+    shader.set({ jfa: { jump: [jump, 0, 0, 0] }, seeds: seedRead });
     passes.push({ target: seedWrite, effect: shader });
     [seedRead, seedWrite] = [seedWrite, seedRead];
   });
   scene.jfa = [seedRead, seedWrite];
-  if (!resolved.needsSdf) return passes;
+  if (resolved.stage === 1) return passes;
 
-  effects.sdfFinalize.set({
-    sdf: { size: [size[0], size[1]], far: Math.hypot(size[0], size[1]) * 2, encode_scale: 1 },
-    seeds: seedRead,
-  });
+  effects.sdfFinalize.set({ seeds: seedRead });
   passes.push({ target: scene.sdf, effect: effects.sdfFinalize });
+  if (resolved.stage === 2) return passes;
 
   let atlasWrite = scene.cascades[0];
   let atlasRead = scene.cascades[1];
-  for (let cascade = scene.cascadeCount - 1; cascade >= resolved.stopAt; cascade--) {
+  for (
+    let cascade = scene.cascadeCount - 1;
+    cascade >= resolved.stopAt;
+    cascade--
+  ) {
     const shader = effects.cascade[cascade]!;
     shader.set({
       rc: {
-        atlas_size: [atlas[0], atlas[1]],
-        scene_size: [size[0], size[1]],
-        cascade,
-        interval0: RC_INTERVAL0,
-        overlap: RC_OVERLAP,
-        sdf_scale: 1,
-        has_upper: cascade < scene.cascadeCount - 1 ? 1 : 0,
-        direction_base: scene.directionBase,
-        _pad1: 0,
-        _pad2: 0,
+        state: [
+          cascade,
+          cascade < scene.cascadeCount - 1 ? 1 : 0,
+          scene.directionBase,
+          0,
+        ],
       },
       sdf_tex: scene.sdf,
       sdf_samp: scene.sampler,
@@ -213,27 +261,33 @@ export function renderLighting(
   scene: AgentRadianceScene,
   time: number,
   view: AgentRadianceView,
-  animation: AgentRadianceAnimation = 'center-out',
+  animation: AgentRadianceAnimation = "center-out"
 ): void {
   const passes = buildChain(scene, time, view, animation);
   frame(scene.gpu, (currentFrame) => {
     for (const pass of passes) {
-      currentFrame.pass({ target: pass.target, clear: [0, 0, 0, 0] }, (encoder) => encoder.draw(pass.effect));
+      currentFrame.pass(
+        { target: pass.target, clear: [0, 0, 0, 0] },
+        (encoder) => encoder.draw(pass.effect)
+      );
     }
   });
 }
 
-export function presentScene(scene: AgentRadianceScene, output: Output, view: AgentRadianceView): void {
+export function presentScene(
+  scene: AgentRadianceScene,
+  output: Output,
+  view: AgentRadianceView
+): void {
   scene.effects.present.set({
     present: {
-      scene_size: [scene.size[0], scene.size[1]],
-      atlas_size: [scene.atlas[0], scene.atlas[1]],
-      exposure: EXPOSURE,
-      view: resolveView(view, scene.cascadeCount).mode,
-      sdf_period: SDF_DEBUG_PERIOD,
-      albedo: BACKDROP_ALBEDO,
-      ambient: AMBIENT,
-      direction_base: scene.directionBase,
+      display: [
+        0.92,
+        resolveView(view, scene.cascadeCount).mode,
+        48,
+        scene.directionBase,
+      ],
+      lighting: [0.075, 0.004, 0, 0],
     },
     cascade_tex: scene.cascades[0],
     emitter_tex: scene.emitter,
@@ -242,8 +296,8 @@ export function presentScene(scene: AgentRadianceScene, output: Output, view: Ag
     emitter_samp: scene.sampler,
   });
   frame(scene.gpu, (currentFrame) => {
-    currentFrame.pass({ target: output, clear: [0, 0, 0, 1] }, (encoder) => encoder.draw(scene.effects.present));
+    currentFrame.pass({ target: output, clear: [0, 0, 0, 1] }, (encoder) =>
+      encoder.draw(scene.effects.present)
+    );
   });
 }
-
-export { HDR_FORMAT };

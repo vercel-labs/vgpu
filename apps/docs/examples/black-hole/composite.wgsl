@@ -1,12 +1,6 @@
-struct Composite {
-  exposure: f32,
-  bloomStrength: f32,
-}
-
 @group(0) @binding(0) var scene: texture_2d<f32>;
 @group(0) @binding(1) var bloom: texture_2d<f32>;
 @group(0) @binding(2) var samp: sampler;
-@group(0) @binding(3) var<uniform> composite: Composite;
 
 fn aces(x: vec3f) -> vec3f {
   let a = 2.51;
@@ -20,9 +14,9 @@ fn aces(x: vec3f) -> vec3f {
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
   let hdrScene = textureSampleLevel(scene, samp, uv, 0.0).rgb;
   let hdrBloom = textureSampleLevel(bloom, samp, uv, 0.0).rgb;
-  var color = hdrScene + hdrBloom * composite.bloomStrength;
+  var color = hdrScene + hdrBloom * 0.9;
 
-  color *= composite.exposure;
+  color *= 1.15;
   color = aces(color);
 
   // Subtle cinematic vignette.

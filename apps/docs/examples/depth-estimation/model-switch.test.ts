@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { createSwitchQueue } from './model-switch';
+import { describe, expect, it } from "vitest";
+import { createSwitchQueue } from "./scheduling";
 
 function deferred() {
   let resolve!: () => void;
@@ -15,43 +15,43 @@ const settle = async () => {
   for (let i = 0; i < 4; i += 1) await Promise.resolve();
 };
 
-describe('createSwitchQueue', () => {
-  it('runs one transition at a time', async () => {
+describe("createSwitchQueue", () => {
+  it("runs one transition at a time", async () => {
     const started: string[] = [];
     const gate = deferred();
     const queue = createSwitchQueue<string>(() => {});
 
-    queue.push('midas', (value) => {
+    queue.push("midas", (value) => {
       started.push(value);
       return gate.promise;
     });
-    queue.push('dav2', (value) => {
+    queue.push("dav2", (value) => {
       started.push(value);
       return Promise.resolve();
     });
     await settle();
 
     // The second choice waits for the first session to finish releasing.
-    expect(started).toEqual(['midas']);
+    expect(started).toEqual(["midas"]);
     gate.resolve();
     await settle();
-    expect(started).toEqual(['midas', 'dav2']);
+    expect(started).toEqual(["midas", "dav2"]);
   });
 
-  it('drops choices that were superseded before they started', async () => {
+  it("drops choices that were superseded before they started", async () => {
     const started: string[] = [];
     const gate = deferred();
     const queue = createSwitchQueue<string>(() => {});
 
-    queue.push('a', (value) => {
+    queue.push("a", (value) => {
       started.push(value);
       return gate.promise;
     });
-    queue.push('b', (value) => {
+    queue.push("b", (value) => {
       started.push(value);
       return Promise.resolve();
     });
-    queue.push('c', (value) => {
+    queue.push("c", (value) => {
       started.push(value);
       return Promise.resolve();
     });
@@ -60,60 +60,62 @@ describe('createSwitchQueue', () => {
 
     // 'b' is never loaded: clicking through the list must not download every
     // model on the way to the one wanted.
-    expect(started).toEqual(['a', 'c']);
+    expect(started).toEqual(["a", "c"]);
   });
 
-  it('aborts obsolete active work and starts only the newest replacement after it settles', async () => {
+  it("aborts obsolete active work and starts only the newest replacement after it settles", async () => {
     const started: string[] = [];
     const aborted: string[] = [];
     const queue = createSwitchQueue<string>(() => {});
 
-    queue.push('slow', (value, signal) => {
+    queue.push("slow", (value, signal) => {
       started.push(value);
       return new Promise<void>((resolve) => {
-        signal.addEventListener('abort', () => {
+        signal.addEventListener("abort", () => {
           aborted.push(value);
           resolve();
         });
       });
     });
-    queue.push('skipped', (value) => {
+    queue.push("skipped", (value) => {
       started.push(value);
       return Promise.resolve();
     });
-    queue.push('latest', (value) => {
+    queue.push("latest", (value) => {
       started.push(value);
       return Promise.resolve();
     });
     await settle();
 
-    expect(aborted).toEqual(['slow']);
-    expect(started).toEqual(['slow', 'latest']);
+    expect(aborted).toEqual(["slow"]);
+    expect(started).toEqual(["slow", "latest"]);
   });
 
-  it('reports a failure and keeps accepting later switches', async () => {
+  it("reports a failure and keeps accepting later switches", async () => {
     const errors: unknown[] = [];
     const started: string[] = [];
     const queue = createSwitchQueue<string>((error) => errors.push(error));
 
-    queue.push('broken', () => Promise.reject(new Error('session create failed')));
+    queue.push("broken", () =>
+      Promise.reject(new Error("session create failed"))
+    );
     await settle();
-    expect((errors[0] as Error).message).toBe('session create failed');
+    expect((errors[0] as Error).message).toBe("session create failed");
 
-    queue.push('recovered', (value) => {
+    queue.push("recovered", (value) => {
       started.push(value);
       return Promise.resolve();
     });
     await settle();
-    expect(started).toEqual(['recovered']);
+    expect(started).toEqual(["recovered"]);
   });
 
-  it('exposes the in-flight transition so callers can drain before disposing', async () => {
+  it("exposes the in-flight transition so callers can drain before disposing", async () => {
     const gate = deferred();
     const queue = createSwitchQueue<string>(() => {});
     expect(queue.busy).toBe(false);
 
-    queue.push('midas', () => gate.promise);
+    queue.push("midas", () => gate.promise);
     expect(queue.busy).toBe(true);
     const active = queue.active;
     expect(active).toBeInstanceOf(Promise);

@@ -1,78 +1,94 @@
-import type { Gpu, Target } from 'vgpu';
-import { frame } from 'vgpu';
+import { frame } from "vgpu";
+import type { Gpu, Target } from "vgpu";
 
-import type { ThumbnailOptions } from '../../lib/example-renderer';
-import type { Orbit } from './pointer-input';
 import {
-  createEffects,
-  createTargets,
-  destroyTargets,
+  compileScene,
+  createScene,
+  destroyScene,
   POSTER,
-  prewarm,
-  renderChain,
-  setBindings,
-  setConstants,
-  type FractalEffects,
-  type FractalTargets,
-} from './pipeline';
+  renderScene,
+  type FractalScene,
+  type Orbit,
+} from "./pipeline";
 
-type Variant = 'static-repeat' | 'alternate-orbit' | 'bloom-off';
-interface ThumbOptions extends ThumbnailOptions {
-  onVariantRendered?: (
+type Variant = "static-repeat" | "alternate-orbit" | "bloom-off";
+
+interface ThumbnailOptions {
+  readonly warmupFrames?: number;
+  readonly time?: number;
+  readonly dt?: number;
+  readonly onVariantRendered?: (
     variant: Variant,
     pixels: Uint8Array,
     size: readonly [number, number]
   ) => void | Promise<void>;
 }
+
 const ALTERNATE: Readonly<Orbit> = { yaw: -0.35, pitch: 0.1 };
 
 export async function renderThumbnail(
   gpu: Gpu,
-  colorTarget: Target,
-  opts: ThumbOptions = {}
+  output: Target,
+  options: ThumbnailOptions = {}
 ): Promise<void> {
-  const effects = createEffects(gpu, 'raymarched-fractal-thumb');
-  const targets = createTargets(gpu, colorTarget.size, 'raymarched-fractal-thumb');
-  setConstants(effects);
-  setBindings(effects, targets);
+  let scene: FractalScene | undefined;
+  let primaryError: unknown;
+  let failed = false;
   try {
-    await prewarm(effects, targets, colorTarget);
-    await renderAndWait(gpu, effects, targets, colorTarget, POSTER);
-    await renderAndWait(gpu, effects, targets, colorTarget, POSTER);
-    await reportVariant(opts, 'static-repeat', colorTarget);
-    await renderAndWait(gpu, effects, targets, colorTarget, ALTERNATE);
-    await reportVariant(opts, 'alternate-orbit', colorTarget);
-    effects.composite.set({ composite: { bloomStrength: 0 } });
-    await renderAndWait(gpu, effects, targets, colorTarget, POSTER);
-    await reportVariant(opts, 'bloom-off', colorTarget);
-    effects.composite.set({ composite: { bloomStrength: 0.65 } });
-    await renderAndWait(gpu, effects, targets, colorTarget, POSTER);
-    await gpu.settled();
-  } finally {
-    try {
-      await gpu.gpu.queue.onSubmittedWorkDone();
-    } finally {
-      destroyTargets(targets);
-    }
+    scene = createScene(gpu, output.size);
+    await compileScene(scene, output);
+    await renderAndWait(gpu, scene, output, POSTER);
+    await renderAndWait(gpu, scene, output, POSTER);
+    await reportVariant(options, "static-repeat", output);
+    await renderAndWait(gpu, scene, output, ALTERNATE);
+    await reportVariant(options, "alternate-orbit", output);
+    scene.effects.composite.set({ composite: { bloomStrength: 0 } });
+    await renderAndWait(gpu, scene, output, POSTER);
+    await reportVariant(options, "bloom-off", output);
+    scene.effects.composite.set({ composite: { bloomStrength: 0.65 } });
+    await renderAndWait(gpu, scene, output, POSTER);
+  } catch (error) {
+    primaryError = error;
+    failed = true;
   }
+
+  const barriers = await Promise.allSettled([
+    Promise.resolve().then(() => gpu.gpu.queue.onSubmittedWorkDone()),
+    Promise.resolve().then(() => gpu.settled()),
+  ]);
+  const rejectedBarrier = barriers.find(
+    (result): result is PromiseRejectedResult => result.status === "rejected"
+  );
+  let cleanupError: unknown;
+  let cleanupFailed = false;
+  try {
+    if (scene) destroyScene(scene);
+  } catch (error) {
+    cleanupError = error;
+    cleanupFailed = true;
+  }
+
+  if (failed) throw primaryError;
+  if (rejectedBarrier) throw rejectedBarrier.reason;
+  if (cleanupFailed) throw cleanupError;
 }
-async function reportVariant(
-  opts: ThumbOptions,
-  variant: Variant,
-  colorTarget: Target
-): Promise<void> {
-  if (!opts.onVariantRendered) return;
-  const pixels = await colorTarget.read();
-  await opts.onVariantRendered(variant, new Uint8Array(pixels), colorTarget.size);
-}
+
 async function renderAndWait(
   gpu: Gpu,
-  effects: FractalEffects,
-  targets: FractalTargets,
+  scene: FractalScene,
   output: Target,
   orbit: Readonly<Orbit>
-) {
-  effects.scene.set({ params: orbit });
-  frame(gpu, (currentFrame) => renderChain(currentFrame, effects, targets, output));
-  await gpu.gpu.queue.onSubmittedWorkDone();
+): Promise<void> {
+  frame(gpu, (currentFrame) => renderScene(currentFrame, scene, output, orbit));
+  await Promise.resolve().then(() => gpu.gpu.queue.onSubmittedWorkDone());
+}
+
+async function reportVariant(
+  options: ThumbnailOptions,
+  variant: Variant,
+  output: Target
+): Promise<void> {
+  if (!options.onVariantRendered) return;
+  const pixels = await output.color.read({ mipLevel: 0, region: "all" });
+  await options.onVariantRendered(variant, new Uint8Array(pixels), output.size);
 }

@@ -1,10 +1,10 @@
-struct NoiseUniforms { seed: u32, resolution: u32 };
-@group(0) @binding(0) var<uniform> u: NoiseUniforms;
+const SEED: u32 = 0x6f636561u;
+const RESOLUTION: u32 = 512u;
 
 // Random-access form of front's mulberry32. `callIndex` is the number of
 // preceding PRNG calls, so each texel reproduces the CPU upload without state.
 fn mulberryAt(callIndex: u32) -> f32 {
-  let state = u.seed + 0x6d2b79f5u * (callIndex + 1u);
+  let state = SEED + 0x6d2b79f5u * (callIndex + 1u);
   var t = state;
   t = (t ^ (t >> 15u)) * (t | 1u);
   t = t ^ (t + ((t ^ (t >> 7u)) * (t | 61u)));
@@ -19,6 +19,6 @@ fn gaussianPair(callIndex: u32) -> vec2f {
 }
 @fragment fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
   let coord = vec2u(position.xy - vec2f(0.5));
-  let base = (coord.y * u.resolution + coord.x) * 4u;
+  let base = (coord.y * RESOLUTION + coord.x) * 4u;
   return vec4f(gaussianPair(base), gaussianPair(base + 2u));
 }

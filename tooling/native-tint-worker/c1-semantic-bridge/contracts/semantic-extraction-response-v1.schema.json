@@ -1,0 +1,742 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vgpu.sh/schemas/native/tint-semantic-extraction/v1/response.schema.json",
+  "title": "vGPU Native Tint Semantic Extraction Response v1",
+  "oneOf": [
+    { "$ref": "#/$defs/successResponse" },
+    { "$ref": "#/$defs/errorResponse" }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "identifier": {
+      "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/request.schema.json#/$defs/identifier"
+    },
+    "uint32": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "positiveUint32": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4294967295
+    },
+    "nonNegativeSafeInteger": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "positiveSafeInteger": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "requestIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domain", "sha256"],
+      "properties": {
+        "domain": {
+          "const": "vgpu-native-tint-semantic-extraction-request-bytes/v1"
+        },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "bindingId": {
+      "type": "string",
+      "pattern": "^g(?:0|[1-9][0-9]*)b(?:0|[1-9][0-9]*)$",
+      "maxLength": 22
+    },
+    "typeId": {
+      "type": "string",
+      "pattern": "^t_[a-f0-9]{64}$"
+    },
+    "layoutId": {
+      "type": "string",
+      "pattern": "^l_[a-f0-9]{64}$"
+    },
+    "workgroupSize": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "$ref": "#/$defs/positiveUint32" },
+        "y": { "$ref": "#/$defs/positiveUint32" },
+        "z": { "$ref": "#/$defs/positiveUint32" }
+      }
+    },
+    "samplingPair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["texture", "sampler", "mode"],
+      "properties": {
+        "texture": { "$ref": "#/$defs/bindingId" },
+        "sampler": { "$ref": "#/$defs/bindingId" },
+        "mode": { "enum": ["filtering", "comparison"] }
+      }
+    },
+    "entryBindings": {
+      "type": "array",
+      "maxItems": 65536,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/bindingId" }
+    },
+    "entrySamplingPairs": {
+      "type": "array",
+      "maxItems": 65536,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/samplingPair" }
+    },
+    "entryOverrides": {
+      "type": "array",
+      "maxItems": 4096,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/identifier" }
+    },
+    "vertexEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stage",
+        "wgsl",
+        "semanticInterface",
+        "bindings",
+        "samplingPairs",
+        "overrides"
+      ],
+      "properties": {
+        "stage": { "const": "vertex" },
+        "wgsl": { "$ref": "#/$defs/identifier" },
+        "semanticInterface": {
+          "allOf": [
+            {
+              "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/request.schema.json#/$defs/semanticInterface"
+            },
+            {
+              "type": "object",
+              "properties": { "kind": { "const": "vertex" } }
+            }
+          ]
+        },
+        "bindings": { "$ref": "#/$defs/entryBindings" },
+        "samplingPairs": { "$ref": "#/$defs/entrySamplingPairs" },
+        "overrides": { "$ref": "#/$defs/entryOverrides" }
+      }
+    },
+    "fragmentEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stage",
+        "wgsl",
+        "semanticInterface",
+        "bindings",
+        "samplingPairs",
+        "overrides"
+      ],
+      "properties": {
+        "stage": { "const": "fragment" },
+        "wgsl": { "$ref": "#/$defs/identifier" },
+        "semanticInterface": {
+          "allOf": [
+            {
+              "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/request.schema.json#/$defs/semanticInterface"
+            },
+            {
+              "type": "object",
+              "properties": { "kind": { "const": "fragment" } }
+            }
+          ]
+        },
+        "bindings": { "$ref": "#/$defs/entryBindings" },
+        "samplingPairs": { "$ref": "#/$defs/entrySamplingPairs" },
+        "overrides": { "$ref": "#/$defs/entryOverrides" }
+      }
+    },
+    "computeEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stage",
+        "wgsl",
+        "semanticInterface",
+        "bindings",
+        "samplingPairs",
+        "overrides",
+        "workgroupSize"
+      ],
+      "properties": {
+        "stage": { "const": "compute" },
+        "wgsl": { "$ref": "#/$defs/identifier" },
+        "semanticInterface": {
+          "allOf": [
+            {
+              "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/request.schema.json#/$defs/semanticInterface"
+            },
+            {
+              "type": "object",
+              "properties": { "kind": { "const": "compute" } }
+            }
+          ]
+        },
+        "bindings": { "$ref": "#/$defs/entryBindings" },
+        "samplingPairs": { "$ref": "#/$defs/entrySamplingPairs" },
+        "overrides": { "$ref": "#/$defs/entryOverrides" },
+        "workgroupSize": { "$ref": "#/$defs/workgroupSize" }
+      }
+    },
+    "extractedProgram": {
+      "oneOf": [
+        {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "prefixItems": [{ "$ref": "#/$defs/computeEntry" }],
+          "items": false
+        },
+        {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            { "$ref": "#/$defs/vertexEntry" },
+            { "$ref": "#/$defs/fragmentEntry" }
+          ],
+          "items": false
+        }
+      ]
+    },
+    "bindingCommon": {
+      "type": "object",
+      "required": ["id", "name", "group", "binding", "kind"],
+      "properties": {
+        "id": { "$ref": "#/$defs/bindingId" },
+        "name": { "$ref": "#/$defs/identifier" },
+        "group": { "$ref": "#/$defs/uint32" },
+        "binding": { "$ref": "#/$defs/uint32" },
+        "kind": { "type": "string" }
+      }
+    },
+    "bufferBinding": {
+      "allOf": [
+        { "$ref": "#/$defs/bindingCommon" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "name",
+            "group",
+            "binding",
+            "kind",
+            "addressSpace",
+            "access",
+            "type",
+            "layout",
+            "minimumBindingSize"
+          ],
+          "properties": {
+            "id": true,
+            "name": true,
+            "group": true,
+            "binding": true,
+            "kind": { "const": "buffer" },
+            "addressSpace": { "enum": ["uniform", "storage"] },
+            "access": { "enum": ["read", "read_write"] },
+            "type": { "$ref": "#/$defs/typeId" },
+            "layout": { "$ref": "#/$defs/layoutId" },
+            "minimumBindingSize": {
+              "$ref": "#/$defs/nonNegativeSafeInteger"
+            }
+          }
+        }
+      ]
+    },
+    "samplerBinding": {
+      "allOf": [
+        { "$ref": "#/$defs/bindingCommon" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "name", "group", "binding", "kind", "samplerKind"],
+          "properties": {
+            "id": true,
+            "name": true,
+            "group": true,
+            "binding": true,
+            "kind": { "const": "sampler" },
+            "samplerKind": {
+              "enum": ["filtering", "non-filtering", "comparison"]
+            }
+          }
+        }
+      ]
+    },
+    "textureDimension": {
+      "enum": ["1d", "2d", "2d-array", "cube", "cube-array", "3d"]
+    },
+    "textureBinding": {
+      "allOf": [
+        { "$ref": "#/$defs/bindingCommon" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "name",
+            "group",
+            "binding",
+            "kind",
+            "dimension",
+            "sampleType",
+            "multisampled"
+          ],
+          "properties": {
+            "id": true,
+            "name": true,
+            "group": true,
+            "binding": true,
+            "kind": { "const": "texture" },
+            "dimension": { "$ref": "#/$defs/textureDimension" },
+            "sampleType": {
+              "enum": ["float", "unfilterable-float", "depth", "sint", "uint"]
+            },
+            "multisampled": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+    "storageTextureBinding": {
+      "allOf": [
+        { "$ref": "#/$defs/bindingCommon" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "name",
+            "group",
+            "binding",
+            "kind",
+            "dimension",
+            "format",
+            "access"
+          ],
+          "properties": {
+            "id": true,
+            "name": true,
+            "group": true,
+            "binding": true,
+            "kind": { "const": "storage-texture" },
+            "dimension": { "enum": ["1d", "2d", "2d-array", "3d"] },
+            "format": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+            "access": { "enum": ["read", "write", "read_write"] }
+          }
+        }
+      ]
+    },
+    "externalTextureBinding": {
+      "allOf": [
+        { "$ref": "#/$defs/bindingCommon" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "name", "group", "binding", "kind"],
+          "properties": {
+            "id": true,
+            "name": true,
+            "group": true,
+            "binding": true,
+            "kind": { "const": "external-texture" }
+          }
+        }
+      ]
+    },
+    "binding": {
+      "oneOf": [
+        { "$ref": "#/$defs/bufferBinding" },
+        { "$ref": "#/$defs/samplerBinding" },
+        { "$ref": "#/$defs/textureBinding" },
+        { "$ref": "#/$defs/storageTextureBinding" },
+        { "$ref": "#/$defs/externalTextureBinding" }
+      ]
+    },
+    "scalarType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "scalar"],
+      "properties": {
+        "kind": { "const": "scalar" },
+        "scalar": { "enum": ["f16", "f32", "i32", "u32"] }
+      }
+    },
+    "atomicType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "element"],
+      "properties": {
+        "kind": { "const": "atomic" },
+        "element": { "$ref": "#/$defs/typeId" }
+      }
+    },
+    "vectorType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "width", "element"],
+      "properties": {
+        "kind": { "const": "vector" },
+        "width": { "enum": [2, 3, 4] },
+        "element": { "$ref": "#/$defs/typeId" }
+      }
+    },
+    "matrixType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "columns", "rows", "element"],
+      "properties": {
+        "kind": { "const": "matrix" },
+        "columns": { "enum": [2, 3, 4] },
+        "rows": { "enum": [2, 3, 4] },
+        "element": { "$ref": "#/$defs/typeId" }
+      }
+    },
+    "arrayType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "element"],
+      "properties": {
+        "kind": { "const": "array" },
+        "element": { "$ref": "#/$defs/typeId" },
+        "count": { "$ref": "#/$defs/positiveUint32" }
+      }
+    },
+    "structMember": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "type": { "$ref": "#/$defs/typeId" }
+      }
+    },
+    "structType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "wgslName", "members"],
+      "properties": {
+        "kind": { "const": "struct" },
+        "wgslName": { "$ref": "#/$defs/identifier" },
+        "members": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 65536,
+          "items": { "$ref": "#/$defs/structMember" }
+        }
+      }
+    },
+    "typeDescriptor": {
+      "oneOf": [
+        { "$ref": "#/$defs/scalarType" },
+        { "$ref": "#/$defs/atomicType" },
+        { "$ref": "#/$defs/vectorType" },
+        { "$ref": "#/$defs/matrixType" },
+        { "$ref": "#/$defs/arrayType" },
+        { "$ref": "#/$defs/structType" }
+      ]
+    },
+    "types": {
+      "type": "object",
+      "maxProperties": 65536,
+      "propertyNames": { "$ref": "#/$defs/typeId" },
+      "additionalProperties": { "$ref": "#/$defs/typeDescriptor" }
+    },
+    "layoutMember": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type",
+        "layout",
+        "offset",
+        "alignment",
+        "minimumSize",
+        "runtimeSized"
+      ],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "type": { "$ref": "#/$defs/typeId" },
+        "layout": { "$ref": "#/$defs/layoutId" },
+        "offset": { "$ref": "#/$defs/nonNegativeSafeInteger" },
+        "alignment": { "$ref": "#/$defs/positiveSafeInteger" },
+        "minimumSize": { "$ref": "#/$defs/nonNegativeSafeInteger" },
+        "size": { "$ref": "#/$defs/nonNegativeSafeInteger" },
+        "runtimeSized": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "runtimeSized": { "const": true } },
+            "required": ["runtimeSized"]
+          },
+          "then": { "properties": { "size": false } },
+          "else": { "required": ["size"] }
+        }
+      ]
+    },
+    "layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "alignment",
+        "minimumSize",
+        "runtimeSized",
+        "members"
+      ],
+      "properties": {
+        "type": { "$ref": "#/$defs/typeId" },
+        "alignment": { "$ref": "#/$defs/positiveSafeInteger" },
+        "minimumSize": { "$ref": "#/$defs/nonNegativeSafeInteger" },
+        "size": { "$ref": "#/$defs/nonNegativeSafeInteger" },
+        "runtimeSized": { "type": "boolean" },
+        "arrayStride": { "$ref": "#/$defs/positiveSafeInteger" },
+        "elementLayout": {
+          "description": "Explicit physical layout of an array element. Required exactly when arrayStride is present; consumers must not infer this edge by searching for a layout with the element type.",
+          "$ref": "#/$defs/layoutId"
+        },
+        "matrixStride": { "$ref": "#/$defs/positiveSafeInteger" },
+        "members": {
+          "type": "array",
+          "maxItems": 65536,
+          "items": { "$ref": "#/$defs/layoutMember" }
+        }
+      },
+      "dependentRequired": {
+        "arrayStride": ["elementLayout"],
+        "elementLayout": ["arrayStride"]
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "runtimeSized": { "const": true } },
+            "required": ["runtimeSized"]
+          },
+          "then": { "properties": { "size": false } },
+          "else": { "required": ["size"] }
+        }
+      ]
+    },
+    "layouts": {
+      "type": "object",
+      "maxProperties": 65536,
+      "propertyNames": { "$ref": "#/$defs/layoutId" },
+      "additionalProperties": { "$ref": "#/$defs/layout" }
+    },
+    "boolOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "selected"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "wgslId": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "type": { "const": "bool" },
+        "default": {
+          "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/request.schema.json#/$defs/boolValue"
+        },
+        "selected": {
+          "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/request.schema.json#/$defs/boolValue"
+        }
+      }
+    },
+    "i32Override": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "selected"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "wgslId": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "type": { "const": "i32" },
+        "default": {
+          "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/request.schema.json#/$defs/i32Value"
+        },
+        "selected": {
+          "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/request.schema.json#/$defs/i32Value"
+        }
+      }
+    },
+    "u32Override": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "selected"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "wgslId": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "type": { "const": "u32" },
+        "default": {
+          "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/request.schema.json#/$defs/u32Value"
+        },
+        "selected": {
+          "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/request.schema.json#/$defs/u32Value"
+        }
+      }
+    },
+    "f16Override": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "selected"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "wgslId": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "type": { "const": "f16" },
+        "default": {
+          "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/request.schema.json#/$defs/f16Value"
+        },
+        "selected": {
+          "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/request.schema.json#/$defs/f16Value"
+        }
+      }
+    },
+    "f32Override": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "selected"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "wgslId": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "type": { "const": "f32" },
+        "default": {
+          "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/request.schema.json#/$defs/f32Value"
+        },
+        "selected": {
+          "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/request.schema.json#/$defs/f32Value"
+        }
+      }
+    },
+    "override": {
+      "oneOf": [
+        { "$ref": "#/$defs/boolOverride" },
+        { "$ref": "#/$defs/i32Override" },
+        { "$ref": "#/$defs/u32Override" },
+        { "$ref": "#/$defs/f16Override" },
+        { "$ref": "#/$defs/f32Override" }
+      ]
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entryPoints", "bindings", "overrides", "types", "layouts"],
+      "properties": {
+        "entryPoints": { "$ref": "#/$defs/extractedProgram" },
+        "bindings": {
+          "type": "array",
+          "maxItems": 65536,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/binding" }
+        },
+        "overrides": {
+          "type": "array",
+          "maxItems": 4096,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/override" }
+        },
+        "types": { "$ref": "#/$defs/types" },
+        "layouts": { "$ref": "#/$defs/layouts" }
+      }
+    },
+    "base": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "contractId",
+        "ok",
+        "requestIdentity",
+        "compiler",
+        "diagnostics"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "contractId": {
+          "const": "vgpu-native-tint-semantic-extraction/v1"
+        },
+        "ok": { "type": "boolean" },
+        "requestIdentity": { "$ref": "#/$defs/requestIdentity" },
+        "compiler": {
+          "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/response.schema.json#/$defs/compiler"
+        },
+        "diagnostics": { "type": "array" }
+      }
+    },
+    "successResponse": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schemaVersion",
+            "contractId",
+            "ok",
+            "requestIdentity",
+            "compiler",
+            "diagnostics",
+            "result"
+          ],
+          "properties": {
+            "schemaVersion": true,
+            "contractId": true,
+            "ok": { "const": true },
+            "requestIdentity": true,
+            "compiler": true,
+            "diagnostics": {
+              "type": "array",
+              "items": {
+                "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/response.schema.json#/$defs/nonErrorDiagnostic"
+              }
+            },
+            "result": { "$ref": "#/$defs/result" }
+          }
+        }
+      ]
+    },
+    "errorResponse": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schemaVersion",
+            "contractId",
+            "ok",
+            "requestIdentity",
+            "compiler",
+            "diagnostics"
+          ],
+          "properties": {
+            "schemaVersion": true,
+            "contractId": true,
+            "ok": { "const": false },
+            "requestIdentity": true,
+            "compiler": true,
+            "diagnostics": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "https://vgpu.sh/schemas/native/tint-compiler/v1/response.schema.json#/$defs/diagnostic"
+              },
+              "contains": {
+                "type": "object",
+                "required": ["severity"],
+                "properties": { "severity": { "const": "error" } }
+              },
+              "minContains": 1
+            }
+          }
+        }
+      ]
+    }
+  }
+}

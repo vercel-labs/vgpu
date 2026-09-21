@@ -1,8 +1,13 @@
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, expect, test, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ init: vi.fn(), createHeroRenderer: vi.fn() }));
+const guiMocks = vi.hoisted(() => ({
+  add: vi.fn(),
+  change: undefined as ((value: number) => void) | undefined,
+  construct: vi.fn(),
+  destroy: vi.fn(),
+  updateDisplay: vi.fn(),
+}));
 const vgpuFns = vi.hoisted(() => Object.fromEntries(
   ['surface', 'target', 'effect', 'draw', 'geometry', 'sampler', 'bundle', 'compute', 'storage', 'uniforms', 'timer', 'visibility', 'pingPong', 'pingPongStorage', 'frame', 'frameLoop']
     // Each test's gpu double carries its factory fakes in `fns`; these route the free functions to them.
@@ -10,11 +15,28 @@ const vgpuFns = vi.hoisted(() => Object.fromEntries(
 )) as Record<string, unknown>;
 vi.mock('vgpu', () => ({ init: mocks.init, ...vgpuFns, clock: (gpu: any) => gpu.clock ?? { time: 0, deltaTime: 0, frameCount: 0, advance() {} } }));
 vi.mock('./scene-renderer', () => ({ createHeroRenderer: mocks.createHeroRenderer }));
+vi.mock('lil-gui', () => ({
+  default: class {
+    domElement = { style: {} };
+    constructor(options: unknown) { guiMocks.construct(options); }
+    add(...args: unknown[]) {
+      guiMocks.add(...args);
+      const controller = {
+        name: vi.fn(() => controller),
+        onChange: vi.fn((callback: (value: number) => void) => {
+          guiMocks.change = callback;
+          return controller;
+        }),
+        updateDisplay: guiMocks.updateDisplay,
+      };
+      return controller;
+    }
+    destroy() { guiMocks.destroy(); }
+  },
+}));
 
-import { Controls } from './controls';
 import { renderThumbnail } from './render-thumbnail';
 import { createRenderer } from './renderer';
-import { DEFAULT_TRIANGLE_LED_CONTROLS } from './types';
 
 function deferred<T = void>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -40,12 +62,14 @@ function setup() {
   const disconnect = vi.fn();
   vi.stubGlobal('ResizeObserver', class { observe = vi.fn(); disconnect = disconnect; });
   const captured = new Set<number>();
+  const container = {} as HTMLElement;
   const canvas = {
     width: 200,
     height: 100,
     clientWidth: 200,
     clientHeight: 100,
     style: { touchAction: 'pan-y' },
+    parentElement: container,
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 200, height: 100 }),
     addEventListener: vi.fn((name: string, listener: EventListener) => canvasListeners.set(name, listener)),
     removeEventListener: vi.fn((name: string) => canvasListeners.delete(name)),
@@ -62,16 +86,35 @@ function setup() {
   };
   mocks.init.mockResolvedValueOnce(gpu);
   mocks.createHeroRenderer.mockReturnValueOnce(scene);
-  return { canvas, canvasListeners, frames, windowAdd, documentAdd, disconnect, gpu, surface, scene, stop };
+  return { canvas, canvasListeners, frames, windowAdd, documentAdd, disconnect, gpu, surface, scene, stop, container };
 }
 
-afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
+afterEach(() => {
+  guiMocks.change = undefined;
+  vi.unstubAllGlobals();
+  vi.clearAllMocks();
+});
 
-test('uses the shared default in an accessible controlled select', () => {
-  const html = renderToStaticMarkup(createElement(Controls, { value: DEFAULT_TRIANGLE_LED_CONTROLS, onChange: () => {} }));
-  expect(DEFAULT_TRIANGLE_LED_CONTROLS.mode).toBe(-1);
-  expect(html).toContain('aria-label="Triangle LED mode"');
-  expect(html).toContain('value="-1" selected');
+test('mounts a lil-gui mode selector inside the example', async () => {
+  const env = setup();
+  const renderer = createRenderer({ canvas: env.canvas });
+  await renderer.ready;
+
+  expect(guiMocks.construct).toHaveBeenCalledWith({
+    title: 'Triangle LEDs',
+    container: env.container,
+    width: 180,
+  });
+  expect(guiMocks.add).toHaveBeenCalledWith(
+    { mode: -1 },
+    'mode',
+    { Default: -1, 'Edge 1': 0, 'Edge 2': 1, 'Edge 3': 2 },
+  );
+  guiMocks.change?.(2);
+  expect(env.scene.setHero).toHaveBeenCalledTimes(2);
+
+  renderer.dispose();
+  expect(guiMocks.destroy).toHaveBeenCalledOnce();
 });
 
 test('keeps pointer input canvas-scoped, updates controls without recreation, and cleans up', async () => {
@@ -85,7 +128,7 @@ test('keeps pointer input canvas-scoped, updates controls without recreation, an
 
   env.canvasListeners.get('pointerdown')?.({ isPrimary: true, pointerId: 7, clientX: 100, clientY: 50, pointerType: 'mouse' } as unknown as Event);
   expect(env.canvas.setPointerCapture).toHaveBeenCalledWith(7);
-  renderer.setControls?.({ mode: 1 });
+  renderer.setControls({ mode: 1 });
   expect(env.scene.setHero).toHaveBeenCalledTimes(2);
   expect(mocks.createHeroRenderer).toHaveBeenCalledOnce();
 
@@ -100,10 +143,9 @@ test('keeps pointer input canvas-scoped, updates controls without recreation, an
   expect(env.surface.dispose).toHaveBeenCalledOnce();
 });
 
-test('silences stale resize failures and disposes on the current generation failure', async () => {
+test('silences stale resize failures', async () => {
   const env = setup();
-  const onError = vi.fn();
-  const renderer = createRenderer({ canvas: env.canvas, onError });
+  const renderer = createRenderer({ canvas: env.canvas });
   await renderer.ready;
 
   const runNextFrame = () => {
@@ -118,62 +160,46 @@ test('silences stale resize failures and disposes on the current generation fail
   await vi.waitFor(() => expect(env.scene.prewarm).toHaveBeenCalledTimes(2));
 
   const stale = deferred();
-  const current = deferred();
-  env.scene.prewarm.mockReturnValueOnce(stale.promise).mockReturnValueOnce(current.promise);
+  env.scene.prewarm.mockReturnValueOnce(stale.promise).mockResolvedValueOnce(undefined);
 
-  renderer.resize({ width: 300, height: 150, dpr: 1 });
+  renderer.resize({ width: 300, height: 150 });
   runNextFrame();
-  renderer.resize({ width: 400, height: 200, dpr: 1 });
+  renderer.resize({ width: 400, height: 200 });
   runNextFrame();
 
   stale.reject(new Error('stale resize failed'));
   await Promise.resolve();
   await Promise.resolve();
-  expect(onError).not.toHaveBeenCalled();
   expect(env.scene.destroy).not.toHaveBeenCalled();
 
-  const currentError = new Error('current resize failed');
-  current.reject(currentError);
-  await vi.waitFor(() => expect(env.scene.destroy).toHaveBeenCalledOnce());
-  expect(onError).toHaveBeenCalledOnce();
-  expect(onError).toHaveBeenCalledWith(currentError);
-  expect(env.stop).toHaveBeenCalledOnce();
-  expect(env.surface.dispose).toHaveBeenCalledOnce();
-  expect(env.gpu.dispose).toHaveBeenCalledOnce();
-  await renderer.ready;
+  renderer.dispose();
 });
 
-test('a throwing error reporter cannot bypass initialization teardown', async () => {
+test('initialization failure rejects ready after teardown', async () => {
   const env = setup();
   const initError = new Error('initial prewarm failed');
-  const onError = vi.fn(() => { throw new Error('reporter failed'); });
   env.scene.prewarm.mockRejectedValueOnce(initError);
 
-  const renderer = createRenderer({ canvas: env.canvas, onError });
+  const renderer = createRenderer({ canvas: env.canvas });
   await expect(renderer.ready).rejects.toBe(initError);
 
-  expect(onError).toHaveBeenCalledOnce();
-  expect(onError).toHaveBeenCalledWith(initError);
   expect(env.scene.destroy).toHaveBeenCalledOnce();
   expect(env.surface.dispose).toHaveBeenCalledOnce();
   expect(env.gpu.dispose).toHaveBeenCalledOnce();
 });
 
-test('a synchronous resize rebuild failure reports once and fully tears down', async () => {
+test('a synchronous resize rebuild failure surfaces after fully tearing down', async () => {
   const env = setup();
   const resizeError = new Error('rebuild failed');
-  const onError = vi.fn();
-  const renderer = createRenderer({ canvas: env.canvas, onError });
+  const renderer = createRenderer({ canvas: env.canvas });
   await renderer.ready;
   env.scene.rebuild.mockImplementationOnce(() => { throw resizeError; });
 
   const entry = env.frames.entries().next().value as [number, FrameRequestCallback] | undefined;
   expect(entry).toBeDefined();
   env.frames.delete(entry![0]);
-  expect(() => entry![1](16)).not.toThrow();
+  expect(() => entry![1](16)).toThrow(resizeError);
 
-  expect(onError).toHaveBeenCalledOnce();
-  expect(onError).toHaveBeenCalledWith(resizeError);
   expect(env.stop).toHaveBeenCalledOnce();
   expect(env.disconnect).toHaveBeenCalledOnce();
   expect(env.scene.destroy).toHaveBeenCalledOnce();

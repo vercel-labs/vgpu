@@ -6,6 +6,10 @@ export interface ExampleThumbPresence {
 }
 
 export const exampleThumbs: Record<string, ExampleThumbPresence> = {
+  "adaptive-quality": {
+    "card": "/examples/adaptive-quality.card.png",
+    "hero": "/examples/adaptive-quality.hero.png"
+  },
   "agent-radiance-cascades": {
     "card": "/examples/agent-radiance-cascades.card.png",
     "hero": "/examples/agent-radiance-cascades.hero.png"
@@ -17,6 +21,10 @@ export const exampleThumbs: Record<string, ExampleThumbPresence> = {
   "anti-aliasing": {
     "card": "/examples/anti-aliasing.card.png",
     "hero": "/examples/anti-aliasing.hero.png"
+  },
+  "atmosphere": {
+    "card": "/examples/atmosphere.card.png",
+    "hero": "/examples/atmosphere.hero.png"
   },
   "batch-rendering": {
     "card": "/examples/batch-rendering.card.png",
@@ -58,13 +66,25 @@ export const exampleThumbs: Record<string, ExampleThumbPresence> = {
     "card": "/examples/glass-fractal.card.png",
     "hero": "/examples/glass-fractal.hero.png"
   },
+  "glass-sculpture": {
+    "card": "/examples/glass-sculpture.card.png",
+    "hero": "/examples/glass-sculpture.hero.png"
+  },
   "gradient": {
     "card": "/examples/gradient.card.png",
     "hero": "/examples/gradient.hero.png"
   },
+  "holographic-card": {
+    "card": "/examples/holographic-card.card.png",
+    "hero": "/examples/holographic-card.hero.png"
+  },
   "instanced-rendering": {
     "card": "/examples/instanced-rendering.card.png",
     "hero": "/examples/instanced-rendering.hero.png"
+  },
+  "matcap": {
+    "card": "/examples/matcap.card.png",
+    "hero": "/examples/matcap.hero.png"
   },
   "mnist-classifier": {
     "card": "/examples/mnist-classifier.card.png",
@@ -78,9 +98,9 @@ export const exampleThumbs: Record<string, ExampleThumbPresence> = {
     "card": "/examples/optimized-black-hole.card.png",
     "hero": "/examples/optimized-black-hole.hero.png"
   },
-  "post-processing": {
-    "card": "/examples/post-processing.card.png",
-    "hero": "/examples/post-processing.hero.png"
+  "particle-orbit": {
+    "card": "/examples/particle-orbit.card.png",
+    "hero": "/examples/particle-orbit.hero.png"
   },
   "radiance-cascades": {
     "card": "/examples/radiance-cascades.card.png",
@@ -90,6 +110,10 @@ export const exampleThumbs: Record<string, ExampleThumbPresence> = {
     "card": "/examples/raymarched-fractal.card.png",
     "hero": "/examples/raymarched-fractal.hero.png"
   },
+  "three-tsl": {
+    "card": "/examples/three-tsl.card.png",
+    "hero": "/examples/three-tsl.hero.png"
+  },
   "transmission": {
     "card": "/examples/transmission.card.png",
     "hero": "/examples/transmission.hero.png"
@@ -97,6 +121,14 @@ export const exampleThumbs: Record<string, ExampleThumbPresence> = {
   "triangle-led-front": {
     "card": "/examples/triangle-led-front.card.png",
     "hero": "/examples/triangle-led-front.hero.png"
+  },
+  "tsl-exports": {
+    "card": "/examples/tsl-exports.card.png",
+    "hero": "/examples/tsl-exports.hero.png"
+  },
+  "typegpu-liquid-glass": {
+    "card": "/examples/typegpu-liquid-glass.card.png",
+    "hero": "/examples/typegpu-liquid-glass.hero.png"
   },
   "video-to-texture": {
     "card": "/examples/video-to-texture.card.png",

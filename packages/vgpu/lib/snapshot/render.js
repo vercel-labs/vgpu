@@ -15,7 +15,7 @@ export async function renderRepresentativeSnapshot(api) {
     });
     gradient.set({ time: DEFAULT_SNAPSHOT_TIME });
     frame(gpu, (current) => current.pass({ target: colorTarget }, (encoder) => encoder.draw(gradient)));
-    return { pixels: await colorTarget.read(), width: SNAPSHOT_SIZE[0], height: SNAPSHOT_SIZE[1] };
+    return { pixels: await colorTarget.color.read({ mipLevel: 0, region: "all" }), width: SNAPSHOT_SIZE[0], height: SNAPSHOT_SIZE[1] };
   } finally {
     gpu.dispose();
   }

@@ -1,17 +1,69 @@
-import { createProxy } from "@vercel/geistdocs/proxy";
+import {
+  createProxy,
+  type GeistdocsProxyHook,
+} from "@vercel/geistdocs/proxy";
+import { precompute } from "flags/next";
+import { NextResponse } from "next/server";
+import { homepageFlags } from "@/flags";
+import { exampleSlugs } from "@/lib/example-slugs";
 import { config as geistdocsConfig } from "@/lib/geistdocs/config";
 import { trackMdRequest } from "@/lib/geistdocs/md-tracking";
+import { createUnmatchedMarkdownNotFoundResponse } from "@/lib/geistdocs/markdown-not-found";
+
+const rewriteHomepageVariant: GeistdocsProxyHook = async ({
+  defaultLanguage,
+  languages,
+  request,
+}) => {
+  const pathname = request.nextUrl.pathname.replace(/\/+$/u, "") || "/";
+  const language =
+    pathname === "/"
+      ? defaultLanguage
+      : languages.find(
+          (candidate) =>
+            candidate !== defaultLanguage && pathname === `/${candidate}`,
+        );
+
+  // Open-source checkouts do not have the signing secret. In that case the
+  // regular homepage renders the globally released canvas directly.
+  if (!language || !process.env.FLAGS_SECRET) return null;
+
+  // The signed value becomes part of the internal URL, so each variant keeps
+  // its own static cache entry and one visitor cannot poison another's page.
+  const code = await precompute(homepageFlags);
+  const url = request.nextUrl.clone();
+  url.pathname = `/${language}/hero-variant/${code}`;
+  return NextResponse.rewrite(url);
+};
 
 const proxy = createProxy({
   config: geistdocsConfig,
   trackMarkdownRequest: trackMdRequest,
   before: () => null,
+  after: [
+    rewriteHomepageVariant,
+    ({ defaultLanguage, languages, request }) =>
+      createUnmatchedMarkdownNotFoundResponse(request, {
+        defaultLanguage,
+        languages,
+      }),
+  ],
   // Keep negotiation deliberately narrow. `/` is the homepage representation;
   // docs retain their explicit catch-all. No root wildcard is allowed to capture
   // `/examples`, `/api`, or future application routes.
   markdownRoutes: [
     { from: "/", to: "/[lang]/index.md" },
     { from: "/docs/*path", to: "/[lang]/llms.mdx/*path" },
+    ...exampleSlugs.flatMap((slug) => [
+      {
+        from: `/examples/${slug}` as const,
+        to: `/[lang]/examples.md/${slug}` as const,
+      },
+      {
+        from: `/examples/${slug}/source` as const,
+        to: `/[lang]/examples.md/${slug}/source` as const,
+      },
+    ]),
   ],
 });
 
@@ -59,8 +111,9 @@ const proxy = createProxy({
 // ANCHOR TGEIST-EXAMPLES-STATIC (5th instance of this exact class -- TGEIST-06, TGEIST-08 and
 // TGEIST-ML-ASSETS above are the first three): every media file committed under
 // `public/examples/**` -- the gallery/sidebar thumbnails (`public/examples/<slug>.card.png`,
-// `<slug>.hero.png`), videos, meshes, and `public/examples/depth-estimation/source.jpg` (the default input image
-// `example-canvas` fetches for that demo) -- is excluded from the proxy. None of them has a route
+// `<slug>.hero.png`), videos, meshes, `public/examples/depth-estimation/source.jpg` (the default input image
+// `example-canvas` fetches for that demo) and `public/examples/three-tsl/sunset.exr` (the HDRI that
+// example lights with) -- is excluded from the proxy. None of them has a route
 // under `app/[lang]/`, so while the proxy is active on them the i18n rewrite sends e.g.
 // `/examples/depth-estimation/source.jpg` to `/en/examples/depth-estimation/source.jpg`, which no
 // route matches. Verified empirically against `next start` on this build: 404 with
@@ -80,9 +133,11 @@ const proxy = createProxy({
 // HERO-ASSETS: `/hero/**` contains the non-localized mesh and cubemap fetched by the homepage
 // WebGPU renderer. There is no localized page route under this prefix, so keep these binaries out
 // of the geistdocs rewrite just like `/models/**` and `/ort/**` above.
+// `/prism-gpu-benchmarks/**` is the same class of homepage-only static data. Auto quality fetches
+// one pinned detect-gpu vendor table from this prefix after the first production frame.
 export const config = {
   matcher: [
-    "/((?!api(?:/|$)|openapi.json$|opengraph-image(?:/|$)|.well-known/vgpu-examples.json(?:/|$)|preview/|models/|ort/|hero/|examples/.+\\.(?:png|jpe?g|webp|avif|gif|svg|ico|mp4|webm|mesh)$|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)",
+    "/((?!api(?:/|$)|openapi.json$|opengraph-image(?:/|$)|\\.well-known/api-catalog(?:/|$)|\\.well-known/vercel/flags(?:/|$)|.well-known/vgpu-examples.json(?:/|$)|preview/|models/|ort/|hero/|prism-gpu-benchmarks/|examples/.+\\.(?:png|jpe?g|webp|avif|gif|svg|ico|mp4|webm|mesh|exr)$|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)",
   ],
 };
 

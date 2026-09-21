@@ -47,13 +47,13 @@ export async function renderPrimitiveFrame(spec: RenderPrimitiveFrameSpec): Prom
     primitive: { topology: "triangle-list", cullMode: "back" },
     depthStencil: { format: "depth24plus", depthWriteEnabled: true, depthCompare: "less" },
   });
-  const color = spec.device.createTexture({ size: [WIDTH, HEIGHT], format: TARGET_FORMAT, usage: ["render_attachment", "copy_src"] });
-  const depth = spec.device.createTexture({ size: [WIDTH, HEIGHT], format: "depth24plus", usage: ["render_attachment"] });
+  const color = spec.device.createTexture({ kind: "2d", size: [WIDTH, HEIGHT], format: TARGET_FORMAT, usage: ["render_attachment", "copy_src"] });
+  const depth = spec.device.createTexture({ kind: "2d", size: [WIDTH, HEIGHT], format: "depth24plus", usage: ["render_attachment"] });
   try {
     spec.device.gpu.queue.writeBuffer(uniformBuffer, 0, uniformBytes(spec));
     draw(spec, pipeline, bindGroup, color, depth);
     const png = new PNG({ width: WIDTH, height: HEIGHT });
-    png.data.set(await color.read());
+    png.data.set(await color.read({ mipLevel: 0, region: "all" }));
     return PNG.sync.write(png);
   } finally {
     uniformBuffer.destroy();

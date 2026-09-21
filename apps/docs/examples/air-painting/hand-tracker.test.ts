@@ -6,15 +6,15 @@
  * that never reruns leaves the second hand dead, and one that reruns every frame
  * turns a 6 ms tracked frame into a 36 ms acquisition frame forever.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from "vitest";
 import {
   assignByDistance,
   createHandTracker,
   DETECTOR_RETRY_RESULTS,
   type HandCandidate,
-} from './hand-tracker';
-import { PRESENCE_ENTER, TRACK_LOST_RESULTS } from './hand-model-contract';
-import type { HandRoi } from './hand-pipeline';
+} from "./hand-tracker";
+import { PRESENCE_ENTER, TRACK_LOST_RESULTS } from "./hand-model-contract";
+import type { HandRoi } from "./hand-pipeline";
 
 const SOURCE_WIDTH = 640;
 const SOURCE_HEIGHT = 360;
@@ -23,12 +23,15 @@ function roiAt(x: number, y: number, size = 120): HandRoi {
   return { cx: x, cy: y, size, rotation: 0 };
 }
 
-function candidate(x: number, y: number, score = 0.9): HandCandidate {
-  return { roi: roiAt(x, y), centroid: { x, y }, score };
+function candidate(x: number, y: number): HandCandidate {
+  return { roi: roiAt(x, y), centroid: { x, y } };
 }
 
 function tracker() {
-  return createHandTracker({ sourceWidth: SOURCE_WIDTH, sourceHeight: SOURCE_HEIGHT });
+  return createHandTracker({
+    sourceWidth: SOURCE_WIDTH,
+    sourceHeight: SOURCE_HEIGHT,
+  });
 }
 
 /** Feeds a healthy landmark result to every active slot and closes the frame. */
@@ -37,12 +40,12 @@ function keepAlive(t: ReturnType<typeof tracker>, presence = 0.95) {
   t.endFrame();
 }
 
-describe('detector cadence', () => {
-  it('runs the detector at startup, when nothing is tracked', () => {
+describe("detector cadence", () => {
+  it("runs the detector at startup, when nothing is tracked", () => {
     expect(tracker().needsDetector()).toBe(true);
   });
 
-  it('stops running the detector once both slots are tracked', () => {
+  it("stops running the detector once both slots are tracked", () => {
     const t = tracker();
     t.acquire([candidate(150, 180), candidate(500, 180)]);
     keepAlive(t);
@@ -52,7 +55,7 @@ describe('detector cadence', () => {
     expect(t.needsDetector()).toBe(false);
   });
 
-  it('searches every frame while no hand is tracked at all', () => {
+  it("searches every frame while no hand is tracked at all", () => {
     const t = tracker();
     t.acquire([]);
     expect(t.needsDetector()).toBe(true);
@@ -60,7 +63,7 @@ describe('detector cadence', () => {
     expect(t.needsDetector()).toBe(true);
   });
 
-  it('throttles the retry while one hand is still tracked', () => {
+  it("throttles the retry while one hand is still tracked", () => {
     const t = tracker();
     t.acquire([candidate(150, 180)]);
     keepAlive(t);
@@ -73,7 +76,7 @@ describe('detector cadence', () => {
     expect(t.needsDetector()).toBe(true);
   });
 
-  it('reacquires as soon as a tracked hand is lost', () => {
+  it("reacquires as soon as a tracked hand is lost", () => {
     const t = tracker();
     t.acquire([candidate(150, 180), candidate(500, 180)]);
     keepAlive(t);
@@ -91,16 +94,16 @@ describe('detector cadence', () => {
   });
 });
 
-describe('presence gating', () => {
-  it('never seeds confidence from the detector score', () => {
+describe("presence gating", () => {
+  it("never seeds confidence from the detector score", () => {
     const t = tracker();
     // A real photograph scored 0.9 at the detector and 0.017 at the landmark
     // model. The slot must start at zero confidence and wait to be told.
-    t.acquire([candidate(150, 180, 0.9)]);
+    t.acquire([candidate(150, 180)]);
     expect(t.slots[0]!.presence).toBe(0);
   });
 
-  it('drops a slot after the configured run of absent results', () => {
+  it("drops a slot after the configured run of absent results", () => {
     const t = tracker();
     t.acquire([candidate(150, 180)]);
     t.noteResult(0, 0.95);
@@ -112,7 +115,7 @@ describe('presence gating', () => {
     expect(t.slots[0]!.active).toBe(false);
   });
 
-  it('treats a NaN presence as absent rather than as a pass', () => {
+  it("treats a NaN presence as absent rather than as a pass", () => {
     const t = tracker();
     t.acquire([candidate(150, 180)]);
     t.noteResult(0, Number.NaN);
@@ -121,7 +124,7 @@ describe('presence gating', () => {
     expect(Number.isFinite(t.slots[0]!.presence)).toBe(true);
   });
 
-  it('needs the enter threshold on a fresh slot', () => {
+  it("needs the enter threshold on a fresh slot", () => {
     const t = tracker();
     t.acquire([candidate(150, 180)]);
     t.noteResult(0, PRESENCE_ENTER - 0.01);
@@ -129,7 +132,7 @@ describe('presence gating', () => {
     expect(t.slots[0]!.active).toBe(false);
   });
 
-  it('counts a slot that did not run as missing', () => {
+  it("counts a slot that did not run as missing", () => {
     const t = tracker();
     t.acquire([candidate(150, 180)]);
     t.noteResult(0, 0.95);
@@ -138,8 +141,8 @@ describe('presence gating', () => {
   });
 });
 
-describe('slot assignment', () => {
-  it('is deterministic on a cold start, ordered by x', () => {
+describe("slot assignment", () => {
+  it("is deterministic on a cold start, ordered by x", () => {
     const t = tracker();
     t.acquire([candidate(500, 180), candidate(150, 180)]);
     // Left-most hand takes slot 0 regardless of emission order.
@@ -147,17 +150,17 @@ describe('slot assignment', () => {
     expect(t.slots[1]!.centroid?.x).toBe(500);
   });
 
-  it('does not depend on the order the detector emitted its boxes', () => {
+  it("does not depend on the order the detector emitted its boxes", () => {
     const forward = tracker();
     forward.acquire([candidate(150, 180), candidate(500, 180)]);
     const reversed = tracker();
     reversed.acquire([candidate(500, 180), candidate(150, 180)]);
     expect(reversed.slots.map((s) => s.centroid?.x)).toEqual(
-      forward.slots.map((s) => s.centroid?.x),
+      forward.slots.map((s) => s.centroid?.x)
     );
   });
 
-  it('keeps a healthy slot on its own hand when the other reacquires', () => {
+  it("keeps a healthy slot on its own hand when the other reacquires", () => {
     const t = tracker();
     t.acquire([candidate(150, 180), candidate(500, 180)]);
     keepAlive(t);
@@ -178,7 +181,7 @@ describe('slot assignment', () => {
     expect(t.slots[0]!.centroid?.x).toBe(150);
   });
 
-  it('does not steal the only detection from a healthy slot', () => {
+  it("does not steal the only detection from a healthy slot", () => {
     const t = tracker();
     t.acquire([candidate(150, 180)]);
     keepAlive(t);
@@ -190,7 +193,7 @@ describe('slot assignment', () => {
     expect(t.activeSlots()).toEqual([0]);
   });
 
-  it('remembers where a lost slot was, so a brief dropout does not swap tracks', () => {
+  it("remembers where a lost slot was, so a brief dropout does not swap tracks", () => {
     const t = tracker();
     t.acquire([candidate(150, 180), candidate(500, 180)]);
     keepAlive(t);
@@ -207,13 +210,13 @@ describe('slot assignment', () => {
     expect(t.slots[1]!.centroid?.x).toBe(505);
   });
 
-  it('refuses a detection whose ROI is not physically plausible', () => {
+  it("refuses a detection whose ROI is not physically plausible", () => {
     const t = tracker();
-    t.acquire([{ roi: roiAt(150, 180, 1), centroid: { x: 150, y: 180 }, score: 0.9 }]);
+    t.acquire([{ roi: roiAt(150, 180, 1), centroid: { x: 150, y: 180 } }]);
     expect(t.slots[0]!.active).toBe(false);
   });
 
-  it('hands back exactly the slots whose ROI the host must upload', () => {
+  it("hands back exactly the slots whose ROI the host must upload", () => {
     const t = tracker();
     const uploaded = t.acquire([candidate(150, 180), candidate(500, 180)]);
     expect(uploaded).toEqual([0, 1]);
@@ -223,20 +226,10 @@ describe('slot assignment', () => {
       expect(t.slots[slot]!.pendingRoi).toBeUndefined();
     }
   });
-
-  it('reset drops every track so the next frame starts clean', () => {
-    const t = tracker();
-    t.acquire([candidate(150, 180), candidate(500, 180)]);
-    keepAlive(t);
-    t.reset();
-    expect(t.activeSlots()).toEqual([]);
-    expect(t.slots.every((slot) => slot.centroid === undefined)).toBe(true);
-    expect(t.needsDetector()).toBe(true);
-  });
 });
 
-describe('assignByDistance', () => {
-  it('picks the permutation with the lowest total distance', () => {
+describe("assignByDistance", () => {
+  it("picks the permutation with the lowest total distance", () => {
     const assignment = assignByDistance(
       [
         { x: 0, y: 0 },
@@ -245,12 +238,12 @@ describe('assignByDistance', () => {
       [
         { x: 95, y: 5 },
         { x: 5, y: 5 },
-      ],
+      ]
     );
     expect(assignment).toEqual([1, 0]);
   });
 
-  it('is stable when the candidate order reverses', () => {
+  it("is stable when the candidate order reverses", () => {
     const slots = [
       { x: 0, y: 0 },
       { x: 100, y: 0 },
@@ -268,25 +261,28 @@ describe('assignByDistance', () => {
     expect(b).toEqual([1, 0]);
   });
 
-  it('falls back to x order when no slot has any history', () => {
+  it("falls back to x order when no slot has any history", () => {
     expect(
       assignByDistance(
         [undefined, undefined],
         [
           { x: 100, y: 0 },
           { x: 10, y: 0 },
-        ],
-      ),
+        ]
+      )
     ).toEqual([1, 0]);
   });
 
-  it('handles fewer candidates than slots', () => {
-    const assignment = assignByDistance([{ x: 0, y: 0 }, undefined], [{ x: 5, y: 0 }]);
+  it("handles fewer candidates than slots", () => {
+    const assignment = assignByDistance(
+      [{ x: 0, y: 0 }, undefined],
+      [{ x: 5, y: 0 }]
+    );
     expect(assignment[0]).toBe(0);
     expect(assignment[1]).toBeUndefined();
   });
 
-  it('handles no candidates at all', () => {
+  it("handles no candidates at all", () => {
     expect(assignByDistance([{ x: 0, y: 0 }], [])).toEqual([undefined]);
   });
 });

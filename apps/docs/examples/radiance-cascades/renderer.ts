@@ -1,76 +1,137 @@
-import type { Gpu, Surface } from 'vgpu';
+import GUI, { type Controller } from "lil-gui";
+import { surface, type Gpu, type Surface } from "vgpu";
 
-import type { BrowserRendererOptions, ExampleRenderer, RenderSize } from '../../lib/example-renderer';
-import { installLightPaintInput } from './pointer-input';
-import { createScene, destroyScene, prepareScene, presentScene, runChain, type RadianceScene } from './simulation';
-import { DEFAULT_RADIANCE_CASCADES_CONTROLS, type RadianceCascadesControls } from './types';
-import { surface } from "vgpu";
+import { installLightPaintInput } from "./pointer-input";
+import {
+  createScene,
+  destroyScene,
+  prepareScene,
+  presentScene,
+  runChain,
+  type RadianceScene,
+  type RadianceView,
+} from "./simulation";
 
-export interface RadianceCascadesRenderer extends ExampleRenderer<RadianceCascadesControls> {
-  /** Removes every painted stroke; the triangle stays. */
-  clear(): void;
+const RADIANCE_VIEWS: readonly {
+  readonly value: RadianceView;
+  readonly label: string;
+}[] = [
+  { value: "final", label: "Final" },
+  { value: "emitters", label: "Emitters" },
+  { value: "sdf", label: "Distance field" },
+  ...Array.from({ length: 6 }, (_, index) => ({
+    value: `cascade-${index}` as RadianceView,
+    label: `Cascade ${index} atlas`,
+  })),
+];
+
+interface RendererOptions {
+  readonly canvas: HTMLCanvasElement;
 }
 
-export interface RadianceCascadesRendererOptions extends BrowserRendererOptions<RadianceCascadesControls> {
-  /** Reports how many cascades the current canvas needs, so the view list can match. */
-  onCascadeCount?: (count: number) => void;
-}
-
-export function createRenderer(options: RadianceCascadesRendererOptions): RadianceCascadesRenderer {
+export function createRenderer({ canvas }: RendererOptions) {
   let disposed = false;
-  let reportedError = false;
-  let controls: RadianceCascadesControls = options.initialControls ?? DEFAULT_RADIANCE_CASCADES_CONTROLS;
+  const controls: { view: RadianceView } = { view: "final" };
   let gpu: Gpu | undefined;
   let canvasSurface: Surface | undefined;
   let scene: RadianceScene | undefined;
   let input: ReturnType<typeof installLightPaintInput> | undefined;
+  let gui: GUI | undefined;
+  let viewController: Controller | undefined;
   let observer: ResizeObserver | undefined;
   let unsubscribeResize: (() => void) | undefined;
   let animationFrame = 0;
   let resizeFrame = 0;
-  let pendingSize: RenderSize | undefined;
-  let lastDpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio;
+  let pendingSize:
+    | { readonly width: number; readonly height: number; readonly dpr: number }
+    | undefined;
+  let lastDpr = typeof window === "undefined" ? 1 : window.devicePixelRatio;
   let sawInitialResize = false;
   let rebuilding = false;
-  /** The chain only runs when something it depends on changed. */
   let dirty = true;
   let clearRequested = false;
-  let lastView = controls.view;
 
-  const handleFailure = (error: unknown) => {
-    if (disposed) return;
-    if (!reportedError) {
-      reportedError = true;
-      try { options.onError?.(error); } catch { /* error reporting must not block teardown */ }
+  const viewOptions = (count: number) =>
+    Object.fromEntries(
+      RADIANCE_VIEWS.filter(
+        ({ value }) =>
+          !value.startsWith("cascade-") ||
+          Number(value.slice("cascade-".length)) < count
+      ).map(({ value, label }) => [label, value])
+    );
+
+  const updateViewOptions = (count: number) => {
+    if (
+      controls.view.startsWith("cascade-") &&
+      Number(controls.view.slice(8)) >= count
+    ) {
+      controls.view = `cascade-${count - 1}` as RadianceView;
+      dirty = true;
     }
-    dispose();
+    viewController = viewController?.options(viewOptions(count));
+  };
+
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    if (animationFrame) cancelAnimationFrame(animationFrame);
+    if (resizeFrame) cancelAnimationFrame(resizeFrame);
+    observer?.disconnect();
+    if (typeof window !== "undefined") {
+      window.removeEventListener("resize", onWindowResize);
+    }
+    let firstError: unknown;
+    for (const cleanup of [
+      unsubscribeResize,
+      () => input?.dispose(),
+      () => gui?.destroy(),
+      () => gpu?.dispose(),
+    ]) {
+      try {
+        cleanup?.();
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+    if (firstError) throw firstError;
+  };
+
+  const fail = (error: unknown): never => {
+    try {
+      dispose();
+    } catch {
+      // Keep the operation failure primary after best-effort teardown.
+    }
+    throw error;
   };
 
   const rebuildScene = () => {
     if (disposed || !gpu || !canvasSurface) return;
     rebuilding = true;
     try {
-      const next = createScene(gpu, [canvasSurface.size[0], canvasSurface.size[1]], 'radiance-cascades-live');
-      if (scene) destroyScene(scene);
+      const next = createScene(gpu, canvasSurface.size);
+      const previous = scene;
       scene = next;
-      options.onCascadeCount?.(next.cascadeCount);
-      // A resized canvas is a new emitter texture: the triangle is redrawn, the strokes
-      // are gone, and the whole chain has to run again before anything can be presented.
+      if (previous) destroyScene(previous);
+      updateViewOptions(next.cascadeCount);
       clearRequested = true;
       dirty = true;
-      void prepareScene(next, canvasSurface.format).catch(handleFailure);
+      void prepareScene(next, canvasSurface.format).catch((error: unknown) => {
+        if (!disposed && scene === next) fail(error);
+      });
     } catch (error) {
-      handleFailure(error);
+      fail(error);
     } finally {
       rebuilding = false;
     }
   };
 
   const onSurfaceResize = () => {
-    // The surface replays its size on subscribe, and the scene was just built at it.
-    if (!sawInitialResize) { sawInitialResize = true; return; }
-    if (rebuilding) return;
-    rebuildScene();
+    if (!sawInitialResize) {
+      sawInitialResize = true;
+      return;
+    }
+    if (!rebuilding) rebuildScene();
   };
 
   const applyResize = () => {
@@ -84,51 +145,27 @@ export function createRenderer(options: RadianceCascadesRendererOptions): Radian
         Math.max(1, Math.round(size.height * size.dpr)),
       ]);
     } catch (error) {
-      handleFailure(error);
+      fail(error);
     }
-  };
-
-  const resize = (size: RenderSize) => {
-    if (disposed || size.width <= 0 || size.height <= 0) return;
-    pendingSize = size;
-    if (!resizeFrame) resizeFrame = requestAnimationFrame(applyResize);
   };
 
   const measure = () => {
-    const rect = options.canvas.getBoundingClientRect();
-    resize({
-      width: rect.width,
-      height: rect.height,
+    const { width, height } = canvas.getBoundingClientRect();
+    if (disposed || width <= 0 || height <= 0) return;
+    pendingSize = {
+      width,
+      height,
       dpr: Math.min(2, Math.max(1, window.devicePixelRatio || 1)),
-    });
+    };
+    if (!resizeFrame) resizeFrame = requestAnimationFrame(applyResize);
   };
 
-  const onWindowResize = () => {
+  function onWindowResize() {
     if (window.devicePixelRatio === lastDpr) return;
     lastDpr = window.devicePixelRatio;
     measure();
-  };
+  }
 
-  const setControls = (next: Readonly<RadianceCascadesControls>) => {
-    if (disposed) return;
-    controls = { ...next };
-    // A cascade view stops the descent early, so switching views changes what the chain
-    // has to compute, not just what the present pass reads.
-    if (controls.view !== lastView) {
-      lastView = controls.view;
-      dirty = true;
-    }
-  };
-
-  const clear = () => {
-    if (disposed) return;
-    clearRequested = true;
-    dirty = true;
-  };
-
-  // One dirty frame is a paint, a jump flood and six cascade merges, all reading what the
-  // previous pass wrote. They go out as a single submit from a plain rAF loop instead of
-  // `frameLoop`, which owns the frame and would not let the present pass be its own.
   const tick = () => {
     animationFrame = 0;
     if (disposed) return;
@@ -145,65 +182,72 @@ export function createRenderer(options: RadianceCascadesRendererOptions): Radian
           clearRequested = false;
           dirty = false;
         }
-        // Presenting every frame keeps the swap chain fed; it costs one fullscreen pass
-        // and never re-traces, so an untouched canvas is essentially free.
         presentScene(scene, canvasSurface, controls.view);
       } catch (error) {
-        handleFailure(error);
-        return;
+        fail(error);
       }
     }
     animationFrame = requestAnimationFrame(tick);
   };
 
-  function dispose(): void {
-    if (disposed) return;
-    disposed = true;
-    if (animationFrame) cancelAnimationFrame(animationFrame);
-    animationFrame = 0;
-    if (resizeFrame) cancelAnimationFrame(resizeFrame);
-    resizeFrame = 0;
-    pendingSize = undefined;
-    observer?.disconnect();
-    observer = undefined;
-    if (typeof window !== 'undefined') window.removeEventListener('resize', onWindowResize);
-    unsubscribeResize?.();
-    unsubscribeResize = undefined;
-    input?.dispose();
-    input = undefined;
-    if (scene) destroyScene(scene);
-    scene = undefined;
-    canvasSurface?.dispose();
-    canvasSurface = undefined;
-    gpu?.dispose();
-    gpu = undefined;
-  }
-
   const initialize = async () => {
-    const { init } = await import('vgpu');
+    const { init } = await import("vgpu");
     if (disposed) return;
     const nextGpu = await init();
-    if (disposed) { nextGpu.dispose(); return; }
+    if (disposed) {
+      nextGpu.dispose();
+      return;
+    }
     gpu = nextGpu;
-    canvasSurface = surface(gpu, options.canvas, { dpr: [1, 2] });
-    scene = createScene(gpu, [canvasSurface.size[0], canvasSurface.size[1]], 'radiance-cascades-live');
-    options.onCascadeCount?.(scene.cascadeCount);
+    canvasSurface = surface(gpu, canvas, { autoResize: false, dpr: [1, 2] });
+    scene = createScene(gpu, canvasSurface.size);
     await prepareScene(scene, canvasSurface.format);
     if (disposed) return;
-    input = installLightPaintInput(options.canvas);
+
+    input = installLightPaintInput(canvas);
+    gui = new GUI({
+      title: "Radiance Cascades",
+      container: canvas.parentElement ?? undefined,
+      width: 190,
+    });
+    Object.assign(gui.domElement.style, {
+      position: "absolute",
+      top: "16px",
+      right: "16px",
+      zIndex: "10",
+    });
+    viewController = gui
+      .add(controls, "view", viewOptions(scene.cascadeCount))
+      .name("View")
+      .onChange(() => {
+        dirty = true;
+      });
+    gui
+      .add(
+        {
+          clear() {
+            clearRequested = true;
+            dirty = true;
+          },
+        },
+        "clear"
+      )
+      .name("Clear canvas");
+
     unsubscribeResize = canvasSurface.onResize(onSurfaceResize);
-    observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure);
-    observer?.observe(options.canvas);
-    window.addEventListener('resize', onWindowResize);
+    observer =
+      typeof ResizeObserver === "undefined"
+        ? undefined
+        : new ResizeObserver(measure);
+    observer?.observe(canvas);
+    window.addEventListener("resize", onWindowResize);
     measure();
     animationFrame = requestAnimationFrame(tick);
   };
 
   const ready = initialize().catch((error: unknown) => {
-    if (disposed) return;
-    handleFailure(error);
-    throw error;
+    if (!disposed) fail(error);
   });
 
-  return { ready, setControls, clear, invalidate() { dirty = true; }, resize, dispose };
+  return { ready, dispose };
 }

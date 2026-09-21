@@ -4,7 +4,12 @@ export interface VGPUErrorDetail {
   readonly drawLabel?: string;
   readonly group?: number;
   readonly signature?: string;
-  readonly stage?: "vertex" | "fragment";
+  readonly stage?: "vertex" | "fragment" | "compute";
+  readonly label?: string;
+  readonly entry?: string;
+  readonly axis?: string;
+  readonly workgroupSize?: readonly number[];
+  readonly limitName?: string;
   readonly entryPoint?: string;
   readonly count?: number;
   readonly limit?: number;
@@ -16,6 +21,11 @@ export interface VGPUErrorDetail {
   readonly samplerName?: string;
   readonly samplerGroup?: number;
   readonly samplerBinding?: number;
+  readonly reason?: string;
+  readonly path?: string;
+  readonly expected?: string | number;
+  readonly actual?: string | number;
+  readonly type?: string;
 }
 
 export interface VGPUErrorData {

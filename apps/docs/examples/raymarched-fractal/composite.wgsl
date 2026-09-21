@@ -1,5 +1,4 @@
 struct Composite {
-  exposure: f32,
   bloomStrength: f32,
 }
 
@@ -14,7 +13,11 @@ fn aces(x: vec3f) -> vec3f {
   let c = 2.43;
   let d = 0.59;
   let e = 0.14;
-  return clamp((x * (a * x + vec3f(b))) / (x * (c * x + vec3f(d)) + vec3f(e)), vec3f(0.0), vec3f(1.0));
+  return clamp(
+    (x * (a * x + vec3f(b))) / (x * (c * x + vec3f(d)) + vec3f(e)),
+    vec3f(0.0),
+    vec3f(1.0),
+  );
 }
 
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
@@ -22,7 +25,7 @@ fn aces(x: vec3f) -> vec3f {
   let hdrBloom = textureSampleLevel(bloom, samp, uv, 0.0).rgb;
   var color = hdrScene + hdrBloom * composite.bloomStrength;
 
-  color *= composite.exposure;
+  color *= 1.05;
   color = aces(color);
 
   color = pow(color, vec3f(1.0 / 2.2));

@@ -42,7 +42,7 @@ SCALE_METERS = 16.0
 
 
 def cover_crop(image: Image.Image, width: int, height: int) -> Image.Image:
-    """Centre-crop to the target aspect, then resize. Mirrors preprocess.ts."""
+    """Mirror depth-estimation/renderer.ts: coverCrop, then resize."""
     target = width / height
     sw, sh = image.size
     if sw / sh > target:

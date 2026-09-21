@@ -1,10 +1,11 @@
 {
   "root": {
     "title": "Documentation",
-    "description": "Documentation for vgpu, the WebGPU library designed for agents."
+    "description": "Build WebGPU applications for browsers and Node.js, and integrate WGSL with native Metal code."
   },
   "packageOrder": [
     "vgpu",
+    "vgpu/three",
     "vgpu/scene",
     "@vgpu/wgsl",
     "@vgpu/wgsl-std",
@@ -18,6 +19,7 @@
       "gpu",
       "surface",
       "target",
+      "texture",
       "frame",
       "effect",
       "draw",
@@ -35,6 +37,7 @@
       "orbit",
       "..."
     ],
+    "vgpu/three": ["tsl-exports", "..."],
     "vgpu/core": [
       "device",
       "buffer",
@@ -76,12 +79,24 @@
       "perf",
       "edit",
       "..."
+    ],
+    "@vgpu/adapter-node": [
+      "create-node-adapter",
+      "..."
+    ],
+    "vgpu/mock": [
+      "create-mock-adapter",
+      "..."
     ]
   },
   "guideGroups": [
     {
       "title": "General",
       "slugs": ["getting-started"]
+    },
+    {
+      "title": "Integrations",
+      "slugs": ["threejs", "nextjs", "no-bundler", "external-ticker"]
     },
     {
       "title": "Performance",
@@ -92,7 +107,9 @@
         "measuring",
         "optimize-pass",
         "shader-fix-its",
-        "performance-playbook"
+        "performance-playbook",
+        "adaptive-quality",
+        "shipping-to-production"
       ]
     },
     {
@@ -124,6 +141,7 @@
           "title": "",
           "items": [
             { "title": "Context", "href": "/concepts/context" },
+            { "title": "WGSL modules", "href": "/concepts/wgsl-modules" },
             { "title": "Draws", "href": "/concepts/draws" },
             { "title": "Compilation", "href": "/concepts/compilation" },
             { "title": "Effects", "href": "/concepts/effects" },
@@ -147,6 +165,10 @@
           "slugs": ["getting-started"]
         },
         {
+          "title": "Integrations",
+          "slugs": ["threejs", "nextjs", "no-bundler", "external-ticker"]
+        },
+        {
           "title": "Performance",
           "slugs": [
             "performance-model",
@@ -155,7 +177,9 @@
             "measuring",
             "optimize-pass",
             "shader-fix-its",
-            "performance-playbook"
+            "performance-playbook",
+            "adaptive-quality",
+            "shipping-to-production"
           ]
         },
         {
@@ -166,6 +190,11 @@
       ]
     },
     {
+      "title": "Migrations",
+      "href": "/migrations",
+      "groups": [{ "...": [] }]
+    },
+    {
       "title": "Examples",
       "href": "/examples",
       "groups": [{ "...": [] }]
@@ -173,6 +202,11 @@
     {
       "title": "CLI",
       "href": "/cli",
+      "groups": []
+    },
+    {
+      "title": "MCP",
+      "href": "/mcp",
       "groups": []
     },
     {
@@ -186,6 +220,38 @@
             { "title": "Quickstart: Browser", "href": "/ml/browser" },
             { "title": "Quickstart: Node", "href": "/ml/node" },
             { "title": "Buffers & ownership", "href": "/ml/buffers" }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Native",
+      "href": "/native",
+      "groups": [
+        {
+          "title": "",
+          "items": [
+            { "title": "Overview", "href": "/native" }
+          ]
+        },
+        {
+          "title": "macOS",
+          "items": [
+            { "title": "Get started", "href": "/native/macos" },
+            { "title": "Load Metal functions", "href": "/native/macos/metal/functions" },
+            { "title": "Render WGSL with Metal", "href": "/native/macos/metal/rendering" },
+            { "title": "Pack uniforms for Metal", "href": "/native/macos/metal/uniforms" },
+            { "title": "Bind Metal buffers", "href": "/native/macos/metal/bindings" },
+            { "title": "Render to multiple textures", "href": "/native/macos/metal/render/targets" },
+            { "title": "Dispatch WGSL compute", "href": "/native/macos/metal/compute/dispatch" },
+            { "title": "Use prepared compute bindings", "href": "/native/macos/metal/compute/prepared-bindings" },
+            { "title": "Encode native indirect dispatch", "href": "/native/macos/metal/compute/indirect-dispatch" },
+            { "title": "Render computed data", "href": "/native/macos/metal/compute/rendering" },
+            { "title": "Configure a Metal package", "href": "/native/macos/metal/tooling/configuration" },
+            { "title": "Resolve shader inputs", "href": "/native/macos/metal/tooling/sources" },
+            { "title": "Check the native toolchain", "href": "/native/macos/metal/tooling/doctor" },
+            { "title": "Build and verify a Metal package", "href": "/native/macos/metal/tooling/build" },
+            { "title": "Publish generated packages", "href": "/native/macos/metal/tooling/publication" }
           ]
         }
       ]

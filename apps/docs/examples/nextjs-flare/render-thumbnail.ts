@@ -1,36 +1,66 @@
-import type { Gpu, Target } from 'vgpu';
+import type { Gpu, Target } from "vgpu";
 
-import type { ThumbnailOptions } from '../../lib/example-renderer';
-import { mapAutonomousLight } from './animation';
-import { BAKED_LOGO_HEIGHT, BAKED_LOGO_WIDTH, bakedLogoRgba } from './logo-raster-baked';
-import { centeredPlacement } from './placement';
-import { FlarePipeline } from './pipeline';
-import { DEFAULT_FLARE_SETTINGS } from './settings';
-import { createLogoTexture, uploadLogoTextureRgba } from './textures';
+import {
+  BAKED_LOGO_HEIGHT,
+  BAKED_LOGO_WIDTH,
+  bakedLogoRgba,
+} from "./logo-raster-baked";
+import { FlarePipeline, mapAutonomousLight, rgbaRaster } from "./pipeline";
+
+interface ThumbnailOptions {
+  readonly time?: number;
+}
 
 export async function renderThumbnail(
   gpu: Gpu,
-  target: Target,
-  opts: ThumbnailOptions = {}
+  output: Target,
+  options: ThumbnailOptions = {}
 ): Promise<void> {
-  const pipeline = new FlarePipeline(gpu, target);
-  let logoTexture: GPUTexture | undefined;
+  let pipeline: FlarePipeline | undefined;
+  let primary: unknown;
+  let failed = false;
   try {
-    await pipeline.resize(target.size, 2);
-    const [width, height] = target.size;
-    const placement = centeredPlacement(width, height, height);
+    pipeline = new FlarePipeline(gpu, output);
     const rgba = await bakedLogoRgba();
-    logoTexture = createLogoTexture(gpu, BAKED_LOGO_WIDTH, BAKED_LOGO_HEIGHT);
-    uploadLogoTextureRgba(gpu, logoTexture, rgba, BAKED_LOGO_WIDTH, BAKED_LOGO_HEIGHT);
-    pipeline.bindLogoTexture(logoTexture, BAKED_LOGO_WIDTH, BAKED_LOGO_HEIGHT, placement);
-    const time = opts.time ?? 4.2;
+    const placement = await pipeline.replace(
+      output.size,
+      2,
+      rgbaRaster(rgba, BAKED_LOGO_WIDTH, BAKED_LOGO_HEIGHT)
+    );
+    if (!placement) throw new Error("Could not prepare the flare thumbnail.");
+    const time = options.time ?? 4.2;
     const light = mapAutonomousLight(time, placement);
-    pipeline.setFrameUniforms(DEFAULT_FLARE_SETTINGS, placement, light, 0, time, 0);
+    pipeline.setFrameUniforms(placement, light, 0, time, 0);
     pipeline.draw(true);
-    await gpu.gpu.queue.onSubmittedWorkDone();
-  } finally {
-    await Promise.allSettled([gpu.settled()]);
-    logoTexture?.destroy();
-    pipeline.dispose();
+  } catch (error) {
+    primary = error;
+    failed = true;
   }
+
+  try {
+    await waitForGpu(gpu);
+  } catch (error) {
+    if (!failed) primary = error;
+    failed = true;
+  }
+
+  try {
+    pipeline?.dispose();
+  } catch (error) {
+    if (!failed) primary = error;
+    failed = true;
+  }
+
+  if (failed) throw primary;
+}
+
+async function waitForGpu(gpu: Gpu): Promise<void> {
+  const results = await Promise.allSettled([
+    Promise.resolve().then(() => gpu.gpu.queue.onSubmittedWorkDone()),
+    Promise.resolve().then(() => gpu.settled()),
+  ]);
+  const failure = results.find(
+    (result): result is PromiseRejectedResult => result.status === "rejected"
+  );
+  if (failure) throw failure.reason;
 }

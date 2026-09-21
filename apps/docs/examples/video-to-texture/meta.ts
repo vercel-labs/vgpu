@@ -1,5 +1,3 @@
-import type { ExampleMetaDefinition } from '../../lib/example-meta';
-
 export const meta = {
   slug: 'video-to-texture',
   title: 'Video to Texture',
@@ -10,11 +8,15 @@ export const meta = {
     'webgpu',
     'textures',
     'video-input',
-    'external-device',
     'continuous-rendering',
     'responsive-canvas',
   ],
-  // Seconds, scaled by SPIN_RATE in scene.ts to a fixed three-quarter pose.
-  thumb: { time: 2.7 },
-  files: ['index.tsx', 'renderer.ts', 'video-source.ts', 'scene.ts', 'cube.wgsl'],
-} as const satisfies ExampleMetaDefinition;
+  files: [
+    'index.tsx',
+    'renderer.ts',
+    'video-source.ts',
+    'scene.ts',
+    'cube.wgsl',
+    'provenance.md',
+  ],
+} as const;

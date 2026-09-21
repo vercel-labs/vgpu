@@ -1,6 +1,6 @@
 {
   "name": "@vgpu/cli",
-  "version": "0.2.0",
+  "version": "0.2.3",
   "description": "Official VGPU CLI for docs, doctor, and WGSL utilities.",
   "keywords": [
     "webgpu",
@@ -10,7 +10,7 @@
     "wgsl",
     "vgpu"
   ],
-  "homepage": "https://github.com/vercel-labs/vgpu#readme",
+  "homepage": "https://vgpu.sh",
   "bugs": {
     "url": "https://github.com/vercel-labs/vgpu/issues"
   },
@@ -45,13 +45,15 @@
     "test": "cd ../.. && vitest run packages/vgpu"
   },
   "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
     "pixelmatch": "^7.2.0",
-    "pngjs": "^7.0.0"
+    "pngjs": "^7.0.0",
+    "zod": "^4.4.3"
   },
   "peerDependencies": {
-    "@vgpu/adapter-node": ">=0.1.6 <1.0.0",
-    "@vgpu/wgsl": ">=0.1.6 <1.0.0",
-    "vgpu": ">=0.1.6 <1.0.0"
+    "@vgpu/adapter-node": ">=0.1.6 <1.0.0 || ^0.5.0-rc.0",
+    "@vgpu/wgsl": ">=0.1.6 <1.0.0 || ^0.5.0-rc.0",
+    "vgpu": ">=0.1.6 <1.0.0 || ^0.5.0-rc.0"
   },
   "peerDependenciesMeta": {
     "@vgpu/adapter-node": {

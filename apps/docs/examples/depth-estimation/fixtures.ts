@@ -15,8 +15,8 @@ import {
   GOLDEN_HEIGHT,
   GOLDEN_SCALE_METERS,
   GOLDEN_WIDTH,
-} from './golden-depth.generated';
-import type { DepthModelId } from './model-contract';
+} from "./golden-depth.generated";
+import type { DepthModelId } from "./renderer";
 
 export {
   GOLDEN_HEIGHT,
@@ -25,23 +25,23 @@ export {
   GOLDEN_SOURCE_SHA256,
   GOLDEN_STATS,
   GOLDEN_WIDTH,
-} from './golden-depth.generated';
+} from "./golden-depth.generated";
 
 /** The fixture belongs to the default model; the picker's other two are lazy. */
-export const GOLDEN_MODEL_ID: DepthModelId = 'fastdepth-320x256';
+export const GOLDEN_MODEL_ID: DepthModelId = "fastdepth-320x256";
 
 /** Same-origin URL of the image the fixture was captured from. */
-export const GOLDEN_SOURCE_URL = '/examples/depth-estimation/source.jpg';
+export const GOLDEN_SOURCE_URL = "/examples/depth-estimation/source.jpg";
 
 function decodeBase64(value: string): Uint8Array {
-  if (typeof atob === 'function') {
+  if (typeof atob === "function") {
     const binary = atob(value);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
     return bytes;
   }
   // Node (thumbnail rendering and tests).
-  return new Uint8Array(Buffer.from(value, 'base64'));
+  return new Uint8Array(Buffer.from(value, "base64"));
 }
 
 /**
@@ -53,12 +53,15 @@ export function decodeGoldenDepth(): Float32Array {
   const expected = GOLDEN_WIDTH * GOLDEN_HEIGHT;
   if (bytes.byteLength !== expected * 2) {
     throw new Error(
-      `golden depth fixture is ${bytes.byteLength} bytes, expected ${expected * 2}.`,
+      `golden depth fixture is ${bytes.byteLength} bytes, expected ${
+        expected * 2
+      }.`
     );
   }
   // Copy into an aligned buffer: the base64 decode has no alignment guarantee.
   const aligned = new Uint16Array(expected);
-  for (let i = 0; i < expected; i += 1) aligned[i] = bytes[i * 2]! | (bytes[i * 2 + 1]! << 8);
+  for (let i = 0; i < expected; i += 1)
+    aligned[i] = bytes[i * 2]! | (bytes[i * 2 + 1]! << 8);
 
   const depth = new Float32Array(expected);
   const scale = GOLDEN_SCALE_METERS / 65535;
@@ -77,7 +80,11 @@ export function decodeGoldenColour(): Uint8ClampedArray {
   const rgb = decodeBase64(GOLDEN_COLOUR_BASE64);
   const pixels = GOLDEN_WIDTH * GOLDEN_HEIGHT;
   if (rgb.byteLength !== pixels * 3) {
-    throw new Error(`golden colour fixture is ${rgb.byteLength} bytes, expected ${pixels * 3}.`);
+    throw new Error(
+      `golden colour fixture is ${rgb.byteLength} bytes, expected ${
+        pixels * 3
+      }.`
+    );
   }
   const rgba = new Uint8ClampedArray(pixels * 4);
   for (let i = 0; i < pixels; i += 1) {

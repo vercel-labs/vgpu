@@ -1,14 +1,18 @@
-import type { Effect, Frame, Gpu, Surface, Target, TimerSpan } from 'vgpu';
+import type { Effect, Frame, Gpu, Surface, Target } from "vgpu";
 
-import bakeWgsl from './bake.wgsl';
-import bloomWgsl from './bloom.wgsl';
-import compositeWgsl from './composite.wgsl';
-import { createNoiseVolume, NOISE_VOLUME_SIZE, noiseVolumeSampler } from './noise-volume.mjs';
-import refineWgsl from './refine.wgsl';
-import shadeWgsl from './shade.wgsl';
-import type { HeroSettings } from './settings';
+import bakeWgsl from "./bake.wgsl";
+import bloomWgsl from "./bloom.wgsl";
+import compositeWgsl from "./composite.wgsl";
+import {
+  createNoiseVolume,
+  NOISE_VOLUME_SIZE,
+  noiseVolumeSampler,
+} from "./noise-volume.mjs";
+import refineWgsl from "./refine.wgsl";
+import shadeWgsl from "./shade.wgsl";
+import type { HeroSettings } from "./settings";
 
-export type VgpuApi = typeof import('vgpu');
+export type VgpuApi = typeof import("vgpu");
 type Output = Surface | Target;
 type NoiseVolume = ReturnType<typeof createNoiseVolume>;
 
@@ -44,50 +48,55 @@ export interface Targets {
 }
 
 const GBUFFER_FORMATS: readonly GPUTextureFormat[] = [
-  'rg32float',
-  'rg32float',
-  'rgba16float',
-  'rgba16float',
+  "rg32float",
+  "rg32float",
+  "rgba16float",
+  "rgba16float",
 ];
-const AA_FORMATS: readonly GPUTextureFormat[] = ['rg8unorm', 'rgba16float'];
+const AA_FORMATS: readonly GPUTextureFormat[] = ["rg8unorm", "rgba16float"];
 const CLEAR: readonly [number, number, number, number] = [0, 0, 0, 1];
 
-export function createEffects(vgpu: VgpuApi, gpu: Gpu, label: string): Effects {
+export function createEffects(vgpu: VgpuApi, gpu: Gpu): Effects {
+  const postSampler = vgpu.sampler(gpu, {
+    minFilter: "linear",
+    magFilter: "linear",
+  });
+  const noiseSampler = noiseVolumeSampler(vgpu, gpu);
   return {
-    bake: vgpu.effect(gpu, bakeWgsl, { label: `${label}-bake` }),
-    refine: vgpu.effect(gpu, refineWgsl, { label: `${label}-refine` }),
-    shade: vgpu.effect(gpu, shadeWgsl, { label: `${label}-shade` }),
-    bloomExtract: vgpu.effect(gpu, bloomWgsl, { label: `${label}-bloom-extract` }),
-    bloomBlurH0: vgpu.effect(gpu, bloomWgsl, { label: `${label}-bloom-blur-h0` }),
-    bloomBlurV0: vgpu.effect(gpu, bloomWgsl, { label: `${label}-bloom-blur-v0` }),
-    bloomDown1: vgpu.effect(gpu, bloomWgsl, { label: `${label}-bloom-down-1` }),
-    bloomBlurH1: vgpu.effect(gpu, bloomWgsl, { label: `${label}-bloom-blur-h1` }),
-    bloomBlurV1: vgpu.effect(gpu, bloomWgsl, { label: `${label}-bloom-blur-v1` }),
-    bloomDown2: vgpu.effect(gpu, bloomWgsl, { label: `${label}-bloom-down-2` }),
-    bloomBlurH2: vgpu.effect(gpu, bloomWgsl, { label: `${label}-bloom-blur-h2` }),
-    bloomBlurV2: vgpu.effect(gpu, bloomWgsl, { label: `${label}-bloom-blur-v2` }),
-    composite: vgpu.effect(gpu, compositeWgsl, { label: `${label}-composite` }),
-    postSampler: vgpu.sampler(gpu, { minFilter: 'linear', magFilter: 'linear' }),
-    noiseVolume: createNoiseVolume(gpu, NOISE_VOLUME_SIZE, `${label}-noise-volume`),
-    noiseSampler: noiseVolumeSampler(vgpu, gpu),
+    bake: vgpu.effect(gpu, bakeWgsl, { label: "optimized-black-hole-bake" }),
+    refine: vgpu.effect(gpu, refineWgsl, {
+      label: "optimized-black-hole-refine",
+    }),
+    shade: vgpu.effect(gpu, shadeWgsl, { label: "optimized-black-hole-shade" }),
+    bloomExtract: vgpu.effect(gpu, bloomWgsl),
+    bloomBlurH0: vgpu.effect(gpu, bloomWgsl),
+    bloomBlurV0: vgpu.effect(gpu, bloomWgsl),
+    bloomDown1: vgpu.effect(gpu, bloomWgsl),
+    bloomBlurH1: vgpu.effect(gpu, bloomWgsl),
+    bloomBlurV1: vgpu.effect(gpu, bloomWgsl),
+    bloomDown2: vgpu.effect(gpu, bloomWgsl),
+    bloomBlurH2: vgpu.effect(gpu, bloomWgsl),
+    bloomBlurV2: vgpu.effect(gpu, bloomWgsl),
+    composite: vgpu.effect(gpu, compositeWgsl),
+    postSampler,
+    noiseSampler,
+    noiseVolume: createNoiseVolume(gpu, NOISE_VOLUME_SIZE),
   };
 }
 
 export function createTargets(
   vgpu: VgpuApi,
   gpu: Gpu,
-  size: readonly [number, number],
-  label: string
+  size: readonly [number, number]
 ): Targets {
   const full = normalizeSize(size),
     half = scaleSize(full, 2),
     quarter = scaleSize(full, 4),
     eighth = scaleSize(full, 8);
-  const postTarget = (targetSize: readonly [number, number], suffix: string) =>
+  const postTarget = (targetSize: readonly [number, number]) =>
     vgpu.target(gpu, {
       size: targetSize,
-      colors: [{ format: 'rgba16float' }],
-      label: `${label}-${suffix}`,
+      colors: [{ format: "rgba16float" }],
     });
   const created: Target[] = [];
   const own = (value: Target) => {
@@ -100,32 +109,34 @@ export function createTargets(
         vgpu.target(gpu, {
           size: full,
           colors: GBUFFER_FORMATS.map((format) => ({ format })),
-          label: `${label}-gbuffer`,
         })
       ),
       aa: own(
         vgpu.target(gpu, {
           size: full,
           colors: AA_FORMATS.map((format) => ({ format })),
-          label: `${label}-aa`,
         })
       ),
-      scene: own(postTarget(full, 'scene-hdr')),
-      bloom0: own(postTarget(half, 'bloom-0')),
-      bloomPing0: own(postTarget(half, 'bloom-ping-0')),
-      bloom1: own(postTarget(quarter, 'bloom-1')),
-      bloomPing1: own(postTarget(quarter, 'bloom-ping-1')),
-      bloom2: own(postTarget(eighth, 'bloom-2')),
-      bloomPing2: own(postTarget(eighth, 'bloom-ping-2')),
+      scene: own(postTarget(full)),
+      bloom0: own(postTarget(half)),
+      bloomPing0: own(postTarget(half)),
+      bloom1: own(postTarget(quarter)),
+      bloomPing1: own(postTarget(quarter)),
+      bloom2: own(postTarget(eighth)),
+      bloomPing2: own(postTarget(eighth)),
     };
   } catch (error) {
-    for (let i = created.length - 1; i >= 0; i--) destroyTarget(created[i]);
+    try {
+      destroyTargetList(created.reverse());
+    } catch {
+      // The allocation failure remains the primary error.
+    }
     throw error;
   }
 }
 
 export function destroyTargets(targets: Targets): void {
-  for (const value of [
+  destroyTargetList([
     targets.gbuffer,
     targets.aa,
     targets.scene,
@@ -135,9 +146,23 @@ export function destroyTargets(targets: Targets): void {
     targets.bloomPing1,
     targets.bloom2,
     targets.bloomPing2,
-  ])
-    destroyTarget(value);
+  ]);
 }
+
+function destroyTargetList(values: readonly Target[]): void {
+  let failed = false;
+  let failure: unknown;
+  for (const value of values) {
+    try {
+      destroyTarget(value);
+    } catch (error) {
+      if (!failed) failure = error;
+      failed = true;
+    }
+  }
+  if (failed) throw failure;
+}
+
 function destroyTarget(value: Target | undefined): void {
   (value as { destroy?: () => void } | undefined)?.destroy?.();
 }
@@ -146,7 +171,11 @@ export function setBindings(effects: Effects, targets: Targets): void {
   const [hit1, hit2, sky, view] = targets.gbuffer.colors;
   const [aa, aaGeom] = targets.aa.colors;
   effects.bake.set({ bake: { resolution: targets.gbuffer.size } });
-  effects.refine.set({ gHit1: hit1, gSky: sky, refine: { resolution: targets.gbuffer.size } });
+  effects.refine.set({
+    gHit1: hit1,
+    gSky: sky,
+    refine: { resolution: targets.gbuffer.size },
+  });
   effects.shade.set({
     gHit1: hit1,
     gHit2: hit2,
@@ -165,15 +194,42 @@ export function setBindings(effects: Effects, targets: Targets): void {
     bloomPing1 = targets.bloomPing1.colors[0]!,
     bloom2 = targets.bloom2.colors[0]!,
     bloomPing2 = targets.bloomPing2.colors[0]!;
-  effects.bloomExtract.set({ source: scene, linearSampler: effects.postSampler });
-  effects.bloomBlurH0.set({ source: bloom0, linearSampler: effects.postSampler });
-  effects.bloomBlurV0.set({ source: bloomPing0, linearSampler: effects.postSampler });
-  effects.bloomDown1.set({ source: bloom0, linearSampler: effects.postSampler });
-  effects.bloomBlurH1.set({ source: bloom1, linearSampler: effects.postSampler });
-  effects.bloomBlurV1.set({ source: bloomPing1, linearSampler: effects.postSampler });
-  effects.bloomDown2.set({ source: bloom1, linearSampler: effects.postSampler });
-  effects.bloomBlurH2.set({ source: bloom2, linearSampler: effects.postSampler });
-  effects.bloomBlurV2.set({ source: bloomPing2, linearSampler: effects.postSampler });
+  effects.bloomExtract.set({
+    source: scene,
+    linearSampler: effects.postSampler,
+  });
+  effects.bloomBlurH0.set({
+    source: bloom0,
+    linearSampler: effects.postSampler,
+  });
+  effects.bloomBlurV0.set({
+    source: bloomPing0,
+    linearSampler: effects.postSampler,
+  });
+  effects.bloomDown1.set({
+    source: bloom0,
+    linearSampler: effects.postSampler,
+  });
+  effects.bloomBlurH1.set({
+    source: bloom1,
+    linearSampler: effects.postSampler,
+  });
+  effects.bloomBlurV1.set({
+    source: bloomPing1,
+    linearSampler: effects.postSampler,
+  });
+  effects.bloomDown2.set({
+    source: bloom1,
+    linearSampler: effects.postSampler,
+  });
+  effects.bloomBlurH2.set({
+    source: bloom2,
+    linearSampler: effects.postSampler,
+  });
+  effects.bloomBlurV2.set({
+    source: bloomPing2,
+    linearSampler: effects.postSampler,
+  });
   effects.composite.set({
     scene,
     bloomNear: bloom0,
@@ -183,7 +239,11 @@ export function setBindings(effects: Effects, targets: Targets): void {
   });
 }
 
-export function setBakeUniforms(effects: Effects, targets: Targets, settings: HeroSettings): void {
+export function setBakeUniforms(
+  effects: Effects,
+  targets: Targets,
+  settings: HeroSettings
+): void {
   const geometry = {
     resolution: targets.gbuffer.size,
     yaw: 0,
@@ -210,27 +270,34 @@ export function setShadeUniforms(
       resolution: targets.gbuffer.size,
       time,
       diskOuter: settings.diskRadius,
-      debugView: settings.debugView,
-      diskLayers: settings.diskLayers,
-      aa: settings.aa,
       sceneYaw,
-      sideFade: settings.sideFade,
       centerFade: settings.centerFade,
     },
     disk: settings.disk,
     stars: settings.stars,
   });
 }
-export function setPostUniforms(effects: Effects, targets: Targets, settings: HeroSettings): void {
+export function setPostUniforms(
+  effects: Effects,
+  targets: Targets,
+  settings: HeroSettings
+): void {
   const threshold = Math.max(0, settings.bloom.threshold),
     knee = Math.max(0.0001, settings.bloom.knee),
     radius = Math.max(0.1, settings.bloom.radius);
-  const downsample = (sourceSize: readonly [number, number], applyThreshold: boolean) => ({
+  const downsample = (
+    sourceSize: readonly [number, number],
+    applyThreshold: boolean
+  ) => ({
     sourceSize,
     direction: [0, 0],
     params: [applyThreshold ? threshold : -1, knee, radius, 0],
   });
-  const blur = (sourceSize: readonly [number, number], x: number, y: number) => ({
+  const blur = (
+    sourceSize: readonly [number, number],
+    x: number,
+    y: number
+  ) => ({
     sourceSize,
     direction: [x, y],
     params: [-1, knee, radius, 1],
@@ -245,11 +312,17 @@ export function setPostUniforms(effects: Effects, targets: Targets, settings: He
   effects.bloomBlurH2.set({ bloom: blur(targets.bloom2.size, 1, 0) });
   effects.bloomBlurV2.set({ bloom: blur(targets.bloomPing2.size, 0, 1) });
   effects.composite.set({
-    composite: { params: [Math.max(0, settings.bloom.strength), settings.debugView, 0, 0] },
+    composite: {
+      params: [Math.max(0, settings.bloom.strength), 0, 0, 0],
+    },
   });
 }
 
-export async function prewarm(effects: Effects, targets: Targets, output: Output): Promise<void> {
+export async function prewarm(
+  effects: Effects,
+  targets: Targets,
+  output: Output
+): Promise<void> {
   const bloomOutput = { colors: [targets.bloom0.format] };
   await Promise.all([
     effects.bake.compile(targets.gbuffer),
@@ -273,36 +346,60 @@ export function renderChain(
   effects: Effects,
   targets: Targets,
   output: Output,
-  settings: HeroSettings,
-  bake: boolean,
-  timer?: TimerSpan
+  bake: boolean
 ): void {
   if (bake) {
-    frame.pass({ target: targets.gbuffer, clear: CLEAR }, (pass) => pass.draw(effects.bake));
-    frame.pass({ target: targets.aa, clear: CLEAR }, (pass) => pass.draw(effects.refine));
+    frame.pass({ target: targets.gbuffer, clear: CLEAR }, (pass) =>
+      pass.draw(effects.bake)
+    );
+    frame.pass({ target: targets.aa, clear: CLEAR }, (pass) =>
+      pass.draw(effects.refine)
+    );
   }
-  frame.pass({ target: targets.scene, clear: CLEAR, timer }, (pass) => pass.draw(effects.shade));
-  frame.pass({ target: targets.bloom0, clear: CLEAR }, (pass) => pass.draw(effects.bloomExtract));
+  frame.pass({ target: targets.scene, clear: CLEAR }, (pass) =>
+    pass.draw(effects.shade)
+  );
+  frame.pass({ target: targets.bloom0, clear: CLEAR }, (pass) =>
+    pass.draw(effects.bloomExtract)
+  );
   frame.pass({ target: targets.bloomPing0, clear: CLEAR }, (pass) =>
     pass.draw(effects.bloomBlurH0)
   );
-  frame.pass({ target: targets.bloom0, clear: CLEAR }, (pass) => pass.draw(effects.bloomBlurV0));
-  frame.pass({ target: targets.bloom1, clear: CLEAR }, (pass) => pass.draw(effects.bloomDown1));
+  frame.pass({ target: targets.bloom0, clear: CLEAR }, (pass) =>
+    pass.draw(effects.bloomBlurV0)
+  );
+  frame.pass({ target: targets.bloom1, clear: CLEAR }, (pass) =>
+    pass.draw(effects.bloomDown1)
+  );
   frame.pass({ target: targets.bloomPing1, clear: CLEAR }, (pass) =>
     pass.draw(effects.bloomBlurH1)
   );
-  frame.pass({ target: targets.bloom1, clear: CLEAR }, (pass) => pass.draw(effects.bloomBlurV1));
-  frame.pass({ target: targets.bloom2, clear: CLEAR }, (pass) => pass.draw(effects.bloomDown2));
+  frame.pass({ target: targets.bloom1, clear: CLEAR }, (pass) =>
+    pass.draw(effects.bloomBlurV1)
+  );
+  frame.pass({ target: targets.bloom2, clear: CLEAR }, (pass) =>
+    pass.draw(effects.bloomDown2)
+  );
   frame.pass({ target: targets.bloomPing2, clear: CLEAR }, (pass) =>
     pass.draw(effects.bloomBlurH2)
   );
-  frame.pass({ target: targets.bloom2, clear: CLEAR }, (pass) => pass.draw(effects.bloomBlurV2));
-  frame.pass({ target: output, clear: CLEAR }, (pass) => pass.draw(effects.composite));
+  frame.pass({ target: targets.bloom2, clear: CLEAR }, (pass) =>
+    pass.draw(effects.bloomBlurV2)
+  );
+  frame.pass({ target: output, clear: CLEAR }, (pass) =>
+    pass.draw(effects.composite)
+  );
 }
 
 function normalizeSize(size: readonly [number, number]): [number, number] {
   return [Math.max(1, Math.floor(size[0])), Math.max(1, Math.floor(size[1]))];
 }
-function scaleSize(size: readonly [number, number], divisor: number): [number, number] {
-  return [Math.max(1, Math.floor(size[0] / divisor)), Math.max(1, Math.floor(size[1] / divisor))];
+function scaleSize(
+  size: readonly [number, number],
+  divisor: number
+): [number, number] {
+  return [
+    Math.max(1, Math.floor(size[0] / divisor)),
+    Math.max(1, Math.floor(size[1] / divisor)),
+  ];
 }

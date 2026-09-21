@@ -1,6 +1,4 @@
-// Separable Gaussian blur. Four passes (H, V, H, V) with a widening radius stand
-// in for a 6-level mipmap blur: the sun ends up with a broad halo
-// without allocating a mip chain.
+// Four alternating Gaussian passes build the bloom halo.
 
 struct Blur {
   texelSize: vec2f,
@@ -14,7 +12,6 @@ struct Blur {
 
 @fragment
 fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-  // 9-tap Gaussian weights.
   let weights = array<f32, 5>(0.227027, 0.1945946, 0.1216216, 0.054054, 0.016216);
   let step = blur.texelSize * blur.direction * blur.radius;
   var result = textureSampleLevel(src, samp, uv, 0.0).rgb * weights[0];

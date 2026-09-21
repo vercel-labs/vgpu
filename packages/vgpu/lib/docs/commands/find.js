@@ -15,8 +15,14 @@ const HIT_LIMIT = 20;
 export function findCommand(index, args) {
   if (args.includes("--help") || args.includes("-h")) return ok("Usage: vgpu docs find <query>");
   if (args.length !== 1) return fail("Usage: vgpu docs find <query>");
-  const tokens = args[0].toLowerCase().split(/\s+/u).filter(Boolean);
-  if (tokens.length === 0) return fail(`No docs found for: ${args[0]}`);
+  const found = findDocs(index, args[0]);
+  if (found.results.length === 0) return fail(`No docs found for: ${args[0]}`);
+  return ok(withNotice(found.results.map(formatFindResult), found.hiddenCount));
+}
+
+export function findDocs(index, query) {
+  const tokens = query.toLowerCase().split(/\s+/u).filter(Boolean);
+  if (tokens.length === 0) return { results: [], truncated: false, hiddenCount: 0 };
   const phrase = tokens.join(" ");
 
   const matchesAll = (haystack) => tokens.every((token) => haystack.includes(token));
@@ -43,14 +49,24 @@ export function findCommand(index, args) {
   if (routeHitMap.size > 0) {
     const hits = [...routeHitMap.values()];
     const ranked = rankRouteHits(hits, tokens, phrase);
-    return ok(withNotice(ranked.slice(0, HIT_LIMIT).map((hit) => hit.line), hits.length - HIT_LIMIT));
+    const hiddenCount = Math.max(hits.length - HIT_LIMIT, 0);
+    return {
+      results: ranked.slice(0, HIT_LIMIT).map(resultFromHit),
+      truncated: hiddenCount > 0,
+      hiddenCount,
+    };
   }
 
-  const contentHits = [...new Set(uniqueByPath(index.records)
+  const contentHits = uniqueByPath(index.records)
     .filter((record) => matchesAll(record.content.toLowerCase()))
-    .map(pathLine))].sort();
-  if (contentHits.length === 0) return fail(`No docs found for: ${args[0]}`);
-  return ok(withNotice(contentHits.slice(0, HIT_LIMIT), contentHits.length - HIT_LIMIT));
+    .map((record) => ({ type: "path", record, line: pathLine(record) }))
+    .sort((left, right) => compareBytes(left.line, right.line));
+  const hiddenCount = Math.max(contentHits.length - HIT_LIMIT, 0);
+  return {
+    results: contentHits.slice(0, HIT_LIMIT).map(resultFromHit),
+    truncated: hiddenCount > 0,
+    hiddenCount,
+  };
 }
 
 function symbolText(record) {
@@ -67,6 +83,24 @@ function keywordText(record) {
 
 function pathLine(record) {
   return `${record.virtualPath}\t${record.repoPath}`;
+}
+
+function resultFromHit(hit) {
+  if (hit.type === "symbol") {
+    return {
+      kind: "symbol",
+      symbol: hit.record.symbol,
+      package: hit.record.package,
+      virtualPath: hit.record.virtualPath,
+    };
+  }
+  return { kind: "path", virtualPath: hit.record.virtualPath, repoPath: hit.record.repoPath };
+}
+
+function formatFindResult(result) {
+  return result.kind === "symbol"
+    ? `${result.symbol}\t${result.package}\t${result.virtualPath}`
+    : `${result.virtualPath}\t${result.repoPath}`;
 }
 
 // Order (never filter) the route hits so the best match is the line an agent reads first. Ties break

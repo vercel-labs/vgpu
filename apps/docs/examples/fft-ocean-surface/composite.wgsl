@@ -1,5 +1,4 @@
-// Tone-map the HDR scene target to the canvas: ACES filmic approximation
-// followed by gamma. Runs as a fullscreen effect (uv comes in at @location(0)).
+// Tone-map the HDR scene to the canvas.
 
 @group(0) @binding(0) var src: texture_2d<f32>;
 @group(0) @binding(1) var samp: sampler;
@@ -19,7 +18,6 @@ const EXPOSURE = 0.62;
   let hdr = textureSampleLevel(src, samp, uv, 0.0).rgb * EXPOSURE;
   var col = pow(aces(hdr), vec3f(1.0 / 2.2));
 
-  // Gentle cinematic grade: a little contrast + warm tint, subtle vignette.
   col = (col - 0.5) * 1.07 + 0.5;
   col *= vec3f(1.05, 1.0, 0.95);
   let d = uv - vec2f(0.5);

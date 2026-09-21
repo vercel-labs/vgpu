@@ -1,5 +1,36 @@
 # @vgpu/cli
 
+## 0.2.3
+
+### Patch Changes
+
+- 5c18170: Bundle versioned consumer migration guides in the local docs CLI and MCP corpus. Discover them with `vgpu docs ls /migrations` and read a guide with `vgpu docs cat /migrations/0.5.0.docs.md`. Collect migration instructions from changesets during release preparation instead of relying on standalone repository files.
+
+## 0.2.3-rc.0
+
+### Patch Changes
+
+- 5c18170: Bundle versioned consumer migration guides in the local docs CLI and MCP corpus. Discover them with `vgpu docs ls /migrations` and read a guide with `vgpu docs cat /migrations/0.5.0.docs.md`. Collect migration instructions from changesets during release preparation instead of relying on standalone repository files.
+
+## 0.2.2
+
+### Patch Changes
+
+- 01470c5: Make the repository skill a version-neutral router that reads documentation from the project's selected `vgpu` package, keeping agent guidance aligned with the installed stable or prerelease version.
+
+## 0.2.1
+
+### Patch Changes
+
+- 0b9b564: Expose the existing documentation and verified examples workflows as two MCP tools. Add a local
+  `vgpu mcp` stdio server with opt-in, output-directory-confined example downloads and publish a
+  read-only Streamable HTTP endpoint at `https://vgpu.sh/api/mcp` using the stateless modern MCP
+  transport.
+- f4b4b27: Make online `vgpu examples` commands work on macOS and Windows. `search`, `show`, and `cat` now
+  use an in-memory cache when Linux's descriptor-anchored persistent cache is unavailable. On macOS,
+  `pull` uses a portable symlink-checked staging path and preserves atomic publication and recovery.
+  Linux keeps its persistent offline cache and `/proc/self/fd` hardening unchanged.
+
 ## 0.2.0
 
 ### Minor Changes

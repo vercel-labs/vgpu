@@ -4,6 +4,19 @@ This project uses the packaged Geistdocs architecture. The `@vercel/geistdocs` p
 
 Use these instructions when an AI coding agent edits this project.
 
+## Example authoring
+
+- Keep each example self-contained. Published example files may import packages and files inside their own example directory, but must not import app-level helpers or files from another example.
+- Use `lil-gui` for interactive example controls. Do not build custom HTML or React control panels.
+- Mount `lil-gui` inside the example container and destroy it during renderer cleanup.
+- Keep the React entry as a thin mount/cleanup wrapper. Infer renderer types locally and let the preview host observe asynchronous failures instead of importing example-specific reporting or renderer helpers.
+- Before simplifying, capture deterministic baselines for every control state, important interaction, and responsive layout. Make reductions in small tranches and require byte-exact parity after each tranche.
+- Remove unreachable themes, modes, passes, uniforms, configuration, CPU mirrors, and files before compressing active GPU arithmetic. Preserve resource teardown and stale-async cancellation.
+- Optimize logical complexity, not the line counter. Keep normal formatting with one statement per line and readable blocks; never compress active code into long one-liners to claim a LOC reduction. Report file count, source bytes, and nonblank lines when formatting makes physical LOC misleading.
+- Follow ownership boundaries during teardown. When a renderer owns its `Gpu`, let `gpu.dispose()` stop VGPU schedulers and release registered surfaces, resources, services, and the device; do not also dispose every VGPU child or clear every local reference. Explicitly clean only browser/DOM resources and children that must be released while a shared GPU remains alive.
+- Recheck thumbnails, focused tests, type safety, import boundaries, and bundle size after the implementation stabilizes.
+- When simplifying an existing example, migrate it to these rules as part of the simplification.
+
 ## Architecture
 
 - Runtime features come from `@vercel/geistdocs`, including the docs page renderer, layout helpers, MDX components, search, Ask AI, markdown routes, proxy helpers, and source helpers.
@@ -25,6 +38,7 @@ Use these instructions when an AI coding agent edits this project.
 | Task | Edit |
 | --- | --- |
 | Configure site title, logo, nav, GitHub links, AI prompt, suggestions, translations, `basePath`, or `siteId` | `geistdocs.tsx` |
+| Edit public agent best-fit use cases or operational instructions shared by `/agents.md` and `/llms.txt` | `lib/agent-guidance.ts` |
 | Add or update documentation pages | `content/docs/**/*.mdx` |
 | Control sidebar order, groups, and labels | `content/docs/meta.json` |
 | Override MDX components | `components/geistdocs/mdx-components.tsx` |
@@ -33,8 +47,9 @@ Use these instructions when an AI coding agent edits this project.
 | Configure the Fumadocs source adapter or versioned docs | `lib/geistdocs/source.ts` |
 | Configure Fumadocs collections and source-safe MDX processing | `source.config.ts` |
 | Configure the docs page renderer | `app/[lang]/docs/[[...slug]]/page.tsx` |
-| Configure AI-readable markdown output | `app/[lang]/agents.md/route.ts`, `app/[lang]/.well-known/mcp.json/route.ts`, `app/[lang]/llms.txt/route.ts`, `app/[lang]/llms.mdx/[[...slug]]/route.ts`, `app/[lang]/sitemap.md/route.ts` |
+| Configure AI-readable markdown output | `app/[lang]/agents.md/route.ts`, `app/[lang]/.well-known/mcp.json/route.ts`, `app/[lang]/llms.txt/route.ts`, `app/[lang]/llms-full.txt/route.ts`, `app/[lang]/llms.mdx/[[...slug]]/route.ts`, `app/[lang]/sitemap.md/route.ts` |
 | Configure chat or search APIs | `app/api/chat/route.ts`, `app/api/search/route.ts` |
+| Configure the structured JSON fallback for unknown `/api/*` paths | `lib/api-not-found.ts`, `app/api/[...notFound]/route.ts` |
 | Add request handling before or after Geistdocs routing | `proxy.ts` |
 | Edit the marketing home page | `app/[lang]/(home)/**` |
 | Edit shared styles | `app/global.css`, `app/styles/geistdocs.css` |
@@ -53,7 +68,9 @@ Use these instructions when an AI coding agent edits this project.
 - Keep App Router route files as thin adapters around package helpers such as `createDocsPage`, `createChatRoute`, `createLlmsRoute`, and `createProxy`.
 - Keep `export const config` in `proxy.ts` as a static object. Next.js must parse proxy matchers at build time.
 - Use proxy matcher exclusions that only match `/api` and `/api/...`, such as `api(?:/|$)`. Do not exclude broad prefixes like `api`, because that also excludes routes such as `/api-reference`.
-- Preserve markdown negotiation unless the task explicitly changes AI-readable output. Geistdocs serves `/agents.md`, `/llms.txt`, `/.well-known/mcp.json`, and per-page Markdown for `.md`, `.mdx`, `Accept: text/markdown`, and AI-agent requests.
+- Preserve markdown negotiation unless the task explicitly changes AI-readable output. The app serves a concise `/llms.txt` index, a `createLlmsRoute`-backed `/llms-full.txt` corpus, `/agents.md`, `/.well-known/mcp.json`, and per-page Markdown for `.md`, `.mdx`, `Accept: text/markdown`, and AI-agent requests.
+- Preserve the proxy `after` hook that returns a recoverable Markdown 404 for unknown agent requests outside `/docs`. When adding a valid HTML app route, add it to `lib/geistdocs/markdown-not-found.ts` so Markdown-preferring clients still receive the real page rather than the fallback.
+- Preserve `app/api/[...notFound]/route.ts` as the lowest-precedence API route. Valid API routes must retain their own contracts, unknown `/api/*` paths return a stable JSON 404 instead of the framework HTML response, and the existing bare `/api` redirect continues to lead to `/docs/reference`.
 - When adding custom proxy behavior, prefer `before`, `after`, and `markdownRoutes` options on `createProxy` instead of replacing the proxy.
 - Use explicit `markdownRoutes` for root-mounted docs or any site where homepage/app routes coexist with docs routes.
 - Keep source URLs, navigation links, `getPageUrl`, and `markdownRoutes` app-local when `config.basePath` is set. Geistdocs derives public page-action and Markdown URLs separately.
@@ -77,7 +94,7 @@ Use these instructions when an AI coding agent edits this project.
 - Inventory direct app usage of `ai` and `@ai-sdk/react`. Package-owned Ask AI uses AI SDK v6; migrate local AI SDK code separately from Geistdocs route adapters.
 - Import source-config helpers from `@vercel/geistdocs/source-config` in `source.config.ts`. Do not import runtime component entry points from source config.
 - Move existing `middleware.ts` behavior into `createProxy({ before })` or `createProxy({ after })` hooks.
-- Delete `public/llms.txt` when using `createLlmsRoute`; otherwise the static file can mask the App Router route.
+- Delete `public/llms.txt` when an App Router llms route exists; otherwise the static file can mask the concise `/llms.txt` index or a `createLlmsRoute` adapter.
 - Set `openGraph.images` in `createDocsPage` only when the app includes the Geistdocs OG route, or override metadata to avoid broken `/og/...` URLs.
 - Add Tailwind CSS v4 `@source` entries for `@vercel/geistdocs` and related runtime dependencies when migrating styles.
 - Add local fallbacks for production-only environment variables so migration builds do not require production secrets.
@@ -101,5 +118,15 @@ Use these instructions when an AI coding agent edits this project.
 
 - Run `pnpm build` after changing routes, config, source setup, MDX components, or package versions.
 - Run `pnpm dev` and open the changed pages when visual layout, navigation, or MDX rendering changes.
-- Check both `/docs` and AI-readable routes such as `/agents.md`, `/.well-known/mcp.json`, `/llms.txt`, or a page-level `.md` URL when changing content routing or proxy behavior.
+- Check both `/docs` and AI-readable routes such as `/agents.md`, `/.well-known/mcp.json`, `/llms.txt`, `/llms-full.txt`, a page-level `.md` URL, an unknown URL with `Accept: text/markdown`, and an unknown `/api` path when changing content routing or proxy behavior.
 - Confirm no secrets were added to source files. Use `.env.local` for local values and keep it out of Git.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

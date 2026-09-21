@@ -1,15 +1,14 @@
-// Dark theme floor material: builds the scene from radiance, light-source/SDF input, and floor
+// Dark theme floor material: builds the scene from radiance, direct LED emitters, and floor
 // noise, then tonemaps + applies display contrast inline so it renders straight to the canvas
 // (no separate composite pass in dark mode).
 import { col3v, oklab_to_rgb, tonemap, value_remap_clamp } from "../../color-utils.wgsl";
 import { sdf_triangle_vertices } from "../../geometry.wgsl";
-import { near_falloff, middle_falloff, far_falloff } from "../../floor-falloff.wgsl";
+import { near_falloff, far_falloff } from "../../floor-falloff.wgsl";
 
-struct Config { screen: vec4f, light_sources: vec4f, tunables: vec4f, triangle: vec4f, culling: vec4f, radiance_fit: vec4f, light_ao: vec4f, radiance_debug: vec4f, sim_transform: vec4f, dark_floor: vec4f, dark_glow: vec4f, dark_near: vec4f, dark_middle: vec4f, dark_toggles: vec4f, dark_circle: vec4f, dark_noise: vec4f };
+struct Config { screen: vec4f, light_sources: vec4f, triangle: vec4f, radiance_fit: vec4f, sim_transform: vec4f };
 @group(0) @binding(0) var<uniform> cfg: Config;
 @group(0) @binding(1) var radiance_tex: texture_2d<f32>;
 @group(0) @binding(2) var light_sources_tex: texture_2d<f32>;
-@group(0) @binding(3) var linear_samp: sampler;
 @group(0) @binding(4) var floor_noise_tex: texture_2d<f32>;
 
 struct VSOut { @builtin(position) pos: vec4f };
@@ -63,14 +62,11 @@ fn hash12b(p: vec2f) -> f32 {
 }
 
 fn bg(p: vec2f) -> vec3f {
-  // dark_noise.x gates the floor-noise lightness modulation. Off (static bake) →
-  // flat albedo, so the baked glow stays smooth and the grain is reintroduced as a
-  // CSS noise overlay instead.
-  let floor_noise = sample_floor_noise(p) * cfg.dark_noise.x;
+  let floor_noise = sample_floor_noise(p);
   // Lower the grain intensity at DPR 1 (where its tiling repeat is a visible pattern); full at DPR>1.
   let grain_intensity = select(1.0, DARK_FLOOR_GRAIN_DPR1_SCALE, cfg.screen.w < 1.5);
   let floor_brightness =
-    mix(cfg.tunables.y, cfg.tunables.y * 0.5, floor_noise * grain_intensity);
+    mix(1.0, 0.5, floor_noise * grain_intensity);
   // Return the floor base in RGB (gray). The oklab perceptual lift now happens only where an
   // LED color actually blends in (surface > 0, see fs_main), so floor pixels skip rgb<->oklab.
   return vec3f(floor_brightness);
@@ -87,7 +83,7 @@ fn triangle_corners() -> TriangleCorners {
   return TriangleCorners(top, left, right);
 }
 
-// Reads the LED emitter/SDF texture in simulation space, blanking samples that
+// Reads the LED emitter texture in simulation space, blanking samples that
 // fall outside the simulation rect.
 fn sample_light_sources(pixel_screen: vec2f) -> vec4f {
   let sim_px = (pixel_screen - cfg.sim_transform.xy) / cfg.sim_transform.z;
@@ -165,20 +161,14 @@ fn sample_radiance_at(pixel_screen: vec2f) -> vec3f {
 }
 
 // Noise-driven jittered multisample of the radiance, to dither away the blocky
-// artifacts of the low-quality (perf-optimized) radiance cascades. The jitter
+// artifacts of the half-resolution radiance target. The jitter
 // distance grows where the light is dim — bright lit areas stay sharp while the
 // faint falloff regions (where the artifacts show) get a wider offset — and a
 // hash noise (hash12b) sets the blend weight of the offset sample, decorrelated from
 // the floor-brightness grain. A second sample is pulled from a hashed random
-// direction. dark_middle.z = max jitter distance in screen px (0 disables).
+// direction.
 fn sample_radiance(pixel_screen: vec2f, triangle_sdf: f32) -> vec3f {
   let base = sample_radiance_at(pixel_screen);
-  // dark_noise.x off (static bake) → a single radiance sample, no noise-driven
-  // jitter dither. The bake renders at high probe density so there are no low-res
-  // cascade artifacts to hide, and the grain comes from the CSS noise overlay.
-  if (cfg.dark_noise.x < 0.5) {
-    return base;
-  }
   // Bigger offset the dimmer the light: intensity 0 → 1, intensity >= 0.5 → 0.
   let light_intensity = dot(base, LUMA);
   var offset_scale = value_remap_clamp(light_intensity, 0.2, 0.1, 0.0, 1.0);
@@ -197,12 +187,12 @@ fn sample_radiance(pixel_screen: vec2f, triangle_sdf: f32) -> vec3f {
   let noise = hash12b(pixel_screen);
   let angle = hash12(pixel_screen) * 6.2831853;
   let dir = vec2f(cos(angle), sin(angle));
-  // dark_middle.w normalizes the screen-px offset (dark_middle.z) to a constant FRACTION of
+  // sim_transform.w normalizes the fixed screen-px offset to a constant FRACTION of
   // the on-screen scene height (presentation height / desktop-cap reference, clamped <= 1).
   // A fixed px offset is a larger fraction of a short canvas, over-blending spatially-separated
   // (different-hued) radiance → desaturation; this scales it down proportionally. 1 at the
   // desktop cap, so that render is byte-identical.
-  let offset = dir * offset_scale * cfg.dark_middle.z * cfg.dark_middle.w;
+  let offset = dir * offset_scale * 16.0 * cfg.sim_transform.w;
   let jittered = sample_radiance_at(pixel_screen + offset);
   return mix(base, jittered, noise);
 }
@@ -219,7 +209,7 @@ fn compose_floor(
   var colour = max(base_colour, vec3f(0.0));
   colour *= radiance;
   colour = mix(colour, light_sources.rgb, surface);
-  let sat = 1.0 + (cfg.dark_glow.y - 1.0) * brightness_factor;
+  let sat = 1.0 + (2.0 - 1.0) * brightness_factor;
   let luma = dot(colour, LUMA);
   colour = max(mix(vec3f(luma), colour, sat), vec3f(0.0));
   colour *= brightness_factor;
@@ -233,15 +223,13 @@ fn compose_floor(
 const DARK_EDGE_FADE_MOBILE_BOOST: f32 = 2.0;
 
 // VERTICAL-ONLY screen-edge envelope: 1 across the interior, easing to 0 only near the TOP and
-// BOTTOM edges — never left/right (the glow should never fade on the X axis). The easing is t² (not
-// smoothstep): soft/gentle near the edge (the fade lifts slowly off 0) and steepening to an abrupt
-// arrival at full toward the interior. The band height is `dark_circle.x` (0.1 on mobile, 0.2 on
-// desktop; resolved at init, see getHeroEdgeFadeFrac) as a fraction of the canvas HEIGHT, widened
-// on the square mobile canvas by DARK_EDGE_FADE_MOBILE_BOOST.
+// BOTTOM edges — never left/right (the glow should never fade on the X axis). A square-root curve
+// lifts gently from black before arriving at full intensity. The band is 20% of canvas height,
+// widened on the square mobile canvas by DARK_EDGE_FADE_MOBILE_BOOST.
 fn edge_fade(pixel_screen: vec2f) -> f32 {
   let mobile_boost =
     select(1.0, DARK_EDGE_FADE_MOBILE_BOOST, cfg.screen.x < cfg.screen.y * 1.25);
-  let w = max(cfg.dark_circle.x * mobile_boost * cfg.screen.y, 1.0);
+  let w = max(0.2 * mobile_boost * cfg.screen.y, 1.0);
   let d = min(pixel_screen.y, cfg.screen.y - pixel_screen.y);
   let t = clamp(d / w, 0.0, 1.0);
   return sqrt(t);
@@ -265,14 +253,11 @@ const OCCLUDER_INTERIOR_MARGIN: f32 = 4.0;
   let occluder_edge = max(length(vec2f(dpdx(triangle_sdf), dpdy(triangle_sdf))), 1e-4);
   // Early-out to the exact interior value when the occluder is on and we are not in radiance-debug.
   // Uniform-gated, so wavefronts deep inside the triangle skip the body coherently.
-  if (cfg.culling.z > 0.5 && cfg.radiance_debug.x <= 0.5 && triangle_sdf < -OCCLUDER_INTERIOR_MARGIN) {
+  if (triangle_sdf < -OCCLUDER_INTERIOR_MARGIN) {
     return vec4f(0.0, 0.0, 0.0, 1.0);
   }
   let light_sources = sample_light_sources(pixel_screen);
   let radiance = sample_radiance(pixel_screen, triangle_sdf);
-  if (cfg.radiance_debug.x > 0.5) {
-    return vec4f(clamp(radiance * cfg.radiance_debug.yzw, vec3f(0.0), vec3f(1.0)), 1.0);
-  }
 
   // LED surface mask, derived from the emitter color itself (light_sources.rgb) instead of
   // the baked SDF (.w): 1 exactly where an LED is lit, 0 in the gaps / floor. It can't
@@ -292,47 +277,34 @@ const OCCLUDER_INTERIOR_MARGIN: f32 = 4.0;
     base_rgb = oklab_to_rgb(mix(col3v(floor_rgb), col3v(light_sources.rgb), surface));
   }
 
-  // Three glow layers, brightest first. See the *_falloff helpers. Screen-blend
+  // Two glow layers, brightest first. See the *_falloff helpers. Screen-blend
   // the in-range [0,1] parts (preserves the tuned look), then add any over-1
   // overflow additively. A plain screen blend on HDR layers is non-monotonic:
   // once two layers exceed 1, their (1 - x) terms both go negative, the product
   // flips positive, and brightness_factor collapses through 0 to negative — which
   // tonemaps to black. Splitting off the overflow keeps it monotonic so high
   // intensities keep getting brighter and the tonemap saturates them to white.
-  let fade_inner = cfg.dark_floor.y;
+  let fade_inner = 0.0;
   let near_light = dot(radiance, LUMA);
   let near = near_falloff(
     triangle_sdf,
     near_light,
     fade_inner,
     cfg.triangle.z,
-    cfg.dark_near,
-    cfg.dark_floor.z,
-    cfg.dark_toggles.x,
+    vec4f(0.046, 1.2, 2.74, 5.0),
+    4.0,
+    1.0,
   );
-  // middle_falloff returns 0 when its toggle (dark_toggles.y) is off — the shipping default — so
-  // skip the whole remap+pow+smoothstep there. Uniform-gated: no divergence.
-  var middle = 0.0;
-  if (cfg.dark_toggles.y > 0.5) {
-    middle = middle_falloff(
-      triangle_sdf,
-      fade_inner,
-      cfg.triangle.z,
-      cfg.dark_floor.x,
-      cfg.dark_middle,
-      cfg.dark_toggles.y,
-    );
-  }
   let far = far_falloff(
     near_light,
-    cfg.dark_glow,
-    cfg.dark_floor.w,
-    cfg.dark_toggles.z,
+    vec4f(0.65, 2.0, 0.0, 8.85),
+    0.05,
+    1.0,
   );
   let screen_blend =
-    1.0 - (1.0 - min(near, 1.0)) * (1.0 - min(middle, 1.0)) * (1.0 - min(far, 1.0));
+    1.0 - (1.0 - min(near, 1.0)) * (1.0 - min(far, 1.0));
   let overflow =
-    max(near - 1.0, 0.0) + max(middle - 1.0, 0.0) + max(far - 1.0, 0.0);
+    max(near - 1.0, 0.0) + max(far - 1.0, 0.0);
   let brightness_factor = screen_blend + overflow;
 
   var colour = compose_floor(
@@ -343,18 +315,15 @@ const OCCLUDER_INTERIOR_MARGIN: f32 = 4.0;
     brightness_factor,
   );
 
-  // Final output (no composite pass in dark mode): tonemap (HDR → sRGB-display,
-  // operator chosen by the TONEMAP const in color-utils) → display contrast
-  // (dark_toggles.w). Opaque — dark fully owns the frame.
-  // dark_circle.y = pre-tonemap exposure (overall HDR gain applied before the tonemap roll-off).
-  var final_colour = tonemap(colour * cfg.dark_circle.y);
-  final_colour = (final_colour - vec3f(0.5)) * cfg.dark_toggles.w + vec3f(0.5);
+  // Final output (no composite pass): fixed Lottes tonemap and display contrast.
+  var final_colour = tonemap(colour * 0.25);
+  final_colour = (final_colour - vec3f(0.5)) * 1.05 + vec3f(0.5);
 
   // Foreground triangle occluder, drawn analytically from the same SDF instead of as a separate
   // hard-edged geometry pass. occluder_edge (the SDF gradient length, hoisted above into uniform
   // control flow) gives the screen-space edge width, so the silhouette is anti-aliased to ~1px and stays aligned
-  // with the edge light line above. cfg.culling.z is the show-triangle flag (0/1).
-  let occluder = clamp(0.5 - triangle_sdf / occluder_edge, 0.0, 1.0) * cfg.culling.z;
+  // with the edge light line above.
+  let occluder = clamp(0.5 - triangle_sdf / occluder_edge, 0.0, 1.0);
   final_colour = mix(final_colour, vec3f(0.0), occluder);
 
   // Screen-edge fade as a plain multiply by the edge envelope: scales the colour uniformly

@@ -1,114 +1,193 @@
-import type { Effect, Frame, Gpu, Surface, Target } from 'vgpu';
-import { effect, sampler, target } from 'vgpu';
+import { effect, sampler, target } from "vgpu";
+import type { Frame, Gpu, Target } from "vgpu";
 
-import blurWgsl from './blur.wgsl';
-import brightPassWgsl from './bright-pass.wgsl';
-import compositeWgsl from './composite.wgsl';
-import fractalWgsl from './fractal.wgsl';
-import type { Orbit } from './pointer-input';
+import blurWgsl from "./blur.wgsl";
+import brightPassWgsl from "./bright-pass.wgsl";
+import compositeWgsl from "./composite.wgsl";
+import fractalWgsl from "./fractal.wgsl";
+import { quietly, runAll } from "./lifecycle";
 
-type Output = Surface | Target;
-export interface FractalEffects {
-  scene: Effect;
-  brightPass: Effect;
-  blurH: Effect;
-  blurV: Effect;
-  composite: Effect;
-  sampler: GPUSampler;
+export interface Orbit {
+  yaw: number;
+  pitch: number;
 }
-export interface FractalTargets {
-  scene: Target;
-  bloomA: Target;
-  bloomB: Target;
-}
-const HDR_FORMAT: GPUTextureFormat = 'rgba16float';
+
+type Effects = ReturnType<typeof createEffects>;
+type Targets = ReturnType<typeof createTargets>;
+export type FractalScene = ReturnType<typeof createScene>;
+
+const HDR_FORMAT: GPUTextureFormat = "rgba16float";
 const BLOOM_HEIGHT = 360;
 const CLEAR: readonly [number, number, number, number] = [0, 0, 0, 1];
+
 export const POSTER: Readonly<Orbit> = { yaw: 0.58, pitch: 0.24 };
 
-export function createEffects(gpu: Gpu, label: string): FractalEffects {
-  return {
-    scene: effect(gpu, fractalWgsl, { label: `${label}-scene` }),
-    brightPass: effect(gpu, brightPassWgsl, { label: `${label}-bright-pass` }),
-    blurH: effect(gpu, blurWgsl, { label: `${label}-blur-h` }),
-    blurV: effect(gpu, blurWgsl, { label: `${label}-blur-v` }),
-    composite: effect(gpu, compositeWgsl, { label: `${label}-composite` }),
-    sampler: sampler(gpu, { minFilter: 'linear', magFilter: 'linear' }),
-  };
-}
-export function createTargets(
-  gpu: Gpu,
-  size: readonly [number, number],
-  label: string
-): FractalTargets {
-  const full = normalizeSize(size),
-    bloom = bloomSize(full);
-  let scene: Target | undefined;
-  let bloomA: Target | undefined;
-  let bloomB: Target | undefined;
+export function createScene(gpu: Gpu, size: readonly [number, number]) {
+  const targets = createTargets(gpu, size);
   try {
-    scene = target(gpu, { size: full, format: HDR_FORMAT, label: `${label}-scene` });
-    bloomA = target(gpu, { size: bloom, format: HDR_FORMAT, label: `${label}-bloom-a` });
-    bloomB = target(gpu, { size: bloom, format: HDR_FORMAT, label: `${label}-bloom-b` });
-    return { scene, bloomA, bloomB };
+    const effects = createEffects(gpu, targets);
+    bindTargets(effects, targets);
+    return { effects, targets };
   } catch (error) {
-    scene?.color.destroy();
-    bloomA?.color.destroy();
-    bloomB?.color.destroy();
+    quietly(() => destroyTargets(targets));
     throw error;
   }
 }
-export function setConstants(e: FractalEffects): void {
-  e.scene.set({ params: { resolution: [1, 1], ...POSTER } });
-  e.brightPass.set({ samp: e.sampler, bright: { threshold: 1, knee: 0.25 } });
-  e.blurH.set({ samp: e.sampler, blur: { direction: [1, 0], radius: 1.6 } });
-  e.blurV.set({ samp: e.sampler, blur: { direction: [0, 1], radius: 1.6 } });
-  e.composite.set({ samp: e.sampler, composite: { exposure: 1.05, bloomStrength: 0.65 } });
+
+function createEffects(gpu: Gpu, targets: Targets) {
+  const sharedSampler = sampler(gpu, {
+    minFilter: "linear",
+    magFilter: "linear",
+  });
+  const effects = {
+    scene: effect(gpu, fractalWgsl, { label: "raymarched-fractal-scene" }),
+    brightPass: effect(gpu, brightPassWgsl, {
+      label: "raymarched-fractal-bright-pass",
+    }),
+    blurH: effect(gpu, blurWgsl, { label: "raymarched-fractal-blur-h" }),
+    blurV: effect(gpu, blurWgsl, { label: "raymarched-fractal-blur-v" }),
+    composite: effect(gpu, compositeWgsl, {
+      label: "raymarched-fractal-composite",
+    }),
+  };
+  effects.scene.set({ params: { resolution: targets.scene.size, ...POSTER } });
+  effects.brightPass.set({ samp: sharedSampler });
+  effects.blurH.set({
+    samp: sharedSampler,
+    blur: { direction: [1, 0], texelSize: targets.bloomA.texelSize },
+  });
+  effects.blurV.set({
+    samp: sharedSampler,
+    blur: { direction: [0, 1], texelSize: targets.bloomB.texelSize },
+  });
+  effects.composite.set({
+    samp: sharedSampler,
+    composite: { bloomStrength: 0.65 },
+  });
+  return effects;
 }
-export function setBindings(e: FractalEffects, t: FractalTargets): void {
-  e.scene.set({ params: { resolution: t.scene.size } });
-  e.brightPass.set({ src: t.scene });
-  e.blurH.set({ src: t.bloomA, blur: { texelSize: t.bloomA.texelSize } });
-  e.blurV.set({ src: t.bloomB, blur: { texelSize: t.bloomB.texelSize } });
-  e.composite.set({ scene: t.scene, bloom: t.bloomA });
+
+function createTargets(gpu: Gpu, size: readonly [number, number]) {
+  const full: [number, number] = [
+    Math.max(1, Math.floor(size[0])),
+    Math.max(1, Math.floor(size[1])),
+  ];
+  const bloomHeight = Math.max(1, Math.min(BLOOM_HEIGHT, full[1]));
+  const bloom: [number, number] = [
+    Math.max(1, Math.round((bloomHeight * full[0]) / full[1])),
+    bloomHeight,
+  ];
+  const created: Target[] = [];
+  const own = (targetSize: readonly [number, number]) => {
+    const value = target(gpu, {
+      size: targetSize,
+      format: HDR_FORMAT,
+    });
+    created.push(value);
+    return value;
+  };
+  try {
+    return {
+      scene: own(full),
+      bloomA: own(bloom),
+      bloomB: own(bloom),
+    };
+  } catch (error) {
+    quietly(() => destroyTargetList(created));
+    throw error;
+  }
 }
-export async function prewarm(e: FractalEffects, t: FractalTargets, output: Output): Promise<void> {
-  await Promise.all([
-    e.scene.compile(t.scene),
-    e.brightPass.compile(t.bloomA),
-    e.blurH.compile(t.bloomB),
-    e.blurV.compile(t.bloomA),
-    e.composite.compile({ colors: [output.format] }),
+
+function bindTargets(effects: Effects, targets: Targets): void {
+  runAll([
+    () => effects.scene.set({ params: { resolution: targets.scene.size } }),
+    () => effects.brightPass.set({ src: targets.scene }),
+    () =>
+      effects.blurH.set({
+        src: targets.bloomA,
+        blur: { texelSize: targets.bloomA.texelSize },
+      }),
+    () =>
+      effects.blurV.set({
+        src: targets.bloomB,
+        blur: { texelSize: targets.bloomB.texelSize },
+      }),
+    () =>
+      effects.composite.set({ scene: targets.scene, bloom: targets.bloomA }),
   ]);
 }
-export function renderChain(
+
+export async function compileScene(
+  scene: FractalScene,
+  output: Target
+): Promise<void> {
+  const { effects, targets } = scene;
+  const results = await Promise.allSettled(
+    [
+      () => effects.scene.compile(targets.scene),
+      () => effects.brightPass.compile(targets.bloomA),
+      () => effects.blurH.compile(targets.bloomB),
+      () => effects.blurV.compile(targets.bloomA),
+      () => effects.composite.compile({ colors: [output.format] }),
+    ].map((compile) => Promise.resolve().then(compile))
+  );
+  const failed = results.find(
+    (result): result is PromiseRejectedResult => result.status === "rejected"
+  );
+  if (failed) throw failed.reason;
+}
+
+export function renderScene(
   currentFrame: Frame,
-  e: FractalEffects,
-  t: FractalTargets,
-  output: Output
+  scene: FractalScene,
+  output: Target,
+  orbit: Readonly<Orbit>
 ): void {
-  currentFrame.pass({ target: t.scene, clear: CLEAR }, (pass) => pass.draw(e.scene));
-  currentFrame.pass({ target: t.bloomA, clear: CLEAR }, (pass) => pass.draw(e.brightPass));
-  currentFrame.pass({ target: t.bloomB, clear: CLEAR }, (pass) => pass.draw(e.blurH));
-  currentFrame.pass({ target: t.bloomA, clear: CLEAR }, (pass) => pass.draw(e.blurV));
-  currentFrame.pass({ target: output, clear: CLEAR }, (pass) => pass.draw(e.composite));
+  const { effects, targets } = scene;
+  effects.scene.set({ params: orbit });
+  currentFrame.pass({ target: targets.scene, clear: CLEAR }, (pass) =>
+    pass.draw(effects.scene)
+  );
+  currentFrame.pass({ target: targets.bloomA, clear: CLEAR }, (pass) =>
+    pass.draw(effects.brightPass)
+  );
+  currentFrame.pass({ target: targets.bloomB, clear: CLEAR }, (pass) =>
+    pass.draw(effects.blurH)
+  );
+  currentFrame.pass({ target: targets.bloomA, clear: CLEAR }, (pass) =>
+    pass.draw(effects.blurV)
+  );
+  currentFrame.pass({ target: output, clear: CLEAR }, (pass) =>
+    pass.draw(effects.composite)
+  );
 }
-export function resizeTargets(t: FractalTargets, size: readonly [number, number]): void {
-  const full = normalizeSize(size),
-    bloom = bloomSize(full);
-  t.scene.resize(full);
-  t.bloomA.resize(bloom);
-  t.bloomB.resize(bloom);
+
+export function replaceTargets(
+  gpu: Gpu,
+  scene: FractalScene,
+  size: readonly [number, number]
+): void {
+  const previous = scene.targets;
+  const next = createTargets(gpu, size);
+  try {
+    bindTargets(scene.effects, next);
+  } catch (error) {
+    quietly(() => bindTargets(scene.effects, previous));
+    quietly(() => destroyTargets(next));
+    throw error;
+  }
+  scene.targets = next;
+  destroyTargets(previous);
 }
-function normalizeSize(size: readonly [number, number]): [number, number] {
-  return [Math.max(1, Math.floor(size[0])), Math.max(1, Math.floor(size[1]))];
+
+export function destroyScene(scene: FractalScene): void {
+  destroyTargets(scene.targets);
 }
-function bloomSize(size: readonly [number, number]): [number, number] {
-  const height = Math.max(1, Math.min(BLOOM_HEIGHT, size[1]));
-  return [Math.max(1, Math.round((height * size[0]) / size[1])), height];
+
+function destroyTargets(targets: Targets): void {
+  destroyTargetList([targets.scene, targets.bloomA, targets.bloomB]);
 }
-export function destroyTargets(t: FractalTargets): void {
-  t.scene.color.destroy();
-  t.bloomA.color.destroy();
-  t.bloomB.color.destroy();
+
+function destroyTargetList(targets: readonly Target[]): void {
+  runAll(targets.map((value) => () => value.color.destroy()));
 }

@@ -1,9 +1,4 @@
-// Pass 2 of the 2D IFFT: one 256-point inverse transform per COLUMN.
-// dispatch(N, 1) -> workgroup_id.x = column x. workgroup_size is 128, so each of
-// the 128 invocations handles TWO of the 256 rows.
-//
-// Writes the final spatial displacement into `disp` (.xyz = Dx, Dy, Dz), applying
-// the 1/N normalization and the (-1)^(x+z) fftshift that recenters the spectrum.
+// Pass 2: transform each column and write spatial displacement.
 
 import { bitrev, fftStages3 } from "./fft-core.wgsl";
 import { N } from "./params.wgsl";
@@ -28,20 +23,23 @@ fn fftCol(
   @builtin(workgroup_id) wid: vec3u,
   @builtin(local_invocation_id) lid: vec3u,
 ) {
-  let colx = wid.x; // fixed column (x)
+  let colx = wid.x;
   let t = lid.x;
   let z0 = t;
   let z1 = t + 128u;
 
   let r0 = bitrev(z0);
   let r1 = bitrev(z1);
-  shX[r0] = inX[z0 * N + colx]; shY[r0] = inY[z0 * N + colx]; shZ[r0] = inZ[z0 * N + colx];
-  shX[r1] = inX[z1 * N + colx]; shY[r1] = inY[z1 * N + colx]; shZ[r1] = inZ[z1 * N + colx];
+  shX[r0] = inX[z0 * N + colx];
+  shY[r0] = inY[z0 * N + colx];
+  shZ[r0] = inZ[z0 * N + colx];
+  shX[r1] = inX[z1 * N + colx];
+  shY[r1] = inY[z1 * N + colx];
+  shZ[r1] = inZ[z1 * N + colx];
   workgroupBarrier();
 
   fftStages3(&shX, &shY, &shZ, t);
 
-  // fftshift + 1/N normalization, applied per output row.
   let norm = 1.0 / f32(N);
   writeRow(colx, z0, norm);
   writeRow(colx, z1, norm);

@@ -1,81 +1,125 @@
-import type { Gpu, Target } from 'vgpu';
-import { effect, frame, target } from 'vgpu';
+import { effect, frame, target, type Gpu, type Target } from "vgpu";
 
-import type { ThumbnailOptions } from '../../lib/example-renderer';
-import { createGraph, destroyGraph, renderAt } from './scene';
-import stagePreviewWgsl from './stage-preview.wgsl';
+import { createGraph, destroyGraph, renderAt } from "./renderer";
+import stagePreviewWgsl from "./stage-preview.wgsl";
 
-interface ThumbOptions extends ThumbnailOptions {
-  onVariantRendered?: (
-    variant: 'time-delta',
+interface ThumbnailOptions {
+  readonly time?: number;
+  readonly onVariantRendered?: (
+    variant: "time-delta",
     pixels: Uint8Array,
     size: readonly [number, number]
   ) => void | Promise<void>;
-  onIntermediateRendered?: (
-    kind: 'displacement',
+  readonly onIntermediateRendered?: (
+    kind: "displacement",
     pixels: Uint8Array,
     size: readonly [number, number]
   ) => void | Promise<void>;
 }
+
+interface Failure {
+  readonly error: unknown;
+}
+
 const CLEAR = [0, 0, 0, 1] as const;
 
 export async function renderThumbnail(
   gpu: Gpu,
   output: Target,
-  opts: ThumbOptions = {}
+  options: ThumbnailOptions = {}
 ): Promise<void> {
-  const graph = await createGraph(gpu, output, 'fft-ocean-thumb');
+  let graph: Awaited<ReturnType<typeof createGraph>> | undefined;
+  let failure: Failure | undefined;
   try {
-    const time = opts.time ?? 18;
+    graph = await createGraph(gpu, output, "fft-ocean-thumb");
+    const time = options.time ?? 18;
     renderAt(gpu, graph, output, time);
     await gpu.gpu.queue.onSubmittedWorkDone();
-    if (opts.onIntermediateRendered) {
-      const displacement = graph.ifft.at(-1)!.output;
-      const previewTarget = target(gpu, {
-        size: displacement.size,
-        format: 'rgba8unorm',
-        label: 'fft-ocean-displacement-preview',
-      });
-      try {
-        const preview = effect(gpu, stagePreviewWgsl, { label: 'fft-ocean-displacement-preview' });
-        preview.set({
-          u: {
-            outputWidth: displacement.size[0],
-            outputHeight: displacement.size[1],
-            stage: 1,
-            gain: 16,
-          },
-          u_input: displacement,
-        });
-        await preview.compile(previewTarget);
-        frame(gpu, (currentFrame) =>
-          currentFrame.pass({ target: previewTarget, clear: CLEAR }, (pass) => pass.draw(preview))
-        );
-        await gpu.gpu.queue.onSubmittedWorkDone();
-        await opts.onIntermediateRendered(
-          'displacement',
-          await previewTarget.read(),
-          previewTarget.size
-        );
-      } finally {
-        try {
-          await gpu.gpu.queue.onSubmittedWorkDone();
-        } finally {
-          previewTarget.color.destroy();
-        }
-      }
+    if (options.onIntermediateRendered) {
+      await renderDisplacement(gpu, graph, options.onIntermediateRendered);
     }
+
     renderAt(gpu, graph, output, time + 5);
     await gpu.gpu.queue.onSubmittedWorkDone();
-    await opts.onVariantRendered?.('time-delta', await output.read(), output.size);
+    await options.onVariantRendered?.(
+      "time-delta",
+      await output.color.read({ mipLevel: 0, region: "all" }),
+      output.size
+    );
+
     renderAt(gpu, graph, output, time);
     await gpu.gpu.queue.onSubmittedWorkDone();
     await gpu.settled();
-  } finally {
+  } catch (error) {
+    failure = { error };
+  }
+  await releaseShared(gpu, graph ? [() => destroyGraph(graph)] : [], failure);
+}
+
+async function renderDisplacement(
+  gpu: Gpu,
+  graph: Awaited<ReturnType<typeof createGraph>>,
+  onRendered: NonNullable<ThumbnailOptions["onIntermediateRendered"]>
+): Promise<void> {
+  const displacement = graph.ifft.at(-1)!.output;
+  let previewTarget: Target | undefined;
+  let failure: Failure | undefined;
+  try {
+    previewTarget = target(gpu, {
+      size: displacement.size,
+      format: "rgba8unorm",
+      label: "fft-ocean-displacement-preview",
+    });
+    const preview = effect(gpu, stagePreviewWgsl, {
+      label: "fft-ocean-displacement-preview",
+    });
+    preview.set({
+      u: {
+        gain: 16,
+      },
+      u_input: displacement,
+    });
+    await preview.compile(previewTarget);
+    frame(gpu, (currentFrame) =>
+      currentFrame.pass({ target: previewTarget!, clear: CLEAR }, (pass) =>
+        pass.draw(preview)
+      )
+    );
+    await gpu.gpu.queue.onSubmittedWorkDone();
+    await onRendered(
+      "displacement",
+      await previewTarget.color.read({ mipLevel: 0, region: "all" }),
+      previewTarget.size
+    );
+  } catch (error) {
+    failure = { error };
+  }
+  await releaseShared(
+    gpu,
+    previewTarget ? [() => previewTarget.color.destroy()] : [],
+    failure
+  );
+}
+
+async function releaseShared(
+  gpu: Gpu,
+  cleanups: readonly (() => void)[],
+  failure?: Failure
+): Promise<void> {
+  let first = failure;
+  const barriers = await Promise.allSettled([
+    Promise.resolve().then(() => gpu.gpu.queue.onSubmittedWorkDone()),
+    Promise.resolve().then(() => gpu.settled()),
+  ]);
+  for (const result of barriers) {
+    if (result.status === "rejected") first ??= { error: result.reason };
+  }
+  for (const cleanup of cleanups) {
     try {
-      await gpu.gpu.queue.onSubmittedWorkDone();
-    } finally {
-      destroyGraph(graph);
+      cleanup();
+    } catch (error) {
+      first ??= { error };
     }
   }
+  if (first) throw first.error;
 }

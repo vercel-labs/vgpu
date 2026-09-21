@@ -1,78 +1,44 @@
-import type { Gpu, Target } from 'vgpu';
-import { frame } from 'vgpu';
+import { frame, type Gpu, type Target } from 'vgpu';
 
-import type { ThumbnailOptions } from '../../lib/example-renderer';
-import {
-  ALL_MODES,
-  createEffects,
-  createTargets,
-  destroyEffects,
-  destroyTargets,
-  prewarm,
-  renderMode,
-  setModeBindings,
-  setResolutionBindings,
-  setStaticBindings,
-  type AaEffects,
-  type AaTargets,
-} from './scene';
-import { DEFAULT_ANTI_ALIASING_CONTROLS, type AaMode } from './types';
+import { ALL_MODES, createScene, DEFAULT_MODE, type AaMode } from './scene';
 
-interface ThumbOptions extends ThumbnailOptions {
-  onModeRendered?: (
+interface ThumbOptions {
+  readonly warmupFrames?: number;
+  readonly time?: number;
+  readonly dt?: number;
+  readonly onModeRendered?: (
     mode: AaMode,
     pixels: Uint8Array,
-    size: readonly [number, number]
+    size: readonly [number, number],
   ) => void | Promise<void>;
 }
 
 export async function renderThumbnail(
   gpu: Gpu,
-  colorTarget: Target,
-  opts: ThumbOptions = {}
+  output: Target,
+  options: ThumbOptions = {},
 ): Promise<void> {
-  let effects: AaEffects | undefined;
-  let targets: AaTargets | undefined;
+  let scene: ReturnType<typeof createScene> | undefined;
+
   try {
-    effects = createEffects(gpu, 'anti-aliasing-thumb');
-    targets = createTargets(gpu, colorTarget.size, 'anti-aliasing-thumb');
-    await prewarm(effects, targets, colorTarget);
-    setStaticBindings(effects, targets);
-    setResolutionBindings(effects, colorTarget);
-    let configuredMode: AaMode | undefined;
-    const configureMode = (mode: AaMode) => {
-      if (mode !== configuredMode) {
-        configuredMode = mode;
-        setModeBindings(effects!, targets!, mode);
-      }
-    };
-    const dt = opts.dt ?? 1 / 60;
-    let time = opts.time ?? 1.2;
+    scene = createScene(gpu, output);
+    await scene.prewarm();
+    let time = options.time ?? 1.2;
+
     for (const mode of ALL_MODES) {
-      configureMode(mode);
-      frame(gpu, (currentFrame) =>
-        renderMode(currentFrame, effects!, targets!, colorTarget, mode, time)
-      );
+      frame(gpu, (currentFrame) => scene!.render(currentFrame, mode, time));
       await gpu.gpu.queue.onSubmittedWorkDone();
-      await opts.onModeRendered?.(mode, await colorTarget.read(), colorTarget.size);
+      await options.onModeRendered?.(mode, await output.color.read({ mipLevel: 0, region: "all" }), output.size);
     }
-    for (let i = 0; i < Math.max(1, opts.warmupFrames ?? 60); i++) {
-      time += dt;
-      configureMode(DEFAULT_ANTI_ALIASING_CONTROLS.mode);
-      frame(gpu, (currentFrame) =>
-        renderMode(
-          currentFrame,
-          effects!,
-          targets!,
-          colorTarget,
-          DEFAULT_ANTI_ALIASING_CONTROLS.mode,
-          time
-        )
-      );
+    for (let i = 0; i < Math.max(1, options.warmupFrames ?? 60); i++) {
+      time += options.dt ?? 1 / 60;
+      frame(gpu, (currentFrame) => scene!.render(currentFrame, DEFAULT_MODE, time));
     }
   } finally {
-    await Promise.allSettled([gpu.gpu.queue.onSubmittedWorkDone(), gpu.settled()]);
-    if (targets) destroyTargets(targets);
-    if (effects) destroyEffects(effects);
+    await Promise.allSettled([
+      Promise.resolve().then(() => gpu.gpu.queue.onSubmittedWorkDone()),
+      Promise.resolve().then(() => gpu.settled()),
+    ]);
+    scene?.destroy();
   }
 }

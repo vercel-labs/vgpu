@@ -19,7 +19,7 @@ const gpu = await init();
 const colorTarget = target(gpu, { size: [256, 256], format: "rgba8unorm" });
 const drawable = draw(gpu, { shader: TRIANGLE_WGSL, targets: [colorTarget] });
 frame(gpu, (f) => f.pass({ target: colorTarget, clear: [0, 0, 0, 1] }, (p) => p.draw(drawable)));
-const rgba = await colorTarget.read();
+const rgba = await colorTarget.color.read({ mipLevel: 0, region: "all" });
 gpu.dispose();
 ```
 
@@ -27,8 +27,9 @@ gpu.dispose();
 
 - Node.js 22+ is the supported engine.
 - Linux Dawn prebuilds require a compatible GLIBC. Use the repository Docker runner for reproducible CI and snapshots.
-- Linux lets Dawn discover available backends. X11/OpenGL software rendering can use `LIBGL_ALWAYS_SOFTWARE=1` and `DISPLAY`; display-free Vulkan/lavapipe uses a valid `VK_ICD_FILENAMES` and `XDG_RUNTIME_DIR`.
-- `VGPU_DAWN_FLAGS=backend=vulkan` or `backend=opengl` pins a backend when automatic discovery is not desired.
+- Linux defaults to Vulkan, with or without a display server. Install a hardware Vulkan driver or Mesa/lavapipe; headless CPU rendering uses a valid `VK_ICD_FILENAMES` and `XDG_RUNTIME_DIR`.
+- Auto mode can fall back to an already installed portable CPU renderer. Otherwise it reports how to install one with `npx vgpu install-software-renderer`; it never silently switches to OpenGL.
+- `VGPU_DAWN_FLAGS=backend=opengl` remains an explicit opt-in. Dawn's OpenGL backend has a known restricted-mip-view/storage-write bug (392121637). macOS, Windows and browser defaults are unchanged.
 - `VGPU-NODE-NO-ADAPTER` includes the attempted Dawn flags and adapter options plus Mesa, Vulkan ICD, and display diagnostics.
 
 ## License

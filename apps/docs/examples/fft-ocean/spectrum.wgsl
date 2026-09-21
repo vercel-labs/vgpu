@@ -6,7 +6,7 @@
 // the IFFT passes; later passes transform them into spatial displacement,
 // normals/foam, and particles.
 
-import { PI, G, cmul, fullscreenPosition } from "./ocean-common.wgsl";
+import { PI, G, cmul } from "./ocean-common.wgsl";
 
 struct SpectrumUniforms {
   resolution: f32,
@@ -17,16 +17,8 @@ struct SpectrumUniforms {
 @group(0) @binding(0) var<uniform> u: SpectrumUniforms;
 @group(0) @binding(1) var u_initialSpectrum: texture_2d<f32>;
 
-struct VSOut { @builtin(position) pos: vec4f };
-
-@vertex fn vs_main(@builtin(vertex_index) vi: u32) -> VSOut {
-  var out: VSOut;
-  out.pos = fullscreenPosition(vi);
-  return out;
-}
-
-@fragment fn fs_main(in: VSOut) -> @location(0) vec4f {
-  let coord = in.pos.xy - vec2f(0.5);
+@fragment fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
+  let coord = position.xy - vec2f(0.5);
   let n = select(coord.x - u.resolution, coord.x, coord.x < u.resolution * 0.5);
   let m = select(coord.y - u.resolution, coord.y, coord.y < u.resolution * 0.5);
   let k = (2.0 * PI / u.size) * vec2f(n, m);

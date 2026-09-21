@@ -1,36 +1,57 @@
-/** Node-only deterministic thumbnail entry. */
-import type { Gpu, Target } from 'vgpu';
-import type { ThumbnailOptions } from '../../lib/example-renderer';
-import { decodeGoldenColour, decodeGoldenDepth, GOLDEN_MODEL_ID } from './fixtures';
-import { getDepthModel } from './model-contract';
+import type { Buffer, Gpu, Target } from "vgpu";
+import {
+  decodeGoldenColour,
+  decodeGoldenDepth,
+  GOLDEN_MODEL_ID,
+} from "./fixtures";
 import {
   createColourBuffer,
   createDepthBuffer,
   createSideBySidePipeline,
+  getDepthModel,
   writeColour,
   writeDepth,
-} from './renderer';
+  type SideBySidePipeline,
+} from "./renderer";
 
-export async function renderThumbnail(
-  gpu: Gpu,
-  target: Target,
-  _options: ThumbnailOptions = {}
-): Promise<void> {
-  const model = getDepthModel(GOLDEN_MODEL_ID);
-  const view = createSideBySidePipeline(gpu, 'depth-estimation-thumb');
-  const depth = createDepthBuffer(gpu, model, 'depth-estimation-thumb');
-  const colour = createColourBuffer(gpu, model, 'depth-estimation-thumb');
+export async function renderThumbnail(gpu: Gpu, target: Target): Promise<void> {
+  let view: SideBySidePipeline | undefined;
+  let depth: Buffer | undefined;
+  let colour: Buffer | undefined;
+  let failed = false;
+  let failure: unknown;
   try {
+    const model = getDepthModel(GOLDEN_MODEL_ID);
+    view = createSideBySidePipeline(gpu, "depth-estimation-thumb");
+    depth = createDepthBuffer(gpu, model, "depth-estimation-thumb");
+    colour = createColourBuffer(gpu, model, "depth-estimation-thumb");
     writeDepth(depth, decodeGoldenDepth());
     writeColour(colour, decodeGoldenColour());
     view.draw(gpu, target, depth, colour, model, { hasResult: true });
-  } finally {
-    await Promise.allSettled([
-      Promise.resolve().then(() => gpu.gpu.queue.onSubmittedWorkDone()),
-      Promise.resolve().then(() => gpu.settled()),
-    ]);
-    view.dispose();
-    depth.dispose();
-    colour.dispose();
+  } catch (error) {
+    failed = true;
+    failure = error;
   }
+
+  const barriers = await Promise.allSettled([
+    Promise.resolve().then(() => gpu.gpu.queue.onSubmittedWorkDone()),
+    Promise.resolve().then(() => gpu.settled()),
+  ]);
+  for (const result of barriers) {
+    if (result.status === "rejected" && !failed) {
+      failed = true;
+      failure = result.reason;
+    }
+  }
+  for (const resource of [colour, depth, view]) {
+    try {
+      resource?.dispose();
+    } catch (error) {
+      if (!failed) {
+        failed = true;
+        failure = error;
+      }
+    }
+  }
+  if (failed) throw failure;
 }

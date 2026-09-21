@@ -11,7 +11,11 @@ fn sample_dye(p: vec2f) -> vec4f {
   let cell = vec2i(floor(coord));
   let f = fract(coord);
   let bottom = mix(src[index_of(cell, grid.dye_size)], src[index_of(cell + vec2i(1, 0), grid.dye_size)], f.x);
-  let top = mix(src[index_of(cell + vec2i(0, 1), grid.dye_size)], src[index_of(cell + vec2i(1, 1), grid.dye_size)], f.x);
+  let top = mix(
+    src[index_of(cell + vec2i(0, 1), grid.dye_size)],
+    src[index_of(cell + vec2i(1, 1), grid.dye_size)],
+    f.x,
+  );
   return mix(bottom, top, f.y);
 }
 
@@ -20,7 +24,11 @@ fn sample_velocity(p: vec2f) -> vec2f {
   let cell = vec2i(floor(coord));
   let f = fract(coord);
   let bottom = mix(velocity[index_of(cell, grid.size)], velocity[index_of(cell + vec2i(1, 0), grid.size)], f.x);
-  let top = mix(velocity[index_of(cell + vec2i(0, 1), grid.size)], velocity[index_of(cell + vec2i(1, 1), grid.size)], f.x);
+  let top = mix(
+    velocity[index_of(cell + vec2i(0, 1), grid.size)],
+    velocity[index_of(cell + vec2i(1, 1), grid.size)],
+    f.x,
+  );
   return mix(bottom, top, f.y);
 }
 

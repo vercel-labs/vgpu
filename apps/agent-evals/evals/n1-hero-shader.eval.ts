@@ -56,6 +56,14 @@ const TOOL_NAME = "view-image";
 /** The one milestone proven structurally instead of by regex. */
 const VIEW_IMAGE_MILESTONE = "looked at a rendered image (view-image tool)";
 
+/**
+ * Pointer-causality gate: `spatial.ratio` (mean |Δluma| near the pointer over
+ * the same far from every waypoint) must reach this at every waypoint. 3.6x
+ * below the weakest measured positive (14.52) and 3.2x above the strongest
+ * measured negative (1.26); see the README's roadmap table for the populations.
+ */
+const SPATIAL_RATIO_MIN = 4;
+
 /** Judge material is truncated per section so one huge blob cannot crowd out the rest. */
 const JUDGE_SECTION_LIMIT = 2000;
 
@@ -638,7 +646,7 @@ export default defineEval({
       .label("agent-browser reported a successful pointer move at every path step");
 
     // ---- Gates (hard) -----------------------------------------------------
-    // All four are the harness's own observations, not the agent's claims: this
+    // All five are the harness's own observations, not the agent's claims: this
     // code rebuilt the app, served it, and hovered it itself.
     t.check(verify.buildOk, equals(true))
       .gate()
@@ -659,17 +667,45 @@ export default defineEval({
     // more. The multimodal judge below, and `screenshots[].spatial`, are what
     // speak to the trail.
     //
-    // The hook's artifact now records the numbers a deterministic replacement
-    // needs, per waypoint, in `spatial` — mean |Δluma| near the pointer versus
-    // far from every waypoint. Two measured populations exist so far, both with
-    // this same code: pointer driven along the path over the archived green
-    // run's own app gives ratio 25.49-40.32, and that same app with the pointer
-    // provably frozen gives 0.89-1.20. `ratio >= 4` sits between them with
-    // ~6x/~3x margin. Deliberately NOT gated here until a live run has produced
-    // the field (see the README roadmap).
+    // The deterministic replacement lives in `spatial`, per waypoint: mean
+    // |Δluma| near the pointer versus far from every waypoint. Populations
+    // measured with this same code: pointer driven along the path over the
+    // archived green run's own app gives ratio 25.49-40.32; that same app with
+    // the pointer provably frozen gives 0.89-1.20; the first live run to produce
+    // the field (2026-09-09, non-root sandbox, claude-sonnet-5) gave
+    // 1107-100079 with far 0.00-0.17 and max-delta offsets 26-56 px on a
+    // 1050x637 canvas. `ratio >= 4` is gated below, as the README's roadmap
+    // planned for the moment a live run produced the field.
     t.check(verify.screenshotsOk, equals(true))
       .gate()
       .label("the pointer pass changes what is rendered (screenshots decode and are not all identical)");
+    // Pointer causality, deterministic: at every waypoint the change near the
+    // pointer must be at least 4x the change far from every waypoint. A ratio
+    // rather than an absolute delta, so flickering the whole background harder
+    // cannot buy it (that lifts `far` too). A `null` ratio with `far === 0` and
+    // `near > 0` is a perfectly still background that changed only under the
+    // pointer — the strongest possible positive — and counts as passing.
+    const spatialOk = verify.screenshots.map((shot) => {
+      const spatial = shot.spatial;
+      if (!spatial || spatial.near === null || spatial.near === undefined) return false;
+      if (spatial.ratio !== null && spatial.ratio !== undefined) return spatial.ratio >= SPATIAL_RATIO_MIN;
+      return spatial.far === 0 && spatial.near > 0;
+    });
+    t.log(`verify: spatial_ratio_ok=${spatialOk.map((ok) => (ok ? "1" : "0")).join("")} (min ratio ${SPATIAL_RATIO_MIN})`);
+    t.check(spatialOk.length === WAYPOINTS.length && spatialOk.every(Boolean), equals(true))
+      .gate()
+      .label(`the trail follows the pointer (near/far luma-delta ratio >= ${SPATIAL_RATIO_MIN} at every waypoint)`);
+    // Stricter spatial claim, soft: the single largest changed pixel sits within
+    // 10% of the canvas's short side from the pointer. Logged for the record.
+    const shortSide = verify.canvasBox ? Math.min(verify.canvasBox.w, verify.canvasBox.h) : undefined;
+    const offsetOk =
+      shortSide !== undefined &&
+      verify.screenshots.every(
+        (shot) => typeof shot.spatial?.maxDeltaOffset === "number" && shot.spatial.maxDeltaOffset <= 0.1 * shortSide,
+      );
+    t.check(offsetOk, equals(true))
+      .soft()
+      .label("the largest changed pixel is within 10% of the canvas short side from the pointer");
 
     // ---- Multimodal judge (soft, never a gate) ----------------------------
     // The pointer-free baseline (captured before the pointer moved at all)

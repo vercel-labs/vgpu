@@ -1,7 +1,6 @@
 struct Uniforms {
   viewProjection: mat4x4f,
   light: vec3f,
-  time: f32,
 };
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 struct VertexIn {

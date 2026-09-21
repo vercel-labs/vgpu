@@ -1,12 +1,7 @@
 struct Config {
   resolution: vec2f,
-  time: f32,
-  floor_albedo: f32,
-  brush: vec4f,
-  colour: vec4f,
   tunables: vec4f,
   triangle: vec4f,
-  options: vec4f,
   led_clip: vec4f,
 };
 struct Led {
@@ -18,20 +13,17 @@ struct Led {
 
 struct VSIn {
   @location(0) position: vec2f,
-  @location(1) local: vec2f,
-  @location(2) led_index: f32,
+  @location(1) led_index: f32,
 };
 struct VSOut {
   @builtin(position) pos: vec4f,
-  @location(0) local: vec2f,
-  @location(1) led_index: f32,
+  @location(0) led_index: f32,
 };
 
 @vertex fn vs_main(in: VSIn) -> VSOut {
   var out: VSOut;
   let clip = (in.position / cfg.resolution) * vec2f(2.0, -2.0) + vec2f(-1.0, 1.0);
   out.pos = vec4f(clip, 0.0, 1.0);
-  out.local = in.local;
   out.led_index = in.led_index;
   return out;
 }

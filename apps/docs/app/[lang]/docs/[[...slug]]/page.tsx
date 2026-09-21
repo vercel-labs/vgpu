@@ -4,7 +4,7 @@ import { getMDXComponents } from "@/components/geistdocs/mdx-components";
 import { config } from "@/lib/geistdocs/config";
 import { geistdocsSource } from "@/lib/geistdocs/source";
 import { titleAnchorId } from "@/lib/title-anchor.mjs";
-import { siteUrl } from "@/lib/site";
+import { SITE_OG_IMAGE_PATH, siteUrl } from "@/lib/site";
 
 const docsPage = createDocsPage({
   config,
@@ -25,13 +25,17 @@ const docsPage = createDocsPage({
       alternates: {
         ...metadata.alternates,
         canonical,
+        types: {
+          ...metadata.alternates?.types,
+          "text/markdown": siteUrl(`${page.url}.md`),
+        },
       },
       openGraph: {
         type: "article",
         title: data.title,
         description: data.description,
         url: canonical,
-        images: [siteUrl("/opengraph-image")],
+        images: [siteUrl(SITE_OG_IMAGE_PATH)],
       },
     };
   },

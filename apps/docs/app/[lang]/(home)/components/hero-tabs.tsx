@@ -5,23 +5,24 @@ import { Check, Copy } from "lucide-react";
 import { type HeroTab, useHeroTab } from "@/components/hero/hero-tab-state";
 import { InlineCode, stripBackticks } from "./inline-code";
 
-/**
- * `backtick` spans are atomic (never broken across lines); `mono` decides
- * whether they are also *presented* as code. See InlineCode.
- *
- * The two tabs differ in kind, not in taste. Skill is a shell command you paste
- * into a terminal, so mono is carrying meaning: "this is literal, type it
- * exactly". Prompt is a sentence you paste into an agent — the whole line is
- * natural language, including the command it happens to name, so setting that
- * fragment as code mislabelled it; it read as two registers spliced together
- * when it is one instruction throughout.
- *
- * Prompt stays fenced regardless, because "npx vgpu" must not wrap: unset, it
- * breaks after "npx" on a phone and strands the command name on line two.
- */
+/** `mono` distinguishes terminal commands from the natural-language prompt. */
 const tabContent = {
-  Prompt: { text: "Setup vgpu on my project, run `npx vgpu`", mono: false },
-  Skill: { text: "`npx skills add vercel-labs/vgpu`", mono: true },
+  Prompt: {
+    text: "Setup vgpu on my project, run `npx vgpu`",
+    mono: false,
+    wrap: false,
+  },
+  CLI: { text: "`pnpm add vgpu`", mono: true, wrap: false },
+  Skill: {
+    text: "`npx skills add vercel-labs/vgpu`",
+    mono: true,
+    wrap: false,
+  },
+  MCP: {
+    text: "`npx -y add-mcp https://vgpu.sh/api/mcp -g`",
+    mono: true,
+    wrap: true,
+  },
 } as const;
 
 type Tab = keyof typeof tabContent;
@@ -91,7 +92,7 @@ export function HeroTabs() {
   return (
     // No `gap` on the column: the rule carries its own asymmetric margins (see
     // below), and a gap would add to both sides equally.
-    <div className="flex w-full flex-col">
+    <div data-hero-tabs className="flex w-full flex-col">
       <div
         data-hero-tabs-list
         role="tablist"
@@ -101,7 +102,7 @@ export function HeroTabs() {
         {tabs.map((tab, index) => (
           <Fragment key={tab}>
             {index > 0 && (
-              <span aria-hidden className="px-2 text-white">
+              <span aria-hidden className="px-2">
                 ·
               </span>
             )}
@@ -110,11 +111,11 @@ export function HeroTabs() {
               role="tab"
               aria-selected={activeTab === tab}
               onClick={() => selectTab(tab)}
-              className={
+              className={`text-current transition-opacity ${
                 activeTab === tab
-                  ? "text-white"
-                  : "text-white/50 hover:text-white/80"
-              }
+                  ? "opacity-100"
+                  : "opacity-50 hover:opacity-80"
+              }`}
             >
               {tab}
             </button>
@@ -143,8 +144,9 @@ export function HeroTabs() {
         roughly 25/14px of measured ink-to-ink spacing.
       */}
       <div
+        data-hero-tabs-rule
         aria-hidden
-        className="mb-2 mt-5 h-px w-full bg-[linear-gradient(to_right,transparent,#4D4D4D_10%,transparent)]"
+        className="mb-2 mt-5 h-px w-full"
       />
 
       <button
@@ -152,7 +154,7 @@ export function HeroTabs() {
         type="button"
         onClick={copy}
         aria-label={copied ? "Copied" : `Copy: ${stripBackticks(content)}`}
-        className="group relative w-full px-7 text-center text-[15px] leading-relaxed text-white/90 transition-opacity hover:text-white lg:text-[16px]"
+        className="group relative w-full px-7 text-center text-[15px] leading-relaxed text-current opacity-90 transition-opacity hover:opacity-100 lg:text-[16px]"
       >
         {/*
           Every snippet is rendered, stacked in one grid cell, and crossfaded.
@@ -160,8 +162,8 @@ export function HeroTabs() {
           Stacking rather than swapping a single node is what keeps the block
           rigid: the cell is always as tall as the LONGEST snippet, so neither
           the rule above nor the tagline this is centred with can move — not
-          during the transition, and not between tabs either (Prompt wraps to
-          two lines on a phone where Skill fits on one).
+          during the transition, and not between tabs with different content
+          lengths.
 
           Three states instead of active/inactive, because direction matters:
           the one leaving lifts UP and the one arriving rises from BELOW, so a
@@ -197,6 +199,7 @@ export function HeroTabs() {
                 <InlineCode
                   text={tabContent[tab].text}
                   mono={tabContent[tab].mono}
+                  wrap={tabContent[tab].wrap}
                 />
               </span>
             );

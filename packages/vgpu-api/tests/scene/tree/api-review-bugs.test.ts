@@ -1,4 +1,4 @@
-// Regression tests for the six confirmed bugs in docs/plans/scene-api-review.md §1.
+// Regression tests for six confirmed scene-tree API bugs.
 // Each `describe` block maps 1:1 to a numbered finding so the review stays traceable.
 import { describe, expect, test } from "vitest";
 import {

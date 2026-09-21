@@ -5,6 +5,7 @@ import type { NextConfig } from "next";
 // run on bare node, with no TS toolchain), so the gate and the app can never
 // disagree about what the redirect table is.
 import { loadDocsRedirects } from "./lib/docs-redirects.mjs";
+import { homepageLinkHeader } from "./lib/site";
 
 const withMDX = createMDX();
 const require = createRequire(import.meta.url);
@@ -31,26 +32,50 @@ const config: NextConfig = {
         loaders: [wgslLoader],
         as: "*.js",
       },
+      "**/typegpu-liquid-glass/renderer.ts": {
+        loaders: [
+          {
+            loader: "babel-loader",
+            options: {
+              presets: ["@babel/preset-typescript"],
+              plugins: ["unplugin-typegpu/babel"],
+            },
+          },
+        ],
+        as: "*.js",
+      },
     },
   },
   // TGEIST-07 end.
 
   experimental: {
     turbopackFileSystemCacheForDev: true,
+    turbopackUseBuiltinBabel: false,
   },
 
   // ANCHOR TGEIST-06 (examples API transplant) -- this key is owned by that ticket alone; copied
   // literally, globs included, from the old app's next.config.mjs.
-  // The examples API serves the generated tree straight from the deployment, reading it with fs at
-  // request time. Static tracing cannot see a path built at runtime, so these routes must be told
-  // to bundle the tree explicitly or every artifact 404s in production.
+  // The examples API serves the prebuild-generated tree straight from the deployment, reading it
+  // with fs at request time. Static tracing cannot see a path built at runtime, so these routes must
+  // be told to bundle the ignored build output explicitly or every artifact 404s in production.
   // Keys are picomatch globs, not literal route paths, so a dynamic segment cannot be written
   // out: `[revision]` and `[...artifact]` would parse as character classes and match nothing.
-  // `check:examples-api-tracing` fails the build if any of the three routes loses the tree.
+  // `check:examples-api-tracing` fails the build if any artifact-backed route loses the tree.
   outputFileTracingIncludes: {
     "/.well-known/vgpu-examples.json": ["./generated/examples-api/**/*"],
     "/api/examples/v1/latest.json": ["./generated/examples-api/**/*"],
     "/api/examples/v1/revisions/**": ["./generated/examples-api/**/*"],
+    "/api/mcp": ["./generated/examples-api/**/*"],
+  },
+  // The artifact reader probes from process.cwd() so it works in both monorepo and deployed
+  // layouts. Next's static tracer consequently treats the whole app root as reachable unless the
+  // routes exclude unrelated CDN assets. Keep the generated tree above and prevent large models,
+  // videos, and images under public/ from being copied into every artifact-backed function.
+  outputFileTracingExcludes: {
+    "/.well-known/vgpu-examples.json": ["./public/**/*"],
+    "/api/examples/v1/latest.json": ["./public/**/*"],
+    "/api/examples/v1/revisions/**": ["./public/**/*"],
+    "/api/mcp": ["./public/**/*"],
   },
 
   // ANCHOR TGEIST-12 (gate (d) of Decision 4). The table lives in
@@ -63,6 +88,20 @@ const config: NextConfig = {
   // ship without any of them; `scripts/check-url-anchor-parity.mjs` will not.
   async redirects() {
     return loadDocsRedirects();
+  },
+
+  async headers() {
+    return [
+      {
+        source: "/",
+        headers: [
+          {
+            key: "Link",
+            value: homepageLinkHeader,
+          },
+        ],
+      },
+    ];
   },
 
   images: {

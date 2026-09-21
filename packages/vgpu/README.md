@@ -11,6 +11,8 @@ pnpm exec vgpu --help
 pnpm exec vgpu docs ls
 pnpm exec vgpu docs cat /@vgpu/core/Buffer.docs.md
 pnpm exec vgpu docs grep -i --package @vgpu/wgsl minify
+pnpm exec vgpu mcp
+pnpm exec vgpu mcp --project-from-cwd # opt in to local example downloads
 pnpm add -D @vgpu/wgsl # required only for `vgpu check`
 pnpm exec vgpu check ./shader.wgsl
 ```
@@ -37,6 +39,10 @@ This package only owns the CLI binary.
 - `vgpu docs grep [-i] [--package <pkg>] <pattern>` searches bundled docs content. Matching is case-sensitive by default; use `-i` for case-insensitive search.
 - `vgpu docs find <query>` searches docs paths and symbols, not full content.
 - `vgpu docs path <symbol|path>` resolves a symbol/path for shell usage.
+- `vgpu mcp [--output-dir <absolute-directory> | --project-from-cwd]` serves the `docs` and `examples` MCP tools over stdio. Bare invocation is read-only. On Linux and macOS, an explicit output scope enables `examples.download`, whose `destination` is a relative new directory beneath that scope; the operation is omitted from the Windows schema. `VGPU_MCP_OUTPUT_DIR` is the environment-variable alternative.
 - `vgpu check <file.wgsl>` resolves imports, validates through `@vgpu/wgsl`, and prints reflection JSON with bindings/layouts for agent tooling. Because `@vgpu/wgsl` is an optional peer of `@vgpu/cli`, install it next to the CLI before using `check` (for example, `pnpm add -D @vgpu/wgsl`). Reflection errors surface the Phase-1 fix-it text verbatim.
+
+The public read-only Streamable HTTP MCP endpoint is `https://vgpu.sh/api/mcp`. It is stateless and
+requires automatic or modern MCP protocol negotiation.
 
 `vgpu doctor` and `vgpu wgsl` are reserved and currently print coming-soon messages.

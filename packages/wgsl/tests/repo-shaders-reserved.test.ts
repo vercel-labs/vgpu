@@ -1,11 +1,12 @@
-import { readdir, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
 import { reservedIdentifierDiagnosticsForSource } from "../src/runtime/reserved-identifiers.ts";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const SKIPPED_DIRS = new Set(["node_modules", ".git", "dist", "coverage", ".next", ".turbo"]);
+const SKIPPED_DIRS = new Set(["node_modules", ".git", "dist", "coverage", ".next", ".turbo", ".context", ".artifacts"]);
 /** Fixture that is invalid on purpose — it drives the `vgpu check` diagnostic test. */
 const INTENTIONALLY_INVALID = "packages/vgpu-api/tests/fixtures/reserved-word.wgsl";
 
@@ -19,6 +20,18 @@ async function wgslFiles(dir: string, found: string[] = []): Promise<string[]> {
   }
   return found;
 }
+
+test("the repository sweep excludes ignored workspace and compiler artifacts", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "vgpu-repo-shader-sweep-"));
+  try {
+    await writeFile(join(directory, "authored.wgsl"), "// authored source");
+    for (const name of [".context", ".artifacts"]) {
+      await mkdir(join(directory, name));
+      await writeFile(join(directory, name, "temporary.wgsl"), "// generated dependency fixture");
+    }
+    expect((await wgslFiles(directory)).map((file) => relative(directory, file))).toEqual(["authored.wgsl"]);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
 
 test("every WGSL file in the repository is free of reserved identifiers", async () => {
   const files = await wgslFiles(repoRoot);

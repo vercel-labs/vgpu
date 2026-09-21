@@ -8,6 +8,6 @@ test("Mesh.dodecahedron creates flat fan-triangulated indexed data", async () =>
   await expectPolyhedronBasics(DODECAHEDRON);
 });
 
-test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("dodecahedron primitive snapshot battery matches", async () => {
+test.skipIf(!process.env.VGPU_SNAPSHOT_MODE)("dodecahedron primitive snapshot battery matches", async () => {
   await expectPolyhedronSnapshots(DODECAHEDRON);
 });

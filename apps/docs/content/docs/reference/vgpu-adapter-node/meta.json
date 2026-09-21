@@ -1,6 +1,7 @@
 {
   "title": "@vgpu/adapter-node",
   "pages": [
+    "create-node-adapter",
     "..."
   ]
 }

@@ -31,30 +31,53 @@ export function createScene(gpu: Gpu, size: { width: number; height: number }): 
   // `copyExternalImageToTexture` requires `render_attachment` on its destination, on
   // top of the `copy_dst` the copy needs and the `texture_binding` the shader reads.
   const texture = gpu.device.createTexture({
+    kind: '2d',
     size: [size.width, size.height],
     format: 'rgba8unorm',
     usage: ['texture_binding', 'copy_dst', 'render_attachment'],
     label: 'video-to-texture-frame',
   });
 
-  const geo = geometry(gpu, box({ size: 1 }));
-  const cube = draw(gpu, {
-    shader: cubeWgsl,
-    geometry: geo,
-    cull: 'back',
-    label: 'video-to-texture',
-  });
-  cube.set({
-    video_tex: texture,
-    video_samp: sampler(gpu, { magFilter: 'linear', minFilter: 'linear' }),
-  });
+  let geo: Geometry | undefined;
+  try {
+    geo = geometry(gpu, box({ size: 1 }));
+    const cube = draw(gpu, {
+      shader: cubeWgsl,
+      geometry: geo,
+      cull: 'back',
+      label: 'video-to-texture',
+    });
+    cube.set({
+      video_tex: texture,
+      video_samp: sampler(gpu, { magFilter: 'linear', minFilter: 'linear' }),
+    });
 
-  return { geometry: geo, cube, texture, width: size.width, height: size.height };
+    return { geometry: geo, cube, texture, width: size.width, height: size.height };
+  } catch (error) {
+    try {
+      geo?.destroy();
+    } catch {
+      // Preserve the setup failure.
+    }
+    try {
+      texture.destroy();
+    } catch {
+      // Preserve the setup failure.
+    }
+    throw error;
+  }
 }
 
 export function destroyScene(scene: VideoCubeScene): void {
-  scene.geometry.destroy();
-  scene.texture.destroy();
+  const failures: unknown[] = [];
+  for (const cleanup of [() => scene.geometry.destroy(), () => scene.texture.destroy()]) {
+    try {
+      cleanup();
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length) throw failures[0];
 }
 
 /**

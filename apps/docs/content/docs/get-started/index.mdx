@@ -1,26 +1,25 @@
 ---
 title: Get started
-description: vgpu runs in the browser and in Node.js with the same API. Pick your platform, then learn the core ideas.
+description: Set up your coding agent and render your first frame with vgpu.
 ---
 
-vgpu runs in two places with the same API: the browser, where WebGPU renders straight to a canvas,
-and Node.js, where Dawn renders headless for scripts, servers, and tests.
+vgpu is designed to be used with coding agents. Give your agent access to version-matched docs, verified examples, and diagnostics, then choose where to render.
 
 <Cards>
   <Card
     title="Agents"
-    description="vgpu is agent-first — the full documentation ships inside the package. Point your agent at `npx vgpu`."
+    description="Start here. Run `npx vgpu`, install the vgpu skill, or connect through MCP."
     href="/docs/get-started/agents"
     className="col-span-2"
   />
   <Card
     title="Web"
-    description="Render to a canvas with WebGPU, and set up the .wgsl loader for Next.js or Vite."
+    description="Render a shader to an interactive canvas with Next.js or Vite."
     href="/docs/get-started/web"
   />
   <Card
     title="Node.js"
-    description="Render headless through Dawn — save a PNG or assert on pixels in a test."
+    description="Render headlessly, save an image, or run GPU tests without a browser."
     href="/docs/get-started/node"
   />
 </Cards>

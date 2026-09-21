@@ -1,6 +1,4 @@
-// Bakes the IFFT displacement storage buffer into an rgba16float texture, one
-// texel per element. Storage buffers are not available in the vertex stage on
-// conservative adapters, so the ocean mesh samples this texture instead.
+// Bake the compute buffer into a texture that the vertex shader can sample.
 
 const NU: u32 = 256u;
 

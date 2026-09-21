@@ -14,7 +14,16 @@ function ExampleSidebarThumb({ thumbnail }: { thumbnail?: string }) {
     // eslint-disable-next-line @next/next/no-img-element -- sidebar icon
     // slot, not a Next-optimized hero image; also unauthenticated static
     // asset so no benefit from next/image here.
-    return <img alt="" className="size-5 shrink-0 rounded-sm object-cover" src={thumbnail} />;
+    return (
+      <img
+        alt=""
+        className="size-5 shrink-0 rounded-sm object-cover"
+        decoding="async"
+        fetchPriority="low"
+        loading="lazy"
+        src={thumbnail}
+      />
+    );
   }
   return (
     <span

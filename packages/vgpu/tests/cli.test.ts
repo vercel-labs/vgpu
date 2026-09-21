@@ -1,9 +1,10 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
 import { resolveVersion, runCli } from "../bin/vgpu.js";
+import { mcpHelp, runMcpStdio } from "../lib/mcp/stdio.js";
 
 // Under vitest the CLI always runs in-repo, where `bin/vgpu.js` resolves its version from the
 // public `vgpu` package (packages/vgpu-api) rather than from `@vgpu/cli`'s own private, drifting
@@ -22,8 +23,12 @@ const routerHelp = `vgpu ${packageVersion}
 TypeScript library for WebGPU: typed shader imports, a tiny gpu-first API, and
 the same code running in the browser, headless Node, and your test suite.
 
-## Read the docs
-  npx vgpu docs cat getting-started.md    The guide for using the current API correctly
+## Run this first
+  npx vgpu docs cat getting-started.md
+  Always read this when working with vgpu, do not skip.
+  It is short and covers the API, project setup, and what to do before a PR.
+
+## Find anything else in the docs
   npx vgpu docs find "<topic | symbol | VGPU-error-code>"
   npx vgpu docs cat <path>
 
@@ -36,8 +41,14 @@ the same code running in the browser, headless Node, and your test suite.
   npx vgpu examples search "<topic>"
   npx vgpu examples pull <slug> --out <dir>
 
+## Agent tools (MCP)
+  npx vgpu mcp                           Serve docs and examples over stdio
+
 ## Node rendering environment
   npx vgpu doctor
+
+## Native Metal tooling
+  npx vgpu native --help
 `;
 
 test("routes the bare command and --help/-h to the docs-first guide, exit 0", () => {
@@ -45,6 +56,42 @@ test("routes the bare command and --help/-h to the docs-first guide, exit 0", ()
   expect(runCli(["--help"])).toMatchObject({ code: 0, stdout: routerHelp });
   expect(runCli(["-h"])).toMatchObject({ code: 0, stdout: routerHelp });
   expect(success(["--version"])).toBe(`${packageVersion}\n`);
+});
+
+test("documents the MCP stdio command without starting a server", async () => {
+  await expect(Promise.resolve(runCli(["mcp", "--help"]))).resolves.toMatchObject({
+    code: 0,
+    stdout: expect.stringContaining(
+      "Usage: vgpu mcp [--output-dir <absolute-directory> | --project-from-cwd]",
+    ),
+  });
+});
+
+test("rejects invalid or ambiguous MCP output-directory configuration", async () => {
+  const root = mkdtempSync(join(tmpdir(), "vgpu-mcp-cli-options-"));
+  const file = join(root, "file");
+  const missing = join(root, "missing");
+  writeFileSync(file, "not a directory");
+  try {
+    const cliCases = [
+      [["mcp", "--output-dir", "."], "MCP output directory must be absolute: .\n"],
+      [["mcp", "--output-dir", root, "--project-from-cwd"], mcpHelp],
+      [["mcp", "--root", root], mcpHelp],
+    ] as const;
+    for (const [args, stderr] of cliCases) expect(await runCli([...args])).toEqual({ code: 2, stderr });
+
+    const stdioCases = [
+      [[], { env: { VGPU_MCP_OUTPUT_DIR: "relative" } }, "MCP output directory must be absolute: relative\n"],
+      [["--output-dir", file], {}, `MCP output directory is not a directory: ${realpathSync(file)}\n`],
+      [["--output-dir", missing], {}, `MCP output directory is not a directory: ${missing}\n`],
+      [["--output-dir"], {}, mcpHelp],
+    ] as const;
+    for (const [args, options, stderr] of stdioCases) {
+      expect(runMcpStdio([...args], options)).toEqual({ code: 2, stderr });
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 // The published tarball's `../package.json` is copy-cli.mjs's synthetic `{type,version}` stamp with
@@ -131,8 +178,9 @@ test("curates root and guide listings for onboarding", () => {
 
   const guides = success(["docs", "ls", "/guides"]).trimEnd().split("\n");
   expect(guides[0]).toBe("getting-started.docs.md");
-  expect(guides.slice(1, 8)).toEqual([
+  expect(guides.slice(1, 9)).toEqual([
     "concepts-context.docs.md",
+    "concepts-wgsl-modules.docs.md",
     "concepts-draws.docs.md",
     "concepts-compilation.docs.md",
     "concepts-effects.docs.md",
@@ -267,8 +315,11 @@ test("caps the low-signal 'a' query with a notice", () => {
 });
 
 test("does not add a notice when the route-hit count is under the cap", () => {
-  const out = success(["docs", "find", "Buffer"]);
-  expect(out).toContain("Buffer\tvgpu/core");
+  // "Buffer" now legitimately matches more than 20 native and JavaScript guides.
+  // Use the specific symbol to exercise the under-cap branch as the corpus grows.
+  const out = success(["docs", "find", "BufferOptions"]);
+  expect(out).toContain("BufferOptions\tvgpu/core");
+  expect(out.trimEnd().split("\n").length).toBeLessThanOrEqual(20);
   expect(out).not.toMatch(/showing the 20 best/);
 });
 

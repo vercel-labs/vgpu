@@ -1,4 +1,4 @@
-import { PI, G, cmul, fullscreenPosition } from "./ocean-common.wgsl";
+import { PI, G } from "./ocean-common.wgsl";
 
 struct InitialSpectrumUniforms {
   resolution: f32,
@@ -9,14 +9,6 @@ struct InitialSpectrumUniforms {
 };
 @group(0) @binding(0) var<uniform> u: InitialSpectrumUniforms;
 @group(0) @binding(1) var u_noise: texture_2d<f32>;
-
-struct VSOut { @builtin(position) pos: vec4f };
-
-@vertex fn vs_main(@builtin(vertex_index) vi: u32) -> VSOut {
-  var out: VSOut;
-  out.pos = fullscreenPosition(vi);
-  return out;
-}
 
 fn phillips(k: vec2f) -> f32 {
   let kk = dot(k, k);
@@ -31,8 +23,8 @@ fn phillips(k: vec2f) -> f32 {
   return ph;
 }
 
-@fragment fn fs_main(in: VSOut) -> @location(0) vec4f {
-  let coord = in.pos.xy - vec2f(0.5);
+@fragment fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
+  let coord = position.xy - vec2f(0.5);
   let n = select(coord.x - u.resolution, coord.x, coord.x < u.resolution * 0.5);
   let m = select(coord.y - u.resolution, coord.y, coord.y < u.resolution * 0.5);
   let k = (2.0 * PI / u.size) * vec2f(n, m);

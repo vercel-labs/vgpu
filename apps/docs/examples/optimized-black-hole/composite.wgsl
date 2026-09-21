@@ -1,8 +1,6 @@
-// Final postprocess: combine three bloom scales in linear HDR, then apply the
-// hero's existing exposure, ACES fit, vignette, gamma and monochrome treatment.
+// Combine bloom levels, tone map, vignette, and convert to display output.
 
 struct Composite {
-  // x = bloom strength, y = debug view (non-zero bypasses postprocessing).
   params: vec4f,
 }
 
@@ -39,11 +37,6 @@ fn tonemap(linearColor: vec3f, uv: vec2f) -> vec3f {
 
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
   let sceneColor = textureSample(scene, linearSampler, uv).rgb;
-  if (composite.params.y > 0.5) {
-    return vec4f(sceneColor, 1.0);
-  }
-
-  // Close glow keeps the disk crisp; the wider levels supply the cinematic halo.
   let bloom =
     textureSample(bloomNear, linearSampler, uv).rgb * 0.50 +
     textureSample(bloomMedium, linearSampler, uv).rgb * 0.32 +

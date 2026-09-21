@@ -3,6 +3,11 @@
   "pages": [
     "---General---",
     "getting-started",
+    "---Integrations---",
+    "threejs",
+    "nextjs",
+    "no-bundler",
+    "external-ticker",
     "---Performance---",
     "performance-model",
     "performance-patterns",
@@ -11,6 +16,8 @@
     "optimize-pass",
     "shader-fix-its",
     "performance-playbook",
+    "adaptive-quality",
+    "shipping-to-production",
     "---Testing---",
     "browser-testing",
     "..."

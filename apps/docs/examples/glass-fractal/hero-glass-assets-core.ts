@@ -1,7 +1,7 @@
-import type { Geometry, GeometryBufferOptions, Gpu } from 'vgpu';
-import { geometry } from 'vgpu';
-import type { Texture } from 'vgpu/core';
-import { cubeView } from 'vgpu/core';
+import type { Geometry, GeometryBufferOptions, Gpu } from "vgpu";
+import { geometry } from "vgpu";
+import type { Texture } from "vgpu/core";
+import { cubeView } from "vgpu/core";
 
 const MESH_HEADER_SIZE = 40;
 const CUBEMAP_COLUMNS = 3;
@@ -34,11 +34,11 @@ export function createHeroGlassAssets(
   fractalMeshBuffer: ArrayBuffer,
   atlas: RgbaAtlas
 ): HeroGlassAssets {
-  const glassMesh = decodeMesh(gpu, glassMeshBuffer, 'glass-pyramid');
+  const glassMesh = decodeMesh(gpu, glassMeshBuffer, "glass-pyramid");
   let fractalMesh: ReturnType<typeof decodeMesh> | undefined;
   let environment: Texture | undefined;
   try {
-    fractalMesh = decodeMesh(gpu, fractalMeshBuffer, 'fractal-pyramid-face-l7');
+    fractalMesh = decodeMesh(gpu, fractalMeshBuffer, "fractal-pyramid-face-l7");
     const faceSize = atlas.height / CUBEMAP_ROWS;
     const mipLevelCount = Math.floor(Math.log2(faceSize)) + 1;
     let expectedWidth = 0;
@@ -50,21 +50,30 @@ export function createHeroGlassAssets(
       atlas.width !== expectedWidth ||
       atlas.data.byteLength !== atlas.width * atlas.height * 4
     ) {
-      throw new Error('Hero cubemap atlas must contain a packed spherical mip chain.');
+      throw new Error(
+        "Hero cubemap atlas must contain a packed spherical mip chain."
+      );
     }
     environment = gpu.device.createTexture({
-      size: [faceSize, faceSize, 6],
-      format: 'rgba8unorm-srgb',
-      usage: ['texture_binding', 'copy_dst'],
+      kind: "2d-array",
+      size: [faceSize, faceSize], layers: 6,
+      format: "rgba8unorm-srgb",
+      usage: ["texture_binding", "copy_dst"],
       mipLevelCount,
-      label: 'homepage-light-glass-studio-cubemap',
+      label: "homepage-light-glass-studio-cubemap",
     });
-    uploadPackedCubemapMipAtlas(gpu, environment, atlas, faceSize, mipLevelCount);
+    uploadPackedCubemapMipAtlas(
+      gpu,
+      environment,
+      atlas,
+      faceSize,
+      mipLevelCount
+    );
     const loadedEnvironment = environment;
     const loadedFractal = fractalMesh;
     const environmentView = cubeView(loadedEnvironment, {
       compat: true,
-      label: 'homepage-light-glass-studio-cubemap-array-view',
+      label: "homepage-light-glass-studio-cubemap-array-view",
     });
     let disposed = false;
     return {
@@ -78,19 +87,27 @@ export function createHeroGlassAssets(
       dispose() {
         if (disposed) return;
         disposed = true;
-        glassMesh.geometry.destroy();
-        glassMesh.wireframeGeometry.destroy();
-        loadedFractal.geometry.destroy();
-        loadedFractal.wireframeGeometry.destroy();
-        loadedEnvironment.destroy();
+        destroyAll([
+          glassMesh.geometry,
+          glassMesh.wireframeGeometry,
+          loadedFractal.geometry,
+          loadedFractal.wireframeGeometry,
+          loadedEnvironment,
+        ]);
       },
     };
   } catch (error) {
-    glassMesh.geometry.destroy();
-    glassMesh.wireframeGeometry.destroy();
-    fractalMesh?.geometry.destroy();
-    fractalMesh?.wireframeGeometry.destroy();
-    environment?.destroy();
+    try {
+      destroyAll([
+        glassMesh.geometry,
+        glassMesh.wireframeGeometry,
+        fractalMesh?.geometry,
+        fractalMesh?.wireframeGeometry,
+        environment,
+      ]);
+    } catch {
+      // Preserve the construction failure after attempting every rollback.
+    }
     throw error;
   }
 }
@@ -108,12 +125,16 @@ function uploadPackedCubemapMipAtlas(
     for (let face = 0; face < 6; face++) {
       const tileX = levelOffsetX + (face % CUBEMAP_COLUMNS) * mipSize;
       const tileY = Math.floor(face / CUBEMAP_COLUMNS) * mipSize;
-      const pixels = new Uint8Array(mipSize * mipSize * 4);
-      for (let row = 0; row < mipSize; row++) {
-        const sourceStart = ((tileY + row) * atlas.width + tileX) * 4;
-        pixels.set(atlas.data.subarray(sourceStart, sourceStart + mipSize * 4), row * mipSize * 4);
-      }
-      uploadCubemapMip(gpu, environment, pixels, face, mipLevel, mipSize);
+      uploadCubemapMip(
+        gpu,
+        environment,
+        atlas,
+        tileX,
+        tileY,
+        face,
+        mipLevel,
+        mipSize
+      );
     }
     levelOffsetX += CUBEMAP_COLUMNS * mipSize;
   }
@@ -122,7 +143,9 @@ function uploadPackedCubemapMipAtlas(
 function uploadCubemapMip(
   gpu: Gpu,
   environment: Texture,
-  pixels: Uint8Array,
+  atlas: RgbaAtlas,
+  tileX: number,
+  tileY: number,
   face: number,
   mipLevel: number,
   size: number
@@ -130,11 +153,13 @@ function uploadCubemapMip(
   const sourceBytesPerRow = size * 4;
   const bytesPerRow = Math.ceil(sourceBytesPerRow / 256) * 256;
   const upload = new Uint8Array(bytesPerRow * size);
-  for (let row = 0; row < size; row++)
+  for (let row = 0; row < size; row++) {
+    const sourceStart = ((tileY + row) * atlas.width + tileX) * 4;
     upload.set(
-      pixels.subarray(row * sourceBytesPerRow, (row + 1) * sourceBytesPerRow),
+      atlas.data.subarray(sourceStart, sourceStart + sourceBytesPerRow),
       row * bytesPerRow
     );
+  }
   gpu.gpu.queue.writeTexture(
     { texture: environment.gpu, mipLevel, origin: [0, 0, face] },
     upload,
@@ -144,7 +169,8 @@ function uploadCubemapMip(
 }
 
 function decodeMesh(gpu: Gpu, buffer: ArrayBuffer, label: string) {
-  if (buffer.byteLength < MESH_HEADER_SIZE) throw new Error('Hero glass mesh header is truncated.');
+  if (buffer.byteLength < MESH_HEADER_SIZE)
+    throw new Error("Hero glass mesh header is truncated.");
   const view = new DataView(buffer);
   const magic = String.fromCharCode(
     view.getUint8(0),
@@ -152,14 +178,15 @@ function decodeMesh(gpu: Gpu, buffer: ArrayBuffer, label: string) {
     view.getUint8(2),
     view.getUint8(3)
   );
-  const hasSphereTarget = magic === 'HGP2';
-  if (magic !== 'HGP1' && !hasSphereTarget) throw new Error('Unsupported hero glass mesh format.');
-  const vertexCount = view.getUint32(4, true),
-    indexCount = view.getUint32(8, true),
-    vertexStride = view.getUint32(12, true),
-    expectedStride = hasSphereTarget ? 24 : 16;
+  const hasSphereTarget = magic === "HGP2";
+  if (magic !== "HGP1" && !hasSphereTarget)
+    throw new Error("Unsupported hero glass mesh format.");
+  const vertexCount = view.getUint32(4, true);
+  const indexCount = view.getUint32(8, true);
+  const vertexStride = view.getUint32(12, true);
+  const expectedStride = hasSphereTarget ? 24 : 16;
   if (vertexStride !== expectedStride || vertexCount <= 0 || indexCount <= 0)
-    throw new Error('Hero glass mesh layout is invalid.');
+    throw new Error("Hero glass mesh layout is invalid.");
   const meshMin = [
     view.getFloat32(16, true),
     view.getFloat32(20, true),
@@ -170,12 +197,14 @@ function decodeMesh(gpu: Gpu, buffer: ArrayBuffer, label: string) {
     view.getFloat32(32, true),
     view.getFloat32(36, true),
   ] as const;
-  const vertexByteLength = vertexCount * vertexStride,
-    indexOffset = MESH_HEADER_SIZE + vertexByteLength,
-    expectedLength = indexOffset + indexCount * 2;
+  const vertexByteLength = vertexCount * vertexStride;
+  const indexOffset = MESH_HEADER_SIZE + vertexByteLength;
+  const expectedLength = indexOffset + indexCount * 2;
   if (expectedLength !== buffer.byteLength)
-    throw new Error('Hero glass mesh payload length is invalid.');
-  const vertexData = new Uint8Array(buffer.slice(MESH_HEADER_SIZE, indexOffset));
+    throw new Error("Hero glass mesh payload length is invalid.");
+  const vertexData = new Uint8Array(
+    buffer.slice(MESH_HEADER_SIZE, indexOffset)
+  );
   const indices = new Uint16Array(buffer.slice(indexOffset));
   const wireframeIndices = triangleEdges(indices);
   const buffers: GeometryBufferOptions[] = [
@@ -183,30 +212,49 @@ function decodeMesh(gpu: Gpu, buffer: ArrayBuffer, label: string) {
       data: vertexData,
       stride: vertexStride,
       attributes: hasSphereTarget
-        ? { packed_position: 'unorm16x4', packed_normal: 'snorm16x4', packed_sphere: 'snorm16x4' }
-        : { packed_position: 'unorm16x4', packed_normal: 'snorm16x4' },
+        ? {
+            packed_position: "unorm16x4",
+            packed_normal: "snorm16x4",
+            packed_sphere: "snorm16x4",
+          }
+        : { packed_position: "unorm16x4", packed_normal: "snorm16x4" },
     },
   ];
-  return {
-    geometry: geometry(gpu, { label: `homepage-light-${label}`, buffers, indices }),
-    wireframeGeometry: geometry(gpu, {
-      label: `homepage-light-${label}-wireframe`,
-      topology: 'line-list',
+  let solid: Geometry | undefined;
+  try {
+    solid = geometry(gpu, {
+      label: `homepage-light-${label}`,
       buffers,
-      indices: wireframeIndices,
-    }),
-    meshMin,
-    meshMax,
-  };
+      indices,
+    });
+    return {
+      geometry: solid,
+      wireframeGeometry: geometry(gpu, {
+        label: `homepage-light-${label}-wireframe`,
+        topology: "line-list",
+        buffers,
+        indices: wireframeIndices,
+      }),
+      meshMin,
+      meshMax,
+    };
+  } catch (error) {
+    try {
+      solid?.destroy();
+    } catch {
+      // Preserve the geometry construction failure.
+    }
+    throw error;
+  }
 }
 
 function triangleEdges(indices: Uint16Array): Uint16Array {
-  const edges = new Set<string>();
+  const edges = new Set<number>();
   const result: number[] = [];
   const append = (a: number, b: number) => {
-    const start = Math.min(a, b),
-      end = Math.max(a, b),
-      key = `${start}:${end}`;
+    const start = Math.min(a, b);
+    const end = Math.max(a, b);
+    const key = start * 0x10000 + end;
     if (edges.has(key)) return;
     edges.add(key);
     result.push(start, end);
@@ -217,4 +265,18 @@ function triangleEdges(indices: Uint16Array): Uint16Array {
     append(indices[triangle + 2]!, indices[triangle]!);
   }
   return new Uint16Array(result);
+}
+
+function destroyAll(resources: readonly (object | undefined)[]): void {
+  let failed = false;
+  let failure: unknown;
+  for (const resource of resources) {
+    try {
+      (resource as { destroy?: () => void } | undefined)?.destroy?.();
+    } catch (error) {
+      if (!failed) failure = error;
+      failed = true;
+    }
+  }
+  if (failed) throw failure;
 }

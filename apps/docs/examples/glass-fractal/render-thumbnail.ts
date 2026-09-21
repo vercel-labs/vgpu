@@ -1,24 +1,33 @@
-import { readFile } from 'node:fs/promises';
-import { isAbsolute, join } from 'node:path';
+import { readFile } from "node:fs/promises";
+import { isAbsolute, join } from "node:path";
 
-import { PNG } from 'pngjs';
-import type { Gpu, Target } from 'vgpu';
+import { PNG } from "pngjs";
+import type { Gpu, Target } from "vgpu";
 
-import type { ThumbnailOptions } from '../../lib/example-renderer';
-import { createHeroGlassAssets, type HeroGlassAssets } from './hero-glass-assets-core';
+import {
+  createHeroGlassAssets,
+  type HeroGlassAssets,
+} from "./hero-glass-assets-core";
 import {
   createHeroFractalScene,
   destroyHeroFractalScene,
   renderHeroFractalScene,
   setHeroFractalSceneSettings,
   type HeroFractalScene,
-} from './scene';
+} from "./scene";
 import {
   HERO_FRACTAL_CAMERA,
   HERO_FRACTAL_GLASS,
   HERO_FRACTAL_MATERIAL,
   HERO_ORB_MATERIAL,
-} from './settings';
+} from "./settings";
+
+interface ThumbnailOptions {
+  readonly warmupFrames?: number;
+  readonly dt?: number;
+  readonly time?: number;
+  readonly publicAssetsRoot?: string;
+}
 
 export async function renderThumbnail(
   gpu: Gpu,
@@ -28,19 +37,21 @@ export async function renderThumbnail(
   const publicAssetsRoot = options.publicAssetsRoot;
   if (!publicAssetsRoot || !isAbsolute(publicAssetsRoot)) {
     throw new Error(
-      'glass-fractal renderThumbnail requires options.publicAssetsRoot as an absolute path to apps/docs/public.'
+      "glass-fractal renderThumbnail requires options.publicAssetsRoot as an absolute path to apps/docs/public."
     );
   }
 
-  const assetRoot = join(publicAssetsRoot, 'examples', 'glass-fractal');
+  const assetRoot = join(publicAssetsRoot, "examples", "glass-fractal");
   const [glassBytes, fractalBytes, atlasBytes] = await Promise.all([
-    readFile(join(assetRoot, 'rounded-tetrahedron.mesh')),
-    readFile(join(assetRoot, 'fractal-tetrahedron-l7.mesh')),
-    readFile(join(assetRoot, 'studio-cubemap-prefiltered.png')),
+    readFile(join(assetRoot, "rounded-tetrahedron.mesh")),
+    readFile(join(assetRoot, "fractal-tetrahedron-l7.mesh")),
+    readFile(join(assetRoot, "studio-cubemap-prefiltered.png")),
   ]);
   const atlas = PNG.sync.read(atlasBytes);
   let assets: HeroGlassAssets | undefined;
   let scene: HeroFractalScene | undefined;
+  let failure: unknown;
+  let failed = false;
 
   try {
     assets = createHeroGlassAssets(
@@ -49,7 +60,12 @@ export async function renderThumbnail(
       exactArrayBuffer(fractalBytes),
       { width: atlas.width, height: atlas.height, data: atlas.data }
     );
-    scene = await createHeroFractalScene(gpu, output, assets, 'glass-fractal-thumb');
+    scene = await createHeroFractalScene(
+      gpu,
+      output,
+      assets,
+      "glass-fractal-thumb"
+    );
 
     const frameCount = Math.max(1, options.warmupFrames ?? 1);
     const dt = options.dt ?? 0;
@@ -67,13 +83,32 @@ export async function renderThumbnail(
     }
     await gpu.gpu.queue.onSubmittedWorkDone();
     await gpu.settled();
+  } catch (error) {
+    failure = error;
+    failed = true;
   } finally {
-    await Promise.allSettled([gpu.gpu.queue.onSubmittedWorkDone(), gpu.settled()]);
-    if (scene) destroyHeroFractalScene(scene);
-    assets?.dispose();
+    await Promise.allSettled([
+      Promise.resolve().then(() => gpu.gpu.queue.onSubmittedWorkDone()),
+      Promise.resolve().then(() => gpu.settled()),
+    ]);
+    for (const cleanup of [
+      () => scene && destroyHeroFractalScene(scene),
+      () => assets?.dispose(),
+    ]) {
+      try {
+        cleanup();
+      } catch (error) {
+        if (!failed) failure = error;
+        failed = true;
+      }
+    }
   }
+  if (failed) throw failure;
 }
 
 function exactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  return bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength
+  ) as ArrayBuffer;
 }

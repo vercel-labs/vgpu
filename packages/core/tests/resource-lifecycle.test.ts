@@ -35,7 +35,7 @@ test("Buffer exposes stable resource identity and one-shot destroy callbacks", (
 
 test("Texture exposes stable resource identity and destroy callbacks can unsubscribe", () => {
   const device = createDevice();
-  const texture = device.createTexture({ size: [1, 1], format: "rgba8unorm", usage: ["render_attachment"] });
+  const texture = device.createTexture({ kind: "2d", size: [1, 1], format: "rgba8unorm", usage: ["render_attachment"] });
   const calls: Texture[] = [];
 
   const identity = texture.resourceIdentity;

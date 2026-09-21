@@ -1,6 +1,8 @@
 import { ValidationError } from "./errors.ts";
 import { bufferUsageFlags, mapReadMode } from "./gpu-constants.ts";
-import { isMockGPUBuffer } from "./mock-gpu-storage.ts";
+import { isMockGPUBuffer, isMockGPUTexture } from "./mock-gpu-storage.ts";
+import type { TextureReadOptions } from "./types.ts";
+import { textureReadSelection, validateReadAllocation } from "./texture-read-selection.ts";
 
 const stagingUsage = bufferUsageFlags(["copy_dst", "map_read"]);
 
@@ -31,23 +33,30 @@ export class Readback {
     }
   }
 
-  async readTexture(texture: GPUTexture, size: readonly [number, number, number?], format: GPUTextureFormat): Promise<Uint8Array> {
-    const [width, height] = size;
-    const formatInfo = textureReadbackFormat(format, "Readback.readTexture");
+  async readTexture(texture: GPUTexture, options: TextureReadOptions): Promise<Uint8Array> {
+    const formatInfo = textureReadbackFormat(texture.format, "Readback.readTexture");
+    const selection = textureReadSelection(texture, options, "Readback.readTexture");
+    const [width, height, depth] = selection.size;
     const bytesPerPixel = formatInfo.bytesPerPixel;
     const bytesPerRow = align(width * bytesPerPixel, 256);
-    const byteLength = bytesPerRow * height;
+    const byteLength = bytesPerRow * height * depth;
+    validateReadAllocation(byteLength, this.device.limits?.maxBufferSize, "Readback.readTexture");
+    if (isMockGPUTexture(texture)) {
+      const stored = texture.__vgpuMockMips?.[selection.mipLevel] ?? (selection.mipLevel === 0 ? texture.__vgpuMockBytes : undefined);
+      if (!stored) throw new Error("Mock texture has no storage for the selected mip.");
+      return readMockTextureBytes(stored, selection, formatInfo);
+    }
     const staging = this.device.createBuffer({ size: byteLength, usage: stagingUsage });
     // Same contract as read(): unmap is best-effort, destroy is guaranteed even when the device is lost.
     let pixels: Uint8Array;
     try {
       const encoder = this.device.createCommandEncoder();
-      encoder.copyTextureToBuffer({ texture }, { buffer: staging, bytesPerRow, rowsPerImage: height }, { width, height });
+      encoder.copyTextureToBuffer({ texture, mipLevel: selection.mipLevel, origin: selection.origin }, { buffer: staging, bytesPerRow, rowsPerImage: height }, { width, height, depthOrArrayLayers: depth });
       this.device.queue.submit([encoder.finish()]);
       await staging.mapAsync(mapReadMode());
       const padded = new Uint8Array(staging.getMappedRange());
-      pixels = new Uint8Array(width * height * bytesPerPixel);
-      for (let y = 0; y < height; y++) {
+      pixels = new Uint8Array(width * height * depth * bytesPerPixel);
+      for (let y = 0; y < height * depth; y++) {
         const src = y * bytesPerRow;
         const dst = y * width * bytesPerPixel;
         pixels.set(padded.subarray(src, src + width * bytesPerPixel), dst);
@@ -157,13 +166,16 @@ function halfToFloat(bits: number): number {
 }
 
 /**
- * Mock-texture equivalent of `readTexture`: mock storage is tightly packed in the texture's own
- * format and holds every layer, so take layer 0 (what `copyTextureToBuffer` copies for a
- * `[width, height]` extent) and apply the same channel swizzle a real copy does.
- * Callers pass an already validated layout, so mock and real devices reject the same formats.
+ * Mock equivalent: crop one mip's tightly packed storage using the same validated selection.
  */
-export function readMockTextureBytes(stored: Uint8Array, size: readonly [number, number, number?], info: TextureReadbackFormatInfo): Uint8Array {
-  const pixels = stored.slice(0, size[0] * size[1] * info.bytesPerPixel);
+function readMockTextureBytes(stored: Uint8Array, selection: ReturnType<typeof textureReadSelection>, info: TextureReadbackFormatInfo): Uint8Array {
+  const { size: [width, height, depth], origin: [x, y, z], extent } = selection;
+  const rowBytes = width * info.bytesPerPixel;
+  const pixels = new Uint8Array(rowBytes * height * depth);
+  for (let layer = 0; layer < depth; layer++) for (let row = 0; row < height; row++) {
+    const src = (((z + layer) * extent[1] + y + row) * extent[0] + x) * info.bytesPerPixel;
+    pixels.set(stored.subarray(src, src + rowBytes), (layer * height + row) * rowBytes);
+  }
   if (info.swizzle === "bgra-to-rgba") swizzleBgraToRgba(pixels);
   return pixels;
 }

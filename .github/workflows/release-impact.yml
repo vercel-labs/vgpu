@@ -1,0 +1,45 @@
+name: Release impact
+
+on:
+  pull_request_target:
+    branches: [canary, main]
+    types: [opened, synchronize, reopened, ready_for_review, closed, edited]
+
+concurrency:
+  # The check is commit-scoped, so all PRs with this head share one serialized evaluation.
+  group: release-impact-${{ github.event.pull_request.head.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  evaluate:
+    # Keep the required check on this execution's Actions suite (see CONTRIBUTING.md).
+    name: release-impact
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout trusted policy
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .release-impact/trusted
+          persist-credentials: false
+      - name: Checkout candidate as data only
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: .release-impact/candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      # Includes strict migration readiness for release PRs, including description-only edits.
+      # The trusted evaluator materializes allowlisted data blobs, never candidate scripts.
+      - name: Validate PR type, release impact and release readiness without executing PR code
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node .release-impact/trusted/scripts/check-release-impact.mjs .release-impact/candidate

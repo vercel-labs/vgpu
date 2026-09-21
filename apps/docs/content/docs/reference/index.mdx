@@ -15,7 +15,7 @@ Browse generated API docs by topic. Every symbol comes from the docs manifest an
 
 ## Packages
 
-{/* Prod (https://vgpu.sh/docs/reference) serves each of these 8 packages as a heading with an
+{/* Prod (https://vgpu.sh/docs/reference) serves each of these 9 packages as a heading with an
     id="<packageSlug>" anchor (apps/docs/app/docs/reference/page.tsx: `<section id={group.packageSlug}>`),
     and the 19 ported `/packages/<pkg>` redirects in lib/docs-redirects.mjs land on exactly those
     fragments (e.g. /packages/vgpu-adapter-node -> /docs/reference#vgpu-adapter-node). The `id` prop
@@ -27,6 +27,12 @@ Browse generated API docs by topic. Every symbol comes from the docs manifest an
     title="vgpu"
     description="Public API: init, Gpu, effect, draw, compute, frame, bundle, target, ping-pong, and uniforms."
     href="/docs/reference/vgpu"
+  />
+  <Card
+    id="vgpu-three"
+    title="vgpu/three"
+    description="Adapters that turn resolved WGSL function exports into callable three.js TSL nodes."
+    href="/docs/reference/vgpu-three"
   />
   <Card
     id="vgpu-scene"

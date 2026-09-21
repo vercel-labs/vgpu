@@ -18,7 +18,6 @@ const legacyVocabulary: Readonly<Record<string, Pick<ExampleMetadata, 'tags' | '
   gradient: { tags: ['gradient', 'rendering'], capabilities: [] },
   'triangle-led-front': { tags: ['animation', 'rendering'], capabilities: ['controls'] },
   'anti-aliasing': { tags: ['anti-aliasing', 'rendering'], capabilities: ['controls', 'multi-pass', 'textures'] },
-  'post-processing': { tags: ['post-processing', 'bloom', 'rendering'], capabilities: ['controls', 'multi-pass', 'textures'] },
   'black-hole': { tags: ['raymarching', 'hdr', 'bloom'], capabilities: ['hdr', 'multi-pass', 'textures'] },
   fluid: { tags: ['fluid', 'compute', 'animation'], capabilities: ['compute', 'controls', 'storage-buffers'] },
   'instanced-rendering': { tags: ['instancing', 'rendering'], capabilities: ['instancing'] },

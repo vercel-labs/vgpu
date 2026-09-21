@@ -1,6 +1,4 @@
-// Background sky: a large sphere centered on the camera, rendered inside-out
-// (cull front). It sits at ~radius depth so the ocean, being closer, overwrites
-// it wherever the water is drawn. Uses the shared sunset model.
+// An inside-out sphere centered on the camera.
 
 import { skyColor } from "./sky.wgsl";
 

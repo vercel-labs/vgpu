@@ -2,8 +2,9 @@ import {
   HeroFloorAoSettings,
   heroFloorAo,
 } from "./hero-fractal-floor-ao.wgsl";
-import { HERO_FLOOR_Y } from "./hero-fractal-sdf.wgsl";
-import { presentCeramic } from "./hero-fractal-ceramic.wgsl";
+import { presentCeramic } from "./hero-fractal-presentation.wgsl";
+
+const HERO_FLOOR_Y = -0.33333333333;
 
 struct Params {
   resolution: vec2f,

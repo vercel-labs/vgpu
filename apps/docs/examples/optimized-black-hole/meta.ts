@@ -1,5 +1,3 @@
-import type { ExampleMetaDefinition } from "../../lib/example-meta";
-
 export const meta = {
   slug: "optimized-black-hole",
   title: "Optimized Black Hole",
@@ -34,4 +32,4 @@ export const meta = {
     "bloom.wgsl",
     "composite.wgsl",
   ],
-} as const satisfies ExampleMetaDefinition;
+} as const;

@@ -1,0 +1,41 @@
+{
+  "name": "@vgpu/native",
+  "version": "0.5.0",
+  "private": false,
+  "description": "Beta build-time WGSL compiler and Swift/Metal package generator for vgpu native tooling.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vercel-labs/vgpu.git",
+    "directory": "packages/native"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "type": "module",
+  "exports": {
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.tsbuildinfo",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -b && node scripts/copy-assets.mjs",
+    "prepack": "node scripts/prepare-distribution.mjs",
+    "test": "vitest run",
+    "test:native": "vitest run --config vitest.native.config.ts"
+  },
+  "dependencies": {
+    "@vgpu/wgsl": "workspace:*",
+    "ajv": "^8.20.0"
+  }
+}

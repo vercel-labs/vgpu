@@ -29,7 +29,7 @@ test("Mesh.capsule validates params and overflow", async () => {
   device.destroy();
 });
 
-test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("capsule primitive snapshot battery matches", async () => {
+test.skipIf(!process.env.VGPU_SNAPSHOT_MODE)("capsule primitive snapshot battery matches", async () => {
   const { device } = await initNode();
   try { await snapshots("capsule", (material, angle) => renderPrimitiveFrame({ device, mesh: Mesh.capsule({ device, radius: 0.3, height: 0.6, radialSegments: 24, heightSegments: 6 }), camera: primitiveCamera(angle), material, baseColor: [0.55, 0.75, 0.4] })); }
   finally { device.destroy(); }

@@ -1,19 +1,14 @@
 export struct Grid {
   size: vec2u,
   dye_size: vec2u,
-  aspect: f32,
-  _pad0: f32,
-  _pad1: vec2f,
 }
 
 export struct Input {
   step: u32,
   pointer_active: f32,
-  _pad0: vec2f,
   pointer_from: vec2f,
   pointer_to: vec2f,
   pointer_velocity: vec2f,
-  _pad1: vec2f,
   pointer_color: vec4f,
   idle_a: vec4f,
   idle_b: vec4f,

@@ -13,11 +13,11 @@ export async function runBundlesExample() {
   const staticScene = bundle(gpu, { target: scene, label: "staticScene" }, (b) => { b.draw(floor); });
 
   frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.bundles(staticScene)));
-  const before = new Uint8Array(await scene.read());
+  const before = new Uint8Array(await scene.color.read({ mipLevel: 0, region: "all" }));
 
   floor.set({ fogDensity: 0.7 });
   frame(gpu, (currentFrame) => currentFrame.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.bundles(staticScene)));
-  const after = new Uint8Array(await scene.read());
+  const after = new Uint8Array(await scene.color.read({ mipLevel: 0, region: "all" }));
 
   return { gpu, target: scene, before, after };
 }

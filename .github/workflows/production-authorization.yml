@@ -1,0 +1,77 @@
+name: Production authorization
+run-name: Production authorization for ${{ github.event.workflow_run.head_sha }}
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+# workflow_run is deliberately privileged while CI remains read-only. The default canary branch is
+# the release control-plane trust boundary: this workflow executes the policy implementation pinned
+# to github.workflow_sha. The main candidate checkout remains data only and is never executed.
+permissions:
+  actions: read
+  checks: read
+  contents: read
+  pull-requests: read
+  statuses: write
+
+# CI runs can finish out of order. Preserve every completion event and let the two live-main checks
+# reject stale candidates instead of canceling a run while it is updating the authorization status.
+concurrency:
+  group: production-authorization-main
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  authorize:
+    name: production-authorization
+    if: >-
+      ${{
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == github.repository
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout the trusted policy revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .production-authorization/trusted
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout the candidate as data only
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          path: .production-authorization/candidate
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: Authorize the production snapshot
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_GRAPHQL_URL: ${{ github.graphql_url }}
+          CI_WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+          CI_WORKFLOW_ID: ${{ github.event.workflow_run.workflow_id }}
+          CI_WORKFLOW_PATH: ${{ github.event.workflow_run.path }}
+          CI_WORKFLOW_EVENT: ${{ github.event.workflow_run.event }}
+          CI_WORKFLOW_STATUS: ${{ github.event.workflow_run.status }}
+          CI_WORKFLOW_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          CI_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          CI_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          CI_HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
+        run: >-
+          node .production-authorization/trusted/scripts/check-production-authorization.mjs
+          .production-authorization/candidate

@@ -1,5 +1,5 @@
 import { applyMarkdownHeaders } from "@vercel/agent-readability";
-import { siteUrl } from "../../../lib/site";
+import { homepageDiscoveryLinkHeader, siteUrl } from "../../../lib/site";
 
 export const revalidate = false;
 
@@ -24,15 +24,17 @@ npx vgpu
 - [Documentation](/docs)
 - [Getting started](/docs/get-started)
 - [CLI reference](/docs/cli)
+- [MCP reference](/docs/mcp)
 - [Interactive examples](/examples)
 - [Examples API reference](/docs/examples-api)
 
-The preferred way to discover and copy examples is \`npx vgpu examples\`. The existing tokenless, read-only examples discovery API is available at [/.well-known/vgpu-examples.json](/.well-known/vgpu-examples.json), with its OpenAPI 3.1 description at [/openapi.json](/openapi.json).
+Agents can connect directly to the hosted, read-only MCP server at [/api/mcp](/api/mcp). The preferred human CLI for discovering and copying examples is \`npx vgpu examples\`. The existing tokenless, read-only examples discovery API is available at [/.well-known/vgpu-examples.json](/.well-known/vgpu-examples.json), with its OpenAPI 3.1 description at [/openapi.json](/openapi.json).
 
 ## Agent resources
 
 - [Agent readiness manifest](/agents.md)
-- [Complete documentation export](/llms.txt)
+- [Agent documentation index](/llms.txt)
+- [Complete documentation export](/llms-full.txt)
 - [Markdown sitemap](/sitemap.md)
 - [XML sitemap](/sitemap.xml)
 
@@ -44,5 +46,6 @@ export function GET(): Response {
     new Headers({ "Content-Type": "text/markdown; charset=utf-8" }),
     { canonicalUrl: siteUrl("/") },
   );
+  headers.append("Link", homepageDiscoveryLinkHeader);
   return new Response(homepageMarkdown, { headers });
 }

@@ -13,7 +13,6 @@ struct Params {
   spotFocus: f32,
   scatter: f32,
   rimFill: f32,
-  lightTheme: f32,
   verticalEdgeFade: f32,
 }
 @group(0) @binding(0) var linearSampler: sampler;
@@ -25,19 +24,6 @@ struct Params {
 
 fn resolveDarkColor(radiance: vec3f) -> vec3f {
   return max(vec3f(0.0), vec3f(1.0) - exp(-radiance * 1.3));
-}
-
-fn resolveLightColor(scene: f32, beamSignal: f32, rimSignal: f32) -> vec3f {
-  // Target the HTML N's #006bff at 45% opacity. The stronger pre-rim ink
-  // compensates for the white-core resolve that follows.
-  let logoInk = clamp(scene * params.logoOpacity * 0.7, 0.0, 1.0);
-  let base = mix(vec3f(0.975), params.flareColor, logoInk);
-  let beamCoverage = clamp((1.0 - exp(-beamSignal * 1.3)) * 0.72, 0.0, 1.0);
-  let blueBeam = mix(base, params.flareColor, beamCoverage);
-  // White light cannot add over white, so the hot rim removes blue ink where
-  // the rim and beam overlap: white core, blue volumetric falloff.
-  let whiteCore = clamp((1.0 - exp(-rimSignal * 1.6)) * 0.94, 0.0, 1.0);
-  return mix(blueBeam, vec3f(0.995), whiteCore);
 }
 
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
@@ -60,7 +46,9 @@ fn resolveLightColor(scene: f32, beamSignal: f32, rimSignal: f32) -> vec3f {
   var rimRays = 0.0;
   for (var i = 0; i < 48; i++) {
     coordinate -= delta;
-    rimRays += mix(textureSample(rimTexture, linearSampler, coordinate).r, textureSample(rimBlurTexture, linearSampler, coordinate).r, params.smoothness) * illumination;
+    let sharpRay = textureSample(rimTexture, linearSampler, coordinate).r;
+    let blurredRay = textureSample(rimBlurTexture, linearSampler, coordinate).r;
+    rimRays += mix(sharpRay, blurredRay, params.smoothness) * illumination;
     illuminationSum += illumination;
     illumination *= decay;
   }
@@ -75,27 +63,22 @@ fn resolveLightColor(scene: f32, beamSignal: f32, rimSignal: f32) -> vec3f {
   let spot = max(rimSample, rimBlur * 0.85 * params.rimFill) * (1.0 + halo * 1.5);
   let scatterSignal = rimRays * params.beamIntensity * params.scatter;
 
-  // Dark keeps the original colored additive-light model.
-  var darkRadiance = params.flareColor * haloLine;
-  darkRadiance += vec3f(scene) * params.logoOpacity * 0.22;
-  darkRadiance += mix(vec3f(1.0), params.flareColor, 0.5) * spot * params.rimIntensity;
-  darkRadiance += params.flareColor * spot * 0.4 * params.rimIntensity;
-  darkRadiance += params.flareColor * scatterSignal;
+  var radiance = params.flareColor * haloLine;
+  radiance += vec3f(scene) * params.logoOpacity * 0.22;
+  radiance += mix(vec3f(1.0), params.flareColor, 0.5) * spot * params.rimIntensity;
+  radiance += params.flareColor * spot * 0.4 * params.rimIntensity;
+  radiance += params.flareColor * scatterSignal;
 
   let radialMask = smoothstep(1.35, 0.25, length((uv - params.logoCenter) * params.aspect));
-  let darkColor = resolveDarkColor(darkRadiance * radialMask);
-  // Light separates blue volume from a white-hot rim that eats blue ink.
+  let color = resolveDarkColor(radiance * radialMask);
   let beamSignal = scatterSignal * radialMask;
-  let rimSignal = (haloLine + spot * params.rimIntensity * 1.4) * radialMask;
-  let lightColor = resolveLightColor(scene, beamSignal, rimSignal);
-  let color = mix(darkColor, lightColor, params.lightTheme);
-  let background = vec3f(mix(0.0, 0.975, params.lightTheme));
   let verticalFadeWidth = max(params.verticalEdgeFade, 0.0001);
   let horizontalFadeWidth = verticalFadeWidth * params.aspect.y / max(params.aspect.x, 0.0001);
   let verticalEdgeMask = smoothstep(0.0, verticalFadeWidth, uv.y) * smoothstep(0.0, verticalFadeWidth, 1.0 - uv.y);
-  let horizontalEdgeMask = smoothstep(0.0, horizontalFadeWidth, uv.x) * smoothstep(0.0, horizontalFadeWidth, 1.0 - uv.x);
+  let horizontalEdgeMask = smoothstep(0.0, horizontalFadeWidth, uv.x) *
+    smoothstep(0.0, horizontalFadeWidth, 1.0 - uv.x);
   let edgeMask = verticalEdgeMask * horizontalEdgeMask;
-  let composed = mix(background, color, edgeMask);
+  let composed = mix(vec3f(0.0), color, edgeMask);
 
   // A decorrelated blue-noise layer masks sparse ray-march structure only in
   // dim and mid scattering, leaving the logo and flat background untouched.
@@ -105,7 +88,7 @@ fn resolveLightColor(scene: f32, beamSignal: f32, rimSignal: f32) -> vec3f {
   let grain = (fract(grainSample + f32(params.frameIndex) * 0.61803398875 + 0.38196601125) - 0.5) * 2.0;
   let beamGate = smoothstep(0.003, 0.05, beamSignal) * (1.0 - smoothstep(0.4, 1.0, beamSignal));
   let logoCoverage = max(scene, max(rimSample, rimBlur));
-  let grainMask = beamGate * (1.0 - smoothstep(0.02, 0.3, logoCoverage)) * edgeMask * (1.0 - params.lightTheme);
+  let grainMask = beamGate * (1.0 - smoothstep(0.02, 0.3, logoCoverage)) * edgeMask;
   let grained = clamp(composed + vec3f(grain * params.filmGrain * grainMask), vec3f(0.0), vec3f(1.0));
   return vec4f(grained, 1.0);
 }

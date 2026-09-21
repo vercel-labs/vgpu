@@ -1,19 +1,127 @@
-import type { Gpu, Surface } from 'vgpu';
-import { frame, surface } from 'vgpu';
+import { frame, surface } from "vgpu";
+import type { Gpu, Surface } from "vgpu";
 
-import type { BrowserRendererOptions, ExampleRenderer, RenderSize } from '../../lib/example-renderer';
-import { createRenderScheduler, installDragOrbit, type Orbit } from './pointer-input';
-import { createEffects, createTargets, destroyTargets, POSTER, prewarm, renderChain, resizeTargets, setBindings, setConstants, type FractalEffects, type FractalTargets } from './pipeline';
+import { createRenderScheduler, installDragOrbit } from "./pointer-input";
+import { runAll } from "./lifecycle";
+import {
+  compileScene,
+  createScene,
+  POSTER,
+  renderScene,
+  replaceTargets,
+  type FractalScene,
+  type Orbit,
+} from "./pipeline";
 
-export function createRenderer(options: BrowserRendererOptions): ExampleRenderer {
-  let disposed = false; let reportedError = false; let gpu: Gpu | undefined; let canvasSurface: Surface | undefined; let effects: FractalEffects | undefined; let targets: FractalTargets | undefined; let scheduler: ReturnType<typeof createRenderScheduler> | undefined; let disposeInput: (() => void) | undefined; let observer: ResizeObserver | undefined; let resizeFrame = 0; let pendingSize: RenderSize | undefined; let lastDpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio; const orbit: Orbit = { ...POSTER };
-  const renderOnce = () => { if (disposed || !gpu || !canvasSurface || !effects || !targets) return; effects.scene.set({ params: orbit }); frame(gpu, (currentFrame) => renderChain(currentFrame, effects!, targets!, canvasSurface!)); };
-  const applyResize = () => { resizeFrame = 0; const size = pendingSize; pendingSize = undefined; if (disposed || !size || !targets || !effects) return; resizeTargets(targets, [Math.max(1, Math.round(size.width * size.dpr)), Math.max(1, Math.round(size.height * size.dpr))]); setBindings(effects, targets); scheduler?.request(); };
-  const resize = (size: RenderSize) => { if (disposed || size.width <= 0 || size.height <= 0) return; pendingSize = size; if (!resizeFrame) resizeFrame = requestAnimationFrame(applyResize); };
-  const measure = () => { const rect = options.canvas.getBoundingClientRect(); resize({ width: rect.width, height: rect.height, dpr: Math.min(1.6, Math.max(1, window.devicePixelRatio || 1)) }); };
-  const onWindowResize = () => { if (window.devicePixelRatio === lastDpr) return; lastDpr = window.devicePixelRatio; measure(); };
-  function dispose() { if (disposed) return; disposed = true; scheduler?.dispose(); scheduler = undefined; if (resizeFrame) cancelAnimationFrame(resizeFrame); resizeFrame = 0; pendingSize = undefined; observer?.disconnect(); observer = undefined; if (typeof window !== 'undefined') window.removeEventListener('resize', onWindowResize); disposeInput?.(); disposeInput = undefined; if (targets) destroyTargets(targets); targets = undefined; effects = undefined; canvasSurface?.dispose(); canvasSurface = undefined; gpu?.dispose(); gpu = undefined; }
-  const initialize = async () => { const { init } = await import('vgpu'); if (disposed) return; const nextGpu = await init(); if (disposed) { nextGpu.dispose(); return; } gpu = nextGpu; canvasSurface = surface(gpu, options.canvas, { dpr: [1, 1.6] }); effects = createEffects(gpu, 'raymarched-fractal-live'); targets = createTargets(gpu, canvasSurface.size, 'raymarched-fractal-live'); setConstants(effects); setBindings(effects, targets); await prewarm(effects, targets, canvasSurface); if (disposed) return; scheduler = createRenderScheduler(renderOnce); disposeInput = installDragOrbit(options.canvas, orbit, scheduler.request); observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure); observer?.observe(options.canvas); window.addEventListener('resize', onWindowResize); measure(); scheduler.request(); };
-  const ready = initialize().catch((error: unknown) => { if (disposed) return; if (!reportedError) { reportedError = true; options.onError?.(error); } dispose(); throw error; });
-  return { ready, invalidate: () => scheduler?.request(), resize, dispose };
+interface RendererOptions {
+  readonly canvas: HTMLCanvasElement;
+}
+
+export function createRenderer({ canvas }: RendererOptions) {
+  let disposed = false;
+  let failed = false;
+  let gpu: Gpu | undefined;
+  let output: Surface | undefined;
+  let scene: FractalScene | undefined;
+  let scheduler: ReturnType<typeof createRenderScheduler> | undefined;
+  let disposeInput: (() => void) | undefined;
+  let observer: ResizeObserver | undefined;
+  let lastDpr = typeof window === "undefined" ? 1 : window.devicePixelRatio;
+  const orbit: Orbit = { ...POSTER };
+
+  function dispose(): void {
+    if (disposed) return;
+    disposed = true;
+    runAll([
+      () => scheduler?.dispose(),
+      () => observer?.disconnect(),
+      () => {
+        if (typeof window !== "undefined") {
+          window.removeEventListener("resize", onWindowResize);
+        }
+      },
+      () => disposeInput?.(),
+      () => gpu?.dispose(),
+    ]);
+  }
+
+  function fail(error: unknown): never {
+    failed = true;
+    try {
+      dispose();
+    } catch {
+      // Teardown must not replace the live failure.
+    }
+    throw error;
+  }
+
+  function guard<T>(action: () => T): T {
+    try {
+      return action();
+    } catch (error) {
+      return fail(error);
+    }
+  }
+
+  const requestRender = () => guard(() => scheduler?.request());
+
+  const renderOnce = () => {
+    if (disposed || !gpu || !output || !scene) return;
+    const currentGpu = gpu;
+    const currentOutput = output;
+    const currentScene = scene;
+    guard(() =>
+      frame(currentGpu, (currentFrame) => {
+        const renderedSize = currentScene.targets.scene.size;
+        const outputSize = currentOutput.size;
+        if (
+          renderedSize[0] !== outputSize[0] ||
+          renderedSize[1] !== outputSize[1]
+        ) {
+          replaceTargets(currentGpu, currentScene, outputSize);
+        }
+        renderScene(currentFrame, currentScene, currentOutput, orbit);
+      })
+    );
+  };
+
+  const onWindowResize = () =>
+    guard(() => {
+      if (window.devicePixelRatio === lastDpr) return;
+      lastDpr = window.devicePixelRatio;
+      scheduler?.request();
+    });
+
+  const initialize = async () => {
+    const { init } = await import("vgpu");
+    if (disposed) return;
+    const nextGpu = await init();
+    if (disposed) {
+      nextGpu.dispose();
+      return;
+    }
+
+    gpu = nextGpu;
+    output = surface(gpu, canvas, { dpr: [1, 1.6] });
+    scene = createScene(gpu, output.size);
+    await compileScene(scene, output);
+    if (disposed) return;
+
+    scheduler = createRenderScheduler(renderOnce);
+    disposeInput = installDragOrbit(canvas, orbit, requestRender, fail);
+    observer =
+      typeof ResizeObserver === "undefined"
+        ? undefined
+        : new ResizeObserver(requestRender);
+    observer?.observe(canvas);
+    window.addEventListener("resize", onWindowResize);
+    scheduler.request();
+  };
+
+  const ready = initialize().catch((error: unknown) => {
+    if (disposed && !failed) return;
+    return fail(error);
+  });
+
+  return { ready, invalidate: requestRender, dispose };
 }

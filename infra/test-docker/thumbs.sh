@@ -45,7 +45,7 @@ trap cleanup EXIT INT TERM
 cleanup
 
 DOCKER_OUTPUT_ARGS=()
-for output_var in VGPU_AA_MODE_OUTPUT_DIR VGPU_POST_PROCESSING_MODE_OUTPUT_DIR VGPU_BLACK_HOLE_VARIANT_OUTPUT_DIR VGPU_RAYMARCHED_FRACTAL_VARIANT_OUTPUT_DIR VGPU_FFT_OCEAN_VARIANT_OUTPUT_DIR; do
+for output_var in VGPU_AA_MODE_OUTPUT_DIR VGPU_BLACK_HOLE_VARIANT_OUTPUT_DIR VGPU_RAYMARCHED_FRACTAL_VARIANT_OUTPUT_DIR VGPU_FFT_OCEAN_VARIANT_OUTPUT_DIR; do
   output_dir=${!output_var:-}
   if [ -n "$output_dir" ]; then
     mkdir -p "$output_dir"
@@ -63,4 +63,4 @@ docker run \
   --label vgpu-test=1 \
   -v "$ROOT_DIR/apps/docs/public/examples:/workspace/apps/docs/public/examples" \
   "$IMAGE_TAG" \
-  sh -lc "Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & xvfb_pid=\$!; VGPU_DOCKER_TEST=1 pnpm --filter docs ${THUMBS_SCRIPT}${ARGS_QUOTED}; status=\$?; kill \$xvfb_pid; exit \$status"
+  sh -lc "VGPU_DOCKER_TEST=1 pnpm --filter docs ${THUMBS_SCRIPT}${ARGS_QUOTED}"

@@ -1,5 +1,3 @@
-import type { ExampleMetaDefinition } from "../../lib/example-meta";
-
 export const meta = {
   slug: "glass-fractal",
   title: "Glass Fractal",
@@ -31,13 +29,11 @@ export const meta = {
     "hero-glass-assets-core.ts",
     "hero-debug-axes.wgsl",
     "hero-fractal-background-draw.wgsl",
-    "hero-fractal-ceramic.wgsl",
+    "hero-fractal-presentation.wgsl",
     "hero-fractal-face-instance.wgsl",
     "hero-fractal-floor-ao.wgsl",
-    "hero-fractal-light.wgsl",
     "hero-fractal-mesh.wgsl",
     "hero-fractal-present.wgsl",
-    "hero-fractal-sdf.wgsl",
     "hero-fractal-wireframe.wgsl",
     "hero-glass-environment-debug.wgsl",
     "hero-glass-environment.wgsl",
@@ -45,4 +41,4 @@ export const meta = {
     "hero-glass-wireframe.wgsl",
     "hero-glass.wgsl",
   ],
-} as const satisfies ExampleMetaDefinition;
+} as const;

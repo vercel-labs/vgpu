@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { createInferencePump } from './inference-pump';
+import { describe, expect, it } from "vitest";
+import { createInferencePump } from "./scheduling";
 
 /**
  * Deterministic clock and timer queue. The pump takes both as options precisely
@@ -68,8 +68,8 @@ function harness(options: { minIntervalMs?: number } = {}) {
   };
 }
 
-describe('createInferencePump', () => {
-  it('runs a single request', async () => {
+describe("createInferencePump", () => {
+  it("runs a single request", async () => {
     const h = harness();
     h.pump.request();
     expect(h.started).toBe(1);
@@ -78,7 +78,7 @@ describe('createInferencePump', () => {
     expect(h.started).toBe(1);
   });
 
-  it('never overlaps runs', async () => {
+  it("never overlaps runs", async () => {
     const h = harness();
     h.pump.request();
     h.pump.request();
@@ -87,7 +87,7 @@ describe('createInferencePump', () => {
     expect(h.started).toBe(1);
   });
 
-  it('coalesces requests made during a run into exactly one follow-up', async () => {
+  it("coalesces requests made during a run into exactly one follow-up", async () => {
     const h = harness();
     h.pump.request();
     h.pump.request();
@@ -99,7 +99,7 @@ describe('createInferencePump', () => {
     expect(h.started).toBe(2);
   });
 
-  it('waits out the minimum interval before the next run', async () => {
+  it("waits out the minimum interval before the next run", async () => {
     const h = harness({ minIntervalMs: 500 });
     h.pump.request();
     expect(h.started).toBe(1);
@@ -113,7 +113,7 @@ describe('createInferencePump', () => {
     expect(h.started).toBe(2);
   });
 
-  it('keeps running in continuous mode without further requests', async () => {
+  it("keeps running in continuous mode without further requests", async () => {
     const h = harness();
     h.pump.startContinuous();
     expect(h.started).toBe(1);
@@ -126,7 +126,7 @@ describe('createInferencePump', () => {
     expect(h.started).toBe(3);
   });
 
-  it('pauses while a session is replaced and resumes inference on the new session', async () => {
+  it("pauses while a session is replaced and resumes inference on the new session", async () => {
     const h = harness();
     h.pump.request();
     const active = h.pump.pause();
@@ -140,7 +140,7 @@ describe('createInferencePump', () => {
     expect(h.started).toBe(2);
   });
 
-  it('stops scheduling after stop() and hands back the in-flight run', async () => {
+  it("stops scheduling after stop() and hands back the in-flight run", async () => {
     const h = harness();
     h.pump.startContinuous();
     const active = h.pump.stop();
@@ -151,7 +151,7 @@ describe('createInferencePump', () => {
     expect(h.started).toBe(1);
   });
 
-  it('reports the first failure once and then stays down', async () => {
+  it("reports the first failure once and then stays down", async () => {
     const errors: unknown[] = [];
     let started = 0;
     const pump = createInferencePump({
@@ -165,7 +165,7 @@ describe('createInferencePump', () => {
       onError: (error) => errors.push(error),
       run: () => {
         started += 1;
-        return Promise.reject(new Error('inference exploded'));
+        return Promise.reject(new Error("inference exploded"));
       },
     });
 
@@ -175,7 +175,7 @@ describe('createInferencePump', () => {
     await Promise.resolve();
 
     expect(errors).toHaveLength(1);
-    expect((errors[0] as Error).message).toBe('inference exploded');
+    expect((errors[0] as Error).message).toBe("inference exploded");
     // A pump that retried a broken run every interval would bury the error and
     // pin the GPU, so one failure is terminal.
     expect(started).toBe(1);

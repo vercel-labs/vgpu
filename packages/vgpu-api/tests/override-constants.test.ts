@@ -134,8 +134,8 @@ test("an override without a default must be provided", async () => {
 test("compute constants reach the compute stage; @id keys and omission behave like draws", async () => {
   const gpu = await init();
 
-  compute(gpu, COMPUTE_WGSL, { label: "sim", constants: { STEP: 0.5, "3": 4 } });
-  compute(gpu, COMPUTE_WGSL, { label: "sim-absent" });
+  compute(gpu, COMPUTE_WGSL, { label: "sim", constants: { STEP: 0.5, "3": 4 } }).compileSync();
+  compute(gpu, COMPUTE_WGSL, { label: "sim-absent" }).compileSync();
 
   const descs = getMockGPUDeviceInstrumentation(gpu.device.gpu).createComputePipelineDescriptors;
   expect(descs.at(-2)?.compute.constants).toEqual({ STEP: 0.5, "3": 4 });

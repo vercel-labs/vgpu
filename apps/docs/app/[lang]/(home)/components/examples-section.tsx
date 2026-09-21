@@ -35,6 +35,7 @@ export function ExamplesSection() {
         <DynamicLink
           href="/[lang]/examples"
           className="text-sm text-gray-900 transition-colors hover:text-gray-1000"
+          prefetch={false}
         >
           View all →
         </DynamicLink>

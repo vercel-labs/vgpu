@@ -5,7 +5,7 @@ export function AgentCommandSection() {
     <section aria-labelledby="agent-command-heading" className="mb-36">
       <div className="mb-12 flex flex-col items-center text-center sm:mb-14">
         <h2
-          className="text-pretty text-4xl font-normal leading-tight tracking-[-0.045em] text-gray-1000 sm:text-5xl"
+          className="text-pretty text-3xl font-normal leading-[1.05] tracking-[-0.045em] text-gray-1000 sm:text-5xl sm:leading-tight"
           id="agent-command-heading"
         >
           The CLI guides your agent.

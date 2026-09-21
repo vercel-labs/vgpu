@@ -55,7 +55,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
         p.draw(player);
       }));
 
-      const pixels = await scene.read();
+      const pixels = await scene.color.read({ mipLevel: 0, region: "all" });
       const left = rgbaAt(pixels, 8, 2, 4);
       const right = rgbaAt(pixels, 8, 6, 4);
       expect(left[1]).toBeGreaterThan(200);
@@ -124,7 +124,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
         for (const offset of offsets) p.draw(cube, { offsets: { 1: [offset] } });
       }));
 
-      const pixel = rgbaAt(await colorTarget.read(), 4, 2, 2);
+      const pixel = rgbaAt(await colorTarget.color.read({ mipLevel: 0, region: "all" }), 4, 2, 2);
       expect(pixel[0]).toBeGreaterThan(240);
     } finally {
       gpu.dispose();
@@ -150,7 +150,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
       frame(gpu, (f) => f.pass({ target: write }, (p) => p.bundles(odd)));
       [read, write] = [write, read];
 
-      const pixel = rgbaAt(await read.read(), 4, 2, 2);
+      const pixel = rgbaAt(await read.color.read({ mipLevel: 0, region: "all" }), 4, 2, 2);
       expect(pixel[1]).toBeGreaterThan(200);
     } finally {
       gpu.dispose();

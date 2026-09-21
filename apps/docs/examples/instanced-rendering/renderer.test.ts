@@ -1,50 +1,506 @@
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, expect, test, vi } from 'vitest';
-const vgpuFns = vi.hoisted(() => Object.fromEntries(
-  ['surface', 'target', 'effect', 'draw', 'geometry', 'sampler', 'bundle', 'compute', 'storage', 'uniforms', 'timer', 'visibility', 'pingPong', 'pingPongStorage', 'frame', 'frameLoop']
-    // Each test's gpu double carries its factory fakes in `fns`; these route the free functions to them.
-    .map((name) => [name, (gpu: any, ...args: any[]) => gpu.fns[name](...args)]),
-)) as Record<string, unknown>;
-const mocks=vi.hoisted(()=>({init:vi.fn()}));vi.mock('vgpu', () => ({ init: mocks.init, ...vgpuFns, clock: (gpu: any) => gpu.clock ?? { time: 0, deltaTime: 0, frameCount: 0, advance() {} } }));vi.mock('vgpu/scene',()=>({perspectiveCamera:()=>({viewProjection:new Float32Array(16)})}));
-import { Controls } from './controls'; import { renderThumbnail } from './render-thumbnail'; import { createRenderer } from './renderer'; import { DEFAULT_INSTANCED_RENDERING_CONTROLS } from './types';
-function deferred(){let resolve!:()=>void,reject!:(error:unknown)=>void;const promise=new Promise<void>((r,j)=>{resolve=r;reject=j;});return{promise,resolve,reject};}
-afterEach(()=>{vi.unstubAllGlobals();vi.clearAllMocks();});
-test('shares 50 cubed default with accessible count select',()=>{const html=renderToStaticMarkup(createElement(Controls, { value: DEFAULT_INSTANCED_RENDERING_CONTROLS, onChange: () => {} }));expect(DEFAULT_INSTANCED_RENDERING_CONTROLS.count).toBe(50);expect(html).toContain('aria-label="Instance count (1M is an opt-in stress test)"');expect(html).toContain('value="50" selected');});
-test('destroys a stale async rebuild and retains the newest completion',async()=>{vi.stubGlobal('window',{devicePixelRatio:1,addEventListener:vi.fn(),removeEventListener:vi.fn()});vi.stubGlobal('requestAnimationFrame',vi.fn(()=>1));vi.stubGlobal('cancelAnimationFrame',vi.fn());vi.stubGlobal('ResizeObserver',class{observe=vi.fn();disconnect=vi.fn();});const waits=[deferred(),deferred(),deferred()];const geometries=waits.map(()=>({destroy:vi.fn()}));let i=0;const gpu={time:0,dispose:vi.fn(), fns: {surface:()=>({size:[100,50],format:'bgra8unorm',dispose:vi.fn()}),target:()=>({size:[100,50],format:'rgba8unorm',resize:vi.fn(),destroy:vi.fn()}),effect:()=>({set:vi.fn(),compile:vi.fn(async()=>{})}),sampler:()=>({}),geometry:()=>geometries[i],draw:()=>({set:vi.fn(),compile:()=>waits[i++].promise}),bundle:()=>({}), frameLoop: vi.fn(()=>({stop:vi.fn()})) }};mocks.init.mockResolvedValueOnce(gpu);const r=createRenderer({canvas:{getBoundingClientRect:()=>({width:100,height:50})} as HTMLCanvasElement});await vi.waitFor(()=>expect(i).toBe(1));waits[0].resolve();await r.ready;r.setControls?.({count:100});await vi.waitFor(()=>expect(i).toBe(2));r.setControls?.({count:50}); // same as initial is accepted because requested state is 100
-await vi.waitFor(()=>expect(i).toBe(3));waits[2].resolve();await Promise.resolve();waits[1].resolve();await vi.waitFor(()=>expect(geometries[1].destroy).toHaveBeenCalledOnce());expect(geometries[2].destroy).not.toHaveBeenCalled();r.dispose();expect(geometries[2].destroy).toHaveBeenCalledOnce();});
+import { afterEach, expect, test, vi } from "vitest";
 
-test('queues an early control change and installs lifecycle around the latest scene',async()=>{
- vi.stubGlobal('window',{devicePixelRatio:1,addEventListener:vi.fn(),removeEventListener:vi.fn()});vi.stubGlobal('requestAnimationFrame',vi.fn(()=>1));vi.stubGlobal('cancelAnimationFrame',vi.fn());
- const observe=vi.fn(),disconnect=vi.fn(),resizeObserver=vi.fn(function(this: {observe:typeof observe;disconnect:typeof disconnect}){this.observe=observe;this.disconnect=disconnect;});vi.stubGlobal('ResizeObserver',resizeObserver);
- const waits=[deferred(),deferred()];const geometries=waits.map(()=>({destroy:vi.fn()}));let compilation=0;
- const geometryLabels:string[]=[];const geometry=vi.fn((options:{label:string})=>{geometryLabels.push(options.label);return geometries[compilation];});const loop=vi.fn(()=>({stop:vi.fn()}));
- const gpu={time:0,dispose:vi.fn(), fns: {surface:()=>({size:[100,50],format:'bgra8unorm',dispose:vi.fn()}),target:()=>({size:[100,50],format:'rgba8unorm',resize:vi.fn(),destroy:vi.fn()}),effect:()=>({set:vi.fn(),compile:vi.fn(async()=>{})}),sampler:()=>({}),geometry,draw:()=>({set:vi.fn(),compile:()=>waits[compilation++].promise}),bundle:()=>({}),frameLoop: loop }};
- mocks.init.mockResolvedValueOnce(gpu);const renderer=createRenderer({canvas:{getBoundingClientRect:()=>({width:100,height:50})} as HTMLCanvasElement});await vi.waitFor(()=>expect(compilation).toBe(1));renderer.setControls?.({count:100});waits[0].resolve();await vi.waitFor(()=>expect(compilation).toBe(2));expect(loop).not.toHaveBeenCalled();waits[1].resolve();await renderer.ready;
- expect(geometries[0].destroy).toHaveBeenCalledOnce();expect(geometryLabels[1]).toBe('instanced-cubes-100');expect(loop).toHaveBeenCalledOnce();expect(resizeObserver).toHaveBeenCalledOnce();expect(observe).toHaveBeenCalledOnce();renderer.dispose();expect(geometries[1].destroy).toHaveBeenCalledOnce();
+const guiHarness = vi.hoisted(() => {
+  const instances: Array<{
+    options: unknown;
+    domElement: { style: Record<string, string> };
+    destroy: ReturnType<typeof vi.fn>;
+    model?: Record<string, unknown>;
+    property?: string;
+    choices?: Record<string, number>;
+    label?: string;
+    change?: (value: unknown) => unknown;
+  }> = [];
+  const state: { constructorFailure?: unknown; addFailure?: unknown } = {};
+
+  class FakeGui {
+    options: unknown;
+    domElement = { style: {} as Record<string, string> };
+    destroy = vi.fn();
+    model?: Record<string, unknown>;
+    property?: string;
+    choices?: Record<string, number>;
+    label?: string;
+    change?: (value: unknown) => unknown;
+
+    constructor(options: unknown) {
+      if (state.constructorFailure) throw state.constructorFailure;
+      this.options = options;
+      instances.push(this);
+    }
+
+    add(
+      model: Record<string, unknown>,
+      property: string,
+      choices: Record<string, number>
+    ) {
+      this.model = model;
+      this.property = property;
+      this.choices = choices;
+      if (state.addFailure) throw state.addFailure;
+      const controller = {
+        name: (label: string) => {
+          this.label = label;
+          return controller;
+        },
+        onChange: (change: (value: unknown) => unknown) => {
+          this.change = change;
+          return controller;
+        },
+      };
+      return controller;
+    }
+  }
+
+  return { FakeGui, instances, state };
 });
 
-test('rejects the original init error, reports once, and tears down even when onError throws',async()=>{
- vi.stubGlobal('window',{devicePixelRatio:1,addEventListener:vi.fn(),removeEventListener:vi.fn()});const failure=new Error('init failed');mocks.init.mockRejectedValueOnce(failure);const onError=vi.fn(()=>{throw new Error('callback failed');});const renderer=createRenderer({canvas:{} as HTMLCanvasElement,onError});await expect(renderer.ready).rejects.toBe(failure);expect(onError).toHaveBeenCalledOnce();renderer.setControls?.({count:100});expect(onError).toHaveBeenCalledOnce();
+const pipeline = vi.hoisted(() => ({
+  createBlit: vi.fn(),
+  createScene: vi.fn(),
+  renderScene: vi.fn(),
+}));
+
+const vgpu = vi.hoisted(() => ({ init: vi.fn() }));
+
+vi.mock("lil-gui", () => ({ default: guiHarness.FakeGui }));
+vi.mock("./scene-pipeline", () => ({
+  createBlit: pipeline.createBlit,
+  createScene: pipeline.createScene,
+  renderScene: pipeline.renderScene,
+  DEFAULT_INSTANCE_COUNT: 50,
+  INSTANCE_COUNT_OPTIONS: {
+    "50³ (125k)": 50,
+    "100³ (1M — stress test)": 100,
+  },
+  isInstanceCount: (value: number) => value === 50 || value === 100,
+}));
+vi.mock("vgpu", () => ({
+  init: vgpu.init,
+  clock: (gpu: TestGpu) => gpu.clock,
+  frameLoop: (gpu: TestGpu, callback: (frame: unknown) => void) =>
+    gpu.fns.frameLoop(callback),
+  surface: (gpu: TestGpu, canvas: HTMLCanvasElement, options: unknown) =>
+    gpu.fns.surface(canvas, options),
+  target: (gpu: TestGpu, options: { size: readonly [number, number] }) =>
+    gpu.fns.target(options),
+}));
+
+import { createRenderer } from "./renderer";
+
+interface TestSurface {
+  size: readonly [number, number];
+  format: string;
+  onResize(
+    callback: (size: { width: number; height: number }) => unknown
+  ): () => void;
+}
+
+interface TestTarget {
+  size: readonly [number, number];
+  format: string;
+  destroy: ReturnType<typeof vi.fn<() => void>>;
+}
+
+type MakeSurface = (canvas: HTMLCanvasElement, options: unknown) => TestSurface;
+type MakeTarget = (options: { size: readonly [number, number] }) => TestTarget;
+type StartLoop = (callback: (frame: unknown) => void) => { stop(): void };
+
+interface TestGpu {
+  clock: { time: number };
+  dispose: ReturnType<typeof vi.fn>;
+  fns: {
+    frameLoop: ReturnType<typeof vi.fn<StartLoop>>;
+    surface: ReturnType<typeof vi.fn<MakeSurface>>;
+    target: ReturnType<typeof vi.fn<MakeTarget>>;
+  };
+}
+
+interface TestScene {
+  id: string;
+  geometry: { destroy: ReturnType<typeof vi.fn> };
+  draw: object;
+  bundle: object;
+  extent: number;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+function makeScene(id: string): TestScene {
+  return {
+    id,
+    geometry: { destroy: vi.fn() },
+    draw: {},
+    bundle: {},
+    extent: 32,
+  };
+}
+
+function setup() {
+  const container = {} as HTMLElement;
+  const canvas = { parentElement: container } as HTMLCanvasElement;
+  const targets: Array<{
+    size: readonly [number, number];
+    format: string;
+    destroy: ReturnType<typeof vi.fn>;
+  }> = [];
+  const blits: Array<{
+    source: unknown;
+    compile: ReturnType<typeof vi.fn>;
+  }> = [];
+  const scenes: TestScene[] = [];
+  let resize:
+    | ((size: { width: number; height: number }) => unknown)
+    | undefined;
+  let frameCallback: ((frame: unknown) => void) | undefined;
+
+  const unsubscribe = vi.fn();
+  const stop = vi.fn();
+  const output = {
+    size: [100, 50] as const,
+    format: "bgra8unorm",
+    onResize: vi.fn((callback: typeof resize) => {
+      resize = callback;
+      return unsubscribe;
+    }),
+  };
+  const gpu: TestGpu = {
+    clock: { time: 2.4 },
+    dispose: vi.fn(),
+    fns: {
+      surface: vi.fn<MakeSurface>(() => output),
+      target: vi.fn<MakeTarget>((options) => {
+        const next = {
+          size: options.size,
+          format: "rgba8unorm",
+          destroy: vi.fn<() => void>(),
+        };
+        targets.push(next);
+        return next;
+      }),
+      frameLoop: vi.fn<StartLoop>((callback) => {
+        frameCallback = callback;
+        return { stop };
+      }),
+    },
+  };
+
+  pipeline.createScene.mockImplementation(
+    async (_gpu: unknown, _target: unknown, count: number) => {
+      const next = makeScene(`scene-${count}-${scenes.length}`);
+      next.extent = count * 0.64;
+      scenes.push(next);
+      return next;
+    }
+  );
+  pipeline.createBlit.mockImplementation((_gpu: unknown, source: unknown) => {
+    const next = { source, compile: vi.fn(async () => {}) };
+    blits.push(next);
+    return next;
+  });
+  vgpu.init.mockResolvedValue(gpu);
+
+  return {
+    blits,
+    canvas,
+    container,
+    gpu,
+    output,
+    scenes,
+    stop,
+    targets,
+    unsubscribe,
+    emitResize: (width: number, height: number) => resize?.({ width, height }),
+    renderFrame: () => frameCallback?.({ id: "frame" }),
+  };
+}
+
+afterEach(() => {
+  guiHarness.instances.length = 0;
+  guiHarness.state.constructorFailure = undefined;
+  guiHarness.state.addFailure = undefined;
+  pipeline.createBlit.mockReset();
+  pipeline.createScene.mockReset();
+  pipeline.renderScene.mockReset();
+  vgpu.init.mockReset();
 });
 
+test("mounts a container-scoped GUI with the exact default and stress choices", async () => {
+  const env = setup();
+  const renderer = createRenderer({
+    canvas: env.canvas,
+    container: env.container,
+  });
+  await renderer.ready;
 
-test('cancellation fulfills silently without reporting an error',async()=>{vi.stubGlobal('window',{devicePixelRatio:1,addEventListener:vi.fn(),removeEventListener:vi.fn()});const onError=vi.fn();const renderer=createRenderer({canvas:{} as HTMLCanvasElement,onError});renderer.dispose();await expect(renderer.ready).resolves.toBeUndefined();expect(onError).not.toHaveBeenCalled();});
+  const gui = guiHarness.instances[0]!;
+  expect(gui.options).toEqual({
+    title: "Instanced Rendering",
+    container: env.container,
+    width: 210,
+  });
+  expect(gui.model).toEqual({ count: 50 });
+  expect(gui.property).toBe("count");
+  expect(gui.choices).toEqual({
+    "50³ (125k)": 50,
+    "100³ (1M — stress test)": 100,
+  });
+  expect(gui.label).toBe("Instances");
+  expect(pipeline.createScene).toHaveBeenCalledWith(
+    env.gpu,
+    env.targets[0],
+    50
+  );
 
-test('thumbnail compilation failure waits for submitted work and releases target and partial scene',async()=>{const failure=new Error('compile failed'),destroyGeometry=vi.fn(),destroyTarget=vi.fn(),settled=vi.fn(async()=>{}),submitted=vi.fn(async()=>{});const gpu={gpu:{queue:{onSubmittedWorkDone:submitted}},settled, fns: {target:()=>({size:[64,64],format:'rgba8unorm',destroy:destroyTarget}),effect:()=>({set:vi.fn(),compile:vi.fn(async()=>{})}),sampler:()=>({}),geometry:()=>({destroy:destroyGeometry}),draw:()=>({set:vi.fn(),compile:vi.fn(async()=>{throw failure})}) }} as never;const output={size:[64,64],format:'rgba8unorm'} as never;await expect(renderThumbnail(gpu,output)).rejects.toBe(failure);expect(submitted).toHaveBeenCalled();expect(settled).toHaveBeenCalled();expect(destroyGeometry).toHaveBeenCalledOnce();expect(destroyTarget).toHaveBeenCalledOnce();});
+  expect(gui.change?.(75)).toBeUndefined();
+  expect(pipeline.createScene).toHaveBeenCalledTimes(1);
+  await gui.change?.(100);
+  expect(pipeline.createScene).toHaveBeenLastCalledWith(
+    env.gpu,
+    env.targets[1],
+    100
+  );
+  expect(env.scenes[0]!.geometry.destroy).toHaveBeenCalledOnce();
+  expect(env.targets[0]!.destroy).toHaveBeenCalledOnce();
 
-test('ignores stale rebuild rejection but a current rejection reports and disposes',async()=>{
- vi.stubGlobal('window',{devicePixelRatio:1,addEventListener:vi.fn(),removeEventListener:vi.fn()});vi.stubGlobal('requestAnimationFrame',vi.fn(()=>1));vi.stubGlobal('cancelAnimationFrame',vi.fn());vi.stubGlobal('ResizeObserver',class{observe=vi.fn();disconnect=vi.fn();});
- const completions=Array.from({length:4},deferred);completions[0].resolve();const geometries=completions.map(()=>({destroy:vi.fn()}));let compilation=0;
- const stop=vi.fn(),disposeGpu=vi.fn(),onError=vi.fn();const gpu={time:0,dispose:disposeGpu, fns: {surface:()=>({size:[100,50],format:'bgra8unorm',dispose:vi.fn()}),target:()=>({size:[100,50],format:'rgba8unorm',resize:vi.fn(),destroy:vi.fn()}),effect:()=>({set:vi.fn(),compile:vi.fn(async()=>{})}),sampler:()=>({}),geometry:()=>geometries[compilation],draw:()=>({set:vi.fn(),compile:()=>completions[compilation++].promise}),bundle:()=>({}), frameLoop: vi.fn(()=>({stop})) }};
- mocks.init.mockResolvedValueOnce(gpu);const renderer=createRenderer({canvas:{getBoundingClientRect:()=>({width:100,height:50})} as HTMLCanvasElement,onError});await renderer.ready;
- renderer.setControls?.({count:100});await vi.waitFor(()=>expect(compilation).toBe(2));renderer.setControls?.({count:50});await vi.waitFor(()=>expect(compilation).toBe(3));completions[2].resolve();await vi.waitFor(()=>expect(geometries[0].destroy).toHaveBeenCalledOnce());
- const staleFailure=new Error('stale rebuild failed');completions[1].reject(staleFailure);await vi.waitFor(()=>expect(geometries[1].destroy).toHaveBeenCalledOnce());expect(onError).not.toHaveBeenCalled();expect(disposeGpu).not.toHaveBeenCalled();expect(stop).not.toHaveBeenCalled();expect(geometries[2].destroy).not.toHaveBeenCalled();
- renderer.setControls?.({count:100});await vi.waitFor(()=>expect(compilation).toBe(4));const currentFailure=new Error('current rebuild failed');completions[3].reject(currentFailure);await vi.waitFor(()=>expect(onError).toHaveBeenCalledWith(currentFailure));expect(onError).toHaveBeenCalledOnce();expect(stop).toHaveBeenCalledOnce();expect(disposeGpu).toHaveBeenCalledOnce();expect(geometries[2].destroy).toHaveBeenCalledOnce();
+  env.renderFrame();
+  expect(pipeline.renderScene).toHaveBeenCalledWith(
+    { id: "frame" },
+    env.scenes[1],
+    env.blits[1],
+    env.targets[1],
+    env.output,
+    2.4
+  );
+  renderer.dispose();
 });
 
-test('ignores a stale initial scene rejection and completes initialization with latest controls',async()=>{
- vi.stubGlobal('window',{devicePixelRatio:1,addEventListener:vi.fn(),removeEventListener:vi.fn()});vi.stubGlobal('requestAnimationFrame',vi.fn(()=>1));vi.stubGlobal('cancelAnimationFrame',vi.fn());vi.stubGlobal('ResizeObserver',class{observe=vi.fn();disconnect=vi.fn();});
- const completions=[deferred(),deferred()];const geometries=completions.map(()=>({destroy:vi.fn()}));let compilation=0;const onError=vi.fn(),loop=vi.fn(()=>({stop:vi.fn()}));const gpu={time:0,dispose:vi.fn(), fns: {surface:()=>({size:[100,50],format:'bgra8unorm',dispose:vi.fn()}),target:()=>({size:[100,50],format:'rgba8unorm',resize:vi.fn(),destroy:vi.fn()}),effect:()=>({set:vi.fn(),compile:vi.fn(async()=>{})}),sampler:()=>({}),geometry:()=>geometries[compilation],draw:()=>({set:vi.fn(),compile:()=>completions[compilation++].promise}),bundle:()=>({}),frameLoop: loop }};
- mocks.init.mockResolvedValueOnce(gpu);const renderer=createRenderer({canvas:{getBoundingClientRect:()=>({width:100,height:50})} as HTMLCanvasElement,onError});await vi.waitFor(()=>expect(compilation).toBe(1));renderer.setControls?.({count:100});completions[0].reject(new Error('obsolete initial scene failed'));await vi.waitFor(()=>expect(compilation).toBe(2));completions[1].resolve();await renderer.ready;expect(onError).not.toHaveBeenCalled();expect(geometries[0].destroy).toHaveBeenCalledOnce();expect(geometries[1].destroy).not.toHaveBeenCalled();expect(loop).toHaveBeenCalledOnce();renderer.dispose();expect(geometries[1].destroy).toHaveBeenCalledOnce();
+test("does not compile the blit against a Surface outside frame", async () => {
+  const env = setup();
+  const renderer = createRenderer({ canvas: env.canvas });
+  await renderer.ready;
+
+  expect(env.blits[0]!.compile).not.toHaveBeenCalled();
+  env.renderFrame();
+  expect(pipeline.renderScene).toHaveBeenCalledOnce();
+  renderer.dispose();
+});
+
+test("50 to 100 to 50 invalidates and destroys the stale stress generation", async () => {
+  const env = setup();
+  const renderer = createRenderer({ canvas: env.canvas });
+  await renderer.ready;
+  const gui = guiHarness.instances[0]!;
+  const stress = deferred<TestScene>();
+  const staleScene = makeScene("stale-stress");
+  pipeline.createScene.mockImplementationOnce(() => stress.promise);
+
+  const staleBuild = gui.change?.(100) as Promise<void>;
+  expect(gui.change?.(50)).toBeUndefined();
+  stress.resolve(staleScene);
+  await staleBuild;
+
+  expect(staleScene.geometry.destroy).toHaveBeenCalledOnce();
+  expect(env.targets[1]!.destroy).toHaveBeenCalledOnce();
+  expect(env.scenes[0]!.geometry.destroy).not.toHaveBeenCalled();
+  expect(env.targets[0]!.destroy).not.toHaveBeenCalled();
+
+  const newest = makeScene("newest-stress");
+  pipeline.createScene.mockResolvedValueOnce(newest);
+  await gui.change?.(100);
+  env.renderFrame();
+  expect(pipeline.renderScene).toHaveBeenLastCalledWith(
+    { id: "frame" },
+    newest,
+    env.blits[2],
+    env.targets[2],
+    env.output,
+    2.4
+  );
+  renderer.dispose();
+});
+
+test("commits the replacement, attempts all retirement cleanup, then owner-fails exactly", async () => {
+  const env = setup();
+  const renderer = createRenderer({ canvas: env.canvas });
+  await renderer.ready;
+  const geometryFailure = new Error("old geometry retirement failed");
+  const targetFailure = new Error("old target retirement failed");
+  env.scenes[0]!.geometry.destroy.mockImplementationOnce(() => {
+    throw geometryFailure;
+  });
+  env.targets[0]!.destroy.mockImplementationOnce(() => {
+    throw targetFailure;
+  });
+
+  await expect(guiHarness.instances[0]!.change?.(100)).rejects.toBe(
+    geometryFailure
+  );
+
+  expect(pipeline.createScene).toHaveBeenCalledTimes(2);
+  expect(env.scenes[0]!.geometry.destroy).toHaveBeenCalledOnce();
+  expect(env.targets[0]!.destroy).toHaveBeenCalledOnce();
+  expect(env.scenes[1]!.geometry.destroy).not.toHaveBeenCalled();
+  expect(env.targets[1]!.destroy).not.toHaveBeenCalled();
+  expect(env.stop).toHaveBeenCalledOnce();
+  expect(env.unsubscribe).toHaveBeenCalledOnce();
+  expect(guiHarness.instances[0]!.destroy).toHaveBeenCalledOnce();
+  expect(env.gpu.dispose).toHaveBeenCalledOnce();
+  env.renderFrame();
+  expect(pipeline.renderScene).not.toHaveBeenCalled();
+});
+
+test("commits only the latest complete resize generation", async () => {
+  const env = setup();
+  const renderer = createRenderer({ canvas: env.canvas });
+  await renderer.ready;
+  const first = deferred<TestScene>();
+  const firstScene = makeScene("first-resize");
+  const secondScene = makeScene("second-resize");
+  pipeline.createScene
+    .mockImplementationOnce(() => first.promise)
+    .mockResolvedValueOnce(secondScene);
+
+  const staleResize = env.emitResize(200, 100) as Promise<void>;
+  const latestResize = env.emitResize(300, 150) as Promise<void>;
+  await latestResize;
+  first.resolve(firstScene);
+  await staleResize;
+
+  expect(env.targets.map((value) => value.size)).toEqual([
+    [100, 50],
+    [200, 100],
+    [300, 150],
+  ]);
+  expect(firstScene.geometry.destroy).toHaveBeenCalledOnce();
+  expect(env.targets[1]!.destroy).toHaveBeenCalledOnce();
+  expect(env.scenes[0]!.geometry.destroy).toHaveBeenCalledOnce();
+  expect(env.targets[0]!.destroy).toHaveBeenCalledOnce();
+  expect(secondScene.geometry.destroy).not.toHaveBeenCalled();
+
+  env.renderFrame();
+  expect(pipeline.renderScene).toHaveBeenLastCalledWith(
+    { id: "frame" },
+    secondScene,
+    env.blits[1],
+    env.targets[2],
+    env.output,
+    2.4
+  );
+  renderer.dispose();
+});
+
+test("prepares the scene before the blit and preserves a synchronous primary failure", async () => {
+  const env = setup();
+  const primary = new Error("scene allocation failed");
+  const cleanup = new Error("candidate cleanup failed");
+  pipeline.createScene.mockImplementationOnce(() => {
+    throw primary;
+  });
+  env.gpu.fns.target.mockImplementationOnce(
+    (options: { size: readonly [number, number] }) => {
+      const candidate = {
+        size: options.size,
+        format: "rgba8unorm",
+        destroy: vi.fn(() => {
+          throw cleanup;
+        }),
+      };
+      env.targets.push(candidate);
+      return candidate;
+    }
+  );
+
+  const renderer = createRenderer({ canvas: env.canvas });
+  await expect(renderer.ready).rejects.toBe(primary);
+  expect(pipeline.createBlit).not.toHaveBeenCalled();
+  expect(env.targets[0]!.destroy).toHaveBeenCalledOnce();
+  expect(env.gpu.dispose).toHaveBeenCalledOnce();
+});
+
+test("a live resize failure tears down and remains observable by exact identity", async () => {
+  const env = setup();
+  const renderer = createRenderer({ canvas: env.canvas });
+  await renderer.ready;
+  const failure = new Error("resize scene failed");
+  pipeline.createScene.mockRejectedValueOnce(failure);
+
+  await expect(env.emitResize(220, 110)).rejects.toBe(failure);
+  expect(env.targets[1]!.destroy).toHaveBeenCalledOnce();
+  expect(env.stop).toHaveBeenCalledOnce();
+  expect(env.unsubscribe).toHaveBeenCalledOnce();
+  expect(guiHarness.instances[0]!.destroy).toHaveBeenCalledOnce();
+  expect(env.gpu.dispose).toHaveBeenCalledOnce();
+  expect(env.scenes[0]!.geometry.destroy).not.toHaveBeenCalled();
+});
+
+test("rolls back a partially configured GUI and preserves its failure", async () => {
+  const env = setup();
+  const failure = new Error("GUI controller failed");
+  guiHarness.state.addFailure = failure;
+  const renderer = createRenderer({ canvas: env.canvas });
+
+  await expect(renderer.ready).rejects.toBe(failure);
+  expect(guiHarness.instances[0]!.destroy).toHaveBeenCalledOnce();
+  expect(env.gpu.dispose).toHaveBeenCalledOnce();
+  expect(env.scenes[0]!.geometry.destroy).not.toHaveBeenCalled();
+  expect(env.targets[0]!.destroy).not.toHaveBeenCalled();
+});
+
+test("dispose is idempotent, attempts every cleanup, and delegates VGPU children", async () => {
+  const env = setup();
+  const renderer = createRenderer({ canvas: env.canvas });
+  await renderer.ready;
+  const stopFailure = new Error("stop failed");
+  env.stop.mockImplementationOnce(() => {
+    throw stopFailure;
+  });
+
+  expect(() => renderer.dispose()).not.toThrow();
+  expect(env.unsubscribe).toHaveBeenCalledOnce();
+  expect(guiHarness.instances[0]!.destroy).toHaveBeenCalledOnce();
+  expect(env.gpu.dispose).toHaveBeenCalledOnce();
+  expect(env.scenes[0]!.geometry.destroy).not.toHaveBeenCalled();
+  expect(env.targets[0]!.destroy).not.toHaveBeenCalled();
+  expect(() => renderer.dispose()).not.toThrow();
+  expect(env.gpu.dispose).toHaveBeenCalledOnce();
+});
+
+test("a frame failure tears down and throws the same object", async () => {
+  const env = setup();
+  const renderer = createRenderer({ canvas: env.canvas });
+  await renderer.ready;
+  const failure = new Error("frame failed");
+  pipeline.renderScene.mockImplementationOnce(() => {
+    throw failure;
+  });
+
+  expect(() => env.renderFrame()).toThrow(failure);
+  expect(env.stop).toHaveBeenCalledOnce();
+  expect(env.unsubscribe).toHaveBeenCalledOnce();
+  expect(guiHarness.instances[0]!.destroy).toHaveBeenCalledOnce();
+  expect(env.gpu.dispose).toHaveBeenCalledOnce();
+  expect(() => renderer.dispose()).not.toThrow();
+});
+
+test("intentional cancellation is quiet and disposes a late GPU exactly once", async () => {
+  const env = setup();
+  const pendingGpu = deferred<TestGpu>();
+  vgpu.init.mockReturnValueOnce(pendingGpu.promise);
+  const renderer = createRenderer({ canvas: env.canvas });
+  await vi.waitFor(() => expect(vgpu.init).toHaveBeenCalledOnce());
+  renderer.dispose();
+  pendingGpu.resolve(env.gpu);
+
+  await expect(renderer.ready).resolves.toBeUndefined();
+  expect(env.gpu.dispose).toHaveBeenCalledOnce();
+  expect(guiHarness.instances).toHaveLength(0);
 });

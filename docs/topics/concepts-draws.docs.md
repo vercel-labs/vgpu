@@ -7,8 +7,8 @@ relatedSymbols:
   - GeometryLike
 prevNext:
   prev:
-    title: Context
-    href: /concepts/context
+    title: WGSL modules
+    href: /concepts/wgsl-modules
   next:
     title: Compilation
     href: /concepts/compilation

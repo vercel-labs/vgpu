@@ -1,7 +1,6 @@
 import type { Gpu, Target } from 'vgpu';
 import { frame } from 'vgpu';
 
-import type { ThumbnailOptions } from '../../lib/example-renderer';
 import {
   createScene,
   destroyScene,
@@ -10,6 +9,10 @@ import {
   SPIN_RATE,
   uploadTestPattern,
 } from './scene';
+
+interface ThumbnailOptions {
+  readonly time?: number;
+}
 
 /**
  * Three-quarter view, so the thumbnail reads as a cube rather than a flat picture.
@@ -28,17 +31,34 @@ export async function renderThumbnail(
   target: Target,
   options: ThumbnailOptions = {},
 ): Promise<void> {
-  const scene = createScene(gpu, FRAME_SIZE);
+  const failures: unknown[] = [];
+  let scene: ReturnType<typeof createScene> | undefined;
+
   try {
-    uploadTestPattern(gpu, scene);
+    scene = createScene(gpu, FRAME_SIZE);
+    const activeScene = scene;
+    uploadTestPattern(gpu, activeScene);
     frame(gpu, (currentFrame) =>
-      renderScene(currentFrame, scene, target, options.time ?? POSE / SPIN_RATE),
+      renderScene(currentFrame, activeScene, target, options.time ?? POSE / SPIN_RATE),
     );
-  } finally {
-    await Promise.allSettled([
-      Promise.resolve().then(() => gpu.gpu.queue.onSubmittedWorkDone()),
-      Promise.resolve().then(() => gpu.settled()),
-    ]);
-    destroyScene(scene);
+  } catch (error) {
+    failures.push(error);
   }
+
+  for (const result of await Promise.allSettled([
+    Promise.resolve().then(() => gpu.gpu.queue.onSubmittedWorkDone()),
+    Promise.resolve().then(() => gpu.settled()),
+  ])) {
+    if (result.status === 'rejected') failures.push(result.reason);
+  }
+
+  if (scene) {
+    try {
+      destroyScene(scene);
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+
+  if (failures.length) throw failures[0];
 }

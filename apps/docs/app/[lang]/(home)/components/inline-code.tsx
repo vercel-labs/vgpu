@@ -11,7 +11,9 @@ export function stripBackticks(text: string): string {
  * For commands quoted mid-sentence ("install with `npx skills add vercel-labs/vgpu`"), where a
  * block would break the line but the text still has to read as literal — hence
  * a span swap. Geist Mono runs slightly wider and taller than Geist Sans at the
- * same px size, so code is nudged to 0.95em to keep the baseline row even.
+ * same px size, so code is nudged to 0.95em to keep the baseline row even. Long
+ * commands may opt into wrapping when the containing layout is intentionally
+ * narrow.
  *
  * Fence only what is genuinely literal. Mono is a signal that the reader should
  * type the characters exactly; using it for a command merely *named* inside a
@@ -21,7 +23,15 @@ export function stripBackticks(text: string): string {
  * — only the import path changed, since this landing owns its own copy of the
  * hero overlay components (see TGEIST-10).
  */
-export function InlineCode({ text, mono = true }: { text: string; mono?: boolean }) {
+export function InlineCode({
+  text,
+  mono = true,
+  wrap = false,
+}: {
+  text: string;
+  mono?: boolean;
+  wrap?: boolean;
+}) {
   // Odd indices are the fenced spans: "a `b` c" -> ["a ", "b", " c"].
   return (
     <>
@@ -32,14 +42,21 @@ export function InlineCode({ text, mono = true }: { text: string; mono?: boolean
         // *presented* as code. Those are separate concerns, and the Prompt tab
         // needs the first without the second.
         //
-        // Unbreakable either way: a command split across lines ("run npx vgpu"
-        // / "docs") reads as prose and strands an orphan word. Wrap before it.
+        // Atomic by default: a command split across lines ("run npx vgpu" /
+        // "docs") reads as prose and strands an orphan word. Exceptionally
+        // long standalone commands can wrap at their own spaces instead.
         return mono ? (
-          <code key={index} className="whitespace-nowrap font-mono text-[0.95em]">
+          <code
+            key={index}
+            className={`${wrap ? "whitespace-normal" : "whitespace-nowrap"} font-mono text-[0.95em]`}
+          >
             {part}
           </code>
         ) : (
-          <span key={index} className="whitespace-nowrap">
+          <span
+            key={index}
+            className={wrap ? "whitespace-normal" : "whitespace-nowrap"}
+          >
             {part}
           </span>
         );

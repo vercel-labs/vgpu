@@ -137,7 +137,8 @@ Observation for the visual phase: measured values occupy roughly 1.3–7.7 m, so
 over the fixed `[0.35 m, 10 m]` log range `near` only spans about `[0.07, 0.55]`.
 The relief shader may need to expand contrast (or the range may want tightening
 to something like `[1 m, 8 m]`) — that is a Phase 3 decision, and changing it
-requires updating this record and `model-contract.ts` together.
+requires updating this record and
+`apps/docs/examples/depth-estimation/renderer.ts` together.
 
 ## Real-GPU gate result
 

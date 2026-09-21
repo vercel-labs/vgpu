@@ -5,7 +5,7 @@ const recoveryLinks = [
   ["Browse examples", "/examples"],
   ["Search the docs", "/docs?search="],
   ["Markdown sitemap", "/sitemap.md"],
-  ["Complete Markdown export", "/llms.txt"],
+  ["Agent documentation index", "/llms.txt"],
 ] as const;
 
 export default function NotFoundPage() {

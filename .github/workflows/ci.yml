@@ -2,10 +2,27 @@ name: CI
 
 on:
   push:
-    branches: [main, feat/vgpu-rewrite]
+    branches: [canary, main]
   pull_request:
 
+# CI only reads the checkout. Keeping its token read-only ensures that tests and third-party
+# actions cannot forge the separate production-authorization status that gates Vercel aliases.
+permissions:
+  contents: read
+
 jobs:
+  release-migrations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/migrations.mjs check
+
+  visual-snapshots:
+    uses: ./.github/workflows/snapshots.yml
+
   test-fast:
     runs-on: ubuntu-24.04-arm
     steps:
@@ -24,6 +41,34 @@ jobs:
       - run: pnpm -w typecheck
       - run: pnpm exec vitest run
       - run: pnpm bundle-check
+
+  factory-static:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck factory
+        run: pnpm --filter @vgpu/factory typecheck
+      - name: Run deterministic factory tests
+        run: pnpm --filter @vgpu/factory test
+      - name: Inspect Eve discovery
+        run: pnpm --filter @vgpu/factory exec eve info --json
+      - name: Assert factory agent surface
+        run: pnpm --filter @vgpu/factory check:agent-surface
+      - name: Build factory
+        run: pnpm --filter @vgpu/factory build
 
   wgsl-loader-bundler-tests:
     runs-on: ubuntu-latest
@@ -44,7 +89,7 @@ jobs:
       - run: pnpm test packages/wgsl/tests/webpack-real.test.ts packages/wgsl/tests/vite-real.test.ts packages/wgsl/tests/runtime-cjs-require.test.ts
 
   docker-gpu:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Install pnpm
@@ -59,8 +104,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm -w typecheck
       - name: Build Docker GPU image
-        run: docker build -t vgpu-test-dev:ci -f infra/test-docker/Dockerfile.dev .
-      - name: Run Dawn GPU validation in Docker
+        run: docker build --platform linux/amd64 -t vgpu-test-dev:ci -f infra/snapshots/Dockerfile .
+      - name: Run Dawn Vulkan GPU validation in Docker
         run: |
           docker run --rm \
             -v "$PWD:/workspace" \
@@ -68,10 +113,8 @@ jobs:
             -e VGPU_DOCKER_TEST=1 \
             -e VGPU_VALIDATE=require \
             vgpu-test-dev:ci \
-            sh -lc 'Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & xp=$!; \
-              pnpm exec vitest run packages/adapter-node/tests/buffer-readback.test.ts packages/wgsl/tests/reflection-gpu-layout.test.ts packages/wgsl/tests/representative-shaders.test.ts packages/wgsl/tests/validation-real-device.test.ts packages/wgsl/tests/validation.test.ts packages/vgpu-api/tests/gpu examples/fluid-validation/src/fluid-gpu.test.ts; \
-              s=$?; kill $xp; exit $s'
-      - name: Run pixel snapshot CLI in Docker
+            sh -lc 'pnpm exec vitest run packages/adapter-node/tests/buffer-readback.test.ts packages/adapter-node/tests/compatibility-mode.test.ts packages/wgsl/tests/reflection-gpu-layout.test.ts packages/wgsl/tests/representative-shaders.test.ts packages/wgsl/tests/validation-real-device.test.ts packages/wgsl/tests/validation.test.ts packages/vgpu-api/tests/gpu examples/fluid-validation/src/fluid-gpu.test.ts "apps/docs/app/[lang]/(home)/components/prism-background/prism-gpu.test.ts" "apps/docs/app/[lang]/(home)/components/prism-background/pipelines/shared/glass/ray-footprint.test.ts"'
+      - name: Verify doctor and pixel snapshot CLI in Docker
         run: |
           docker run --rm \
             -v "$PWD:/workspace" \
@@ -79,9 +122,7 @@ jobs:
             -e VGPU_DOCKER_TEST=1 \
             -e CI=true \
             vgpu-test-dev:ci \
-            sh -lc 'Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & xp=$!; \
-              node packages/vgpu/bin/vgpu.js snapshot --ci; \
-              s=$?; kill $xp; exit $s'
+            sh -lc 'node packages/vgpu/bin/vgpu.js doctor && node packages/vgpu/bin/vgpu.js snapshot --ci'
       - name: Render docs example proofs in Docker
         run: |
           rm -rf artifacts/example-renders
@@ -91,9 +132,7 @@ jobs:
             -e VGPU_DOCKER_TEST=1 \
             -e CI=true \
             vgpu-test-dev:ci \
-            sh -lc 'Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & xp=$!; \
-              pnpm --filter docs render:proof; \
-              s=$?; kill $xp; exit $s'
+            pnpm --filter docs render:proof
       - name: Upload docs example render proofs
         if: always()
         uses: actions/upload-artifact@v4
@@ -111,9 +150,7 @@ jobs:
             -e VGPU_DOCKER_TEST=1 \
             -e CI=true \
             vgpu-test-dev:ci \
-            sh -lc 'Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & xp=$!; \
-              pnpm --filter docs thumbs:check -- --artifact-dir ../../artifacts/thumb-diffs; \
-              s=$?; kill $xp; exit $s'
+            pnpm --filter docs thumbs:check -- --artifact-dir ../../artifacts/thumb-diffs
       - name: Upload docs thumbnail comparison
         if: always()
         uses: actions/upload-artifact@v4
@@ -155,7 +192,7 @@ jobs:
       # externalizes without reading its contents, so the dynamic import stays opaque to it.
       - run: pnpm --filter @vgpu/adapter-node build
       - name: Test examples CLI filesystem portability
-        run: pnpm exec vitest run packages/vgpu/tests/examples
+        run: pnpm exec vitest run packages/vgpu/tests/examples packages/vgpu/tests/mcp-stdio.test.ts
       - run: pnpm test packages/wgsl/tests/cache-key.test.ts
 
   examples-windows-online:
@@ -176,7 +213,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @vgpu/adapter-node build
       - name: Test examples online commands on Windows
-        run: pnpm exec vitest run packages/vgpu/tests/examples/http-client.test.ts
+        run: pnpm exec vitest run packages/vgpu/tests/examples/http-client.test.ts packages/vgpu/tests/mcp-stdio.test.ts
 
   wgsl-turbopack-smoke:
     runs-on: ubuntu-latest
@@ -377,12 +414,11 @@ jobs:
           if-no-files-found: warn
 
   docs-generated:
-    # Guards that the committed docs manifest + generated skill (skills/vgpu, the payload
-    # `npx skills add vercel-labs/vgpu` ships) are in sync with their sources (co-located
-    # *.docs.md, docs/topics, docs/allowlist.txt, and the generator itself). The generator is
-    # dependency-free (pure Node), so no install/build is needed. check-drift.js regenerates into a
-    # scratch temp dir (it never mutates the working tree) and normalizes the SKILL.md stamp
-    # (vgpuVersion/gitSha/generatedAt) before diffing, since that stamp is volatile by design.
+    # Guards the committed docs manifest and version-neutral skill router (`skills/vgpu`, the
+    # payload `npx skills add vercel-labs/vgpu` ships). The manifest stays in sync with co-located
+    # *.docs.md, docs/topics, and docs/allowlist.txt; the thin router stays in sync with skill.js and
+    # deliberately contains no version stamp or reference corpus. The generator is dependency-free
+    # (pure Node), and check-drift.js regenerates into a scratch directory without mutating the tree.
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
@@ -391,7 +427,7 @@ jobs:
         with:
           node-version: 22
       # TGEIST-12 extended this script to the geistdocs target as well, so this one step now covers
-      # both committed generator outputs: skills/vgpu + the docs manifest, AND
+      # the committed thin router + docs manifest, AND
       # apps/docs/content/docs (Decision 4's closing line). It regenerates both into a temp dir
       # and diffs — it never writes to the working tree, which is what replaced TGEIST-04's
       # "regenerate then `git diff --exit-code`" pair here (that pair mutated the checkout, so it
@@ -410,7 +446,7 @@ jobs:
       # it reports next to gates (a), (c) and (d) as one suite. It is not duplicated here.
 
   examples-api-generated:
-    # Frozen schemas, controlled vocabulary, and deterministic revision artifacts.
+    # Frozen schemas, controlled vocabulary, and deterministic build-time revision artifacts.
     runs-on: ubuntu-24.04-arm
     steps:
       # The artifact revision is a content hash of the source snapshot, so this job never reads
@@ -435,20 +471,25 @@ jobs:
         run: node apps/docs/scripts/validate-example-vocabulary.mjs
       - name: Synchronize frozen embedded schemas
         run: node apps/docs/scripts/sync-examples-api-contracts.mjs
-      # G3 of Decision 1': the artifact revision is a digest of the source snapshot and of nothing
-      # else (not the app directory, not git history). That is what let the geistdocs migration
-      # regenerate this tree in a second app directory and get byte-identical output, and it is what
-      # `git status` below keeps true.
-      - name: Regenerate deterministic examples API artifacts
+      # The artifact revision is a digest of the source snapshot and of nothing else (not the app
+      # directory, not git history). Generate the ignored deployment tree here so the tests exercise
+      # the same output as prebuild; only the separately synchronized schemas remain a drift gate.
+      - name: Generate deterministic examples API build artifacts
         run: node apps/docs/scripts/generate-examples-api.mjs
       - name: Test foundation contracts and publisher
         run: pnpm exec vitest run apps/docs/lib/examples-api apps/docs/scripts/validate-example-vocabulary.test.ts
-      - name: Fail on schema or artifact drift
+      - name: Fail on tracked build artifacts or schema drift
         run: |
-          changed=$(git status --porcelain -- apps/docs/generated/examples-api apps/docs/lib/examples-api/schemas packages/vgpu/lib/examples/schemas packages/vgpu/lib/examples/contracts.js apps/docs/lib/examples-api/contracts.generated.ts)
+          tracked=$(git ls-files -- apps/docs/generated/examples-api)
+          if [ -n "$tracked" ]; then
+            echo "::error::Examples API build artifacts must not be tracked."
+            echo "$tracked"
+            exit 1
+          fi
+          changed=$(git status --porcelain -- apps/docs/lib/examples-api/schemas packages/vgpu/lib/examples/schemas packages/vgpu/lib/examples/contracts.js apps/docs/lib/examples-api/contracts.generated.ts)
           if [ -n "$changed" ]; then
-            echo "::error::Examples API schemas or generated artifacts are out of date."
+            echo "::error::Examples API schemas are out of date."
             echo "$changed"
-            git diff -- apps/docs/generated/examples-api apps/docs/lib/examples-api/schemas packages/vgpu/lib/examples/schemas packages/vgpu/lib/examples/contracts.js apps/docs/lib/examples-api/contracts.generated.ts
+            git diff -- apps/docs/lib/examples-api/schemas packages/vgpu/lib/examples/schemas packages/vgpu/lib/examples/contracts.js apps/docs/lib/examples-api/contracts.generated.ts
             exit 1
           fi

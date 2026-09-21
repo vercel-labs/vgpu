@@ -141,7 +141,7 @@ test("gpu.settled snapshots pending validation deliveries", async () => {
   gpu.dispose();
 });
 
-test("sync pipeline creation throws are delivered once through gpu.onError", async () => {
+test("sync pipeline creation throws synchronously without duplicate onError delivery", async () => {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [4, 4] });
   const drawable = draw(gpu, { shader: SIMPLE_SHADER, label: "syncThrow" });
@@ -150,15 +150,10 @@ test("sync pipeline creation throws are delivered once through gpu.onError", asy
   gpu.onError((error) => errors.push(error));
   vi.spyOn(gpu.device.gpu, "createRenderPipeline").mockImplementation(() => { throw nativeError; });
 
-  expect(() => drawable.draw(colorTarget)).not.toThrow();
+  expect(() => drawable.draw(colorTarget)).toThrowError(/compilation failed/);
   await gpu.settled();
 
-  expect(errors).toHaveLength(1);
-  expect(errors[0]).toMatchObject({
-    code: "VGPU-COMPILE-FAILED",
-    where: "syncThrow.pipelineFor",
-    cause: nativeError,
-  });
+  expect(errors).toEqual([]);
   gpu.dispose();
 });
 
@@ -222,6 +217,8 @@ function rawClaimedDrawWithDeferredScopes(gpu: Awaited<ReturnType<typeof init>>,
   });
   drawable.layout(1, { dynamicOffsets: true });
   drawable.group(1, rawBindGroup);
+  // Creation scopes precede the pipeline/claimed-group scopes tested below.
+  for (const resolve of popResolvers.splice(0)) resolve(null);
   return { draw: drawable, popResolvers };
 }
 

@@ -10,16 +10,16 @@ const cases: readonly {
   readonly expected: { readonly align: number; readonly size?: number; readonly stride?: number; readonly members?: readonly ExpectedMember[]; readonly runtimeSized?: boolean };
 }[] = [
   {
-    name: "single f32 uniform struct rounds struct alignment and size to 16",
+    name: "single f32 uniform struct keeps its intrinsic four-byte alignment and size",
     declarations: "struct Params { value: f32 }",
     binding: "@group(0) @binding(0) var<uniform> params: Params;",
-    expected: { align: 16, size: 16, members: [["value", 0, 4, 4]] },
+    expected: { align: 4, size: 4, members: [["value", 0, 4, 4]] },
   },
   {
     name: "vec2 then f32 packs at natural offsets inside a uniform struct",
     declarations: "struct Params { xy: vec2f, z: f32 }",
     binding: "@group(0) @binding(0) var<uniform> params: Params;",
-    expected: { align: 16, size: 16, members: [["xy", 0, 8, 8], ["z", 8, 4, 4]] },
+    expected: { align: 8, size: 16, members: [["xy", 0, 8, 8], ["z", 8, 4, 4]] },
   },
   {
     name: "vec3 leaves tail room usable by scalar",
@@ -40,10 +40,10 @@ const cases: readonly {
     expected: { align: 8, size: 24, members: [["m", 0, 8, 24, 8]] },
   },
   {
-    name: "uniform array of f32 uses Dawn/Naga standard-layout natural stride",
+    name: "uniform array of f32 keeps intrinsic scalar alignment and stride",
     declarations: "struct Params { values: array<f32, 3> }",
     binding: "@group(0) @binding(0) var<uniform> params: Params;",
-    expected: { align: 16, size: 16, members: [["values", 0, 16, 12, 4]] },
+    expected: { align: 4, size: 12, members: [["values", 0, 4, 12, 4]] },
   },
   {
     name: "storage array of f32 uses natural 4-byte stride",
@@ -123,10 +123,45 @@ describe("WGSL host-shareable layout reference cases", () => {
   }
 });
 
+test("uniform and storage expose the same intrinsic layout without embedding the address space", async () => {
+  const shader = await resolveShader({
+    entry: "/case.wgsl",
+    validate: false,
+    modules: {
+      "/case.wgsl": `
+        struct Params { lead: f32, values: array<f32, 3>, tail: f32 }
+        @group(0) @binding(0) var<uniform> uniformParams: Params;
+        @group(0) @binding(1) var<storage, read> storageParams: Params;
+      `,
+    },
+  });
 
-test("layout records explicit Dawn/Naga standard layout mode", async () => {
+  const uniformBinding = shader.reflection.bindings[0]!;
+  const storageBinding = shader.reflection.bindings[1]!;
+  expect(uniformBinding.addressSpace).toBe("uniform");
+  expect(storageBinding.addressSpace).toBe("storage");
+  expect({ ...uniformBinding.layout, name: "params", mangledName: "params" }).toEqual({
+    ...storageBinding.layout,
+    name: "params",
+    mangledName: "params",
+  });
+  expect(uniformBinding.layout).toMatchObject({
+    layoutMode: "wgsl-host-shareable-v1",
+    align: 4,
+    size: 20,
+    members: [
+      { name: "lead", offset: 0, align: 4, size: 4 },
+      { name: "values", offset: 4, align: 4, size: 12, layout: { stride: 4 } },
+      { name: "tail", offset: 16, align: 4, size: 4 },
+    ],
+  });
+  expect(uniformBinding.layout).not.toHaveProperty("addressSpace");
+});
+
+
+test("layout records the explicit intrinsic WGSL layout model", async () => {
   const shader = await resolveShader({ entry: "/case.wgsl", validate: false, modules: { "/case.wgsl": "struct Params { values: array<f32, 3> }\n@group(0) @binding(0) var<uniform> params: Params;" } });
   const layout = shader.reflection.bindings[0]?.layout;
-  expect(layout).toMatchObject({ layoutMode: "naga-standard", align: 16, size: 16 });
-  expect(layout?.members?.[0]?.layout).toMatchObject({ layoutMode: "naga-standard", stride: 4, size: 12 });
+  expect(layout).toMatchObject({ layoutMode: "wgsl-host-shareable-v1", align: 4, size: 12 });
+  expect(layout?.members?.[0]?.layout).toMatchObject({ layoutMode: "wgsl-host-shareable-v1", stride: 4, size: 12 });
 });

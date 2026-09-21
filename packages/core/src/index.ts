@@ -21,6 +21,8 @@ export type {
   BufferUsageName,
   BufferWriteData,
   TextureOptions,
+  TextureReadOptions,
+  TextureShape,
   TextureUsageName,
   CreateDeviceOptions,
   RequiredDeviceLimits,

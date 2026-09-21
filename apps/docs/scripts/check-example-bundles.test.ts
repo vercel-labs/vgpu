@@ -10,7 +10,6 @@ const slugs = [
   'gradient',
   'triangle-led-front',
   'anti-aliasing',
-  'post-processing',
   'black-hole',
   'fluid',
   'instanced-rendering',
@@ -25,7 +24,13 @@ const slugs = [
 // app's marker shape, and the extra test at the bottom proves the same failure is raised for the
 // shape Turbopack actually emits while the app lives in `apps/docs-next`. Without it, the
 // isolation assertion would pass vacuously here and nothing would notice.
-function writeFixture(options: { foreign?: boolean; oversized?: boolean; staleChunks?: boolean; markerRoot?: string } = {}) {
+function writeFixture(options: {
+  budgetCoverageMismatch?: boolean;
+  foreign?: boolean;
+  oversized?: boolean;
+  staleChunks?: boolean;
+  markerRoot?: string;
+} = {}) {
   const markerRoot = options.markerRoot ?? 'apps/docs';
   const root = mkdtempSync(path.join(tmpdir(), 'example-bundles-'));
   const chunks = path.join(root, 'chunks');
@@ -35,8 +40,11 @@ function writeFixture(options: { foreign?: boolean; oversized?: boolean; staleCh
   // check can be exercised without touching the real one.
   const source = path.join(root, 'source');
   mkdirSync(path.join(source, 'examples', 'gradient'), { recursive: true });
+  mkdirSync(path.join(source, 'lib'), { recursive: true });
   const sourceFile = path.join(source, 'examples', 'gradient', 'renderer.ts');
+  const slugsFile = path.join(source, 'lib', 'example-slugs.ts');
   writeFileSync(sourceFile, 'export const renderer = 1;\n');
+  writeFileSync(slugsFile, `export const exampleSlugs = ${JSON.stringify(slugs)} as const;\n`);
 
   const loaders = slugs.map((slug, index) => {
     const property = slug.includes('-') ? JSON.stringify(slug) : slug;
@@ -58,7 +66,9 @@ function writeFixture(options: { foreign?: boolean; oversized?: boolean; staleCh
   const budgetsPath = path.join(root, 'budgets.json');
   writeFileSync(budgetsPath, JSON.stringify({
     sharedHost: { gzipBytes: 0, maxGrowthBytes: 1_000_000 },
-    examples: Object.fromEntries(slugs.map((slug) => [slug, options.oversized && slug === 'gradient' ? 1 : 1_000_000])),
+    examples: Object.fromEntries(slugs
+      .filter((slug) => !options.budgetCoverageMismatch || slug !== 'fft-ocean')
+      .map((slug) => [slug, options.oversized && slug === 'gradient' ? 1 : 1_000_000])),
     exampleGrowth: { percent: 0, minimumBytes: options.oversized ? 0 : 1_000_000 },
   }));
 
@@ -69,6 +79,7 @@ function writeFixture(options: { foreign?: boolean; oversized?: boolean; staleCh
     ? new Date('2026-01-03T00:00:00Z')
     : new Date('2026-01-01T00:00:00Z');
   utimesSync(sourceFile, sourceTime, sourceTime);
+  utimesSync(slugsFile, sourceTime, sourceTime);
   for (const name of ['host.js', ...slugs.map((slug) => `${slug}.js`)]) {
     utimesSync(path.join(chunks, name), chunkTime, chunkTime);
   }
@@ -112,6 +123,14 @@ test('fails when one preview chunk exceeds its gzip budget', () => {
   expect(result.status).toBe(1);
   expect(result.stderr).toContain('/preview/gradient chunks are');
   expect(result.stderr).toContain('budget is 1 B');
+});
+
+test('fails when a canonical preview has no bundle budget', () => {
+  const result = runFixture(writeFixture({ budgetCoverageMismatch: true }));
+
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('Example budget coverage must exactly match exampleSlugs');
+  expect(result.stderr).toContain('Missing: fft-ocean');
 });
 
 test('refuses to grade chunks older than the sources they were built from', () => {

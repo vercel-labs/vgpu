@@ -1,29 +1,19 @@
-import { fullscreenPosition, wrapLoad } from "./ocean-common.wgsl";
+import { wrapLoad } from "./ocean-common.wgsl";
 
 struct NormalFoamUniforms {
   resolution: f32,
   worldSize: f32,
   displacementScale: f32,
-  choppiness: f32,
   foamThreshold: f32,
 };
 @group(0) @binding(0) var<uniform> u: NormalFoamUniforms;
 @group(0) @binding(1) var u_displacement: texture_2d<f32>;
 
-struct VSOut { @builtin(position) pos: vec4f };
-
-@vertex fn vs_main(@builtin(vertex_index) vi: u32) -> VSOut {
-  var out: VSOut;
-  out.pos = fullscreenPosition(vi);
-  return out;
-}
-
-@fragment fn fs_main(in: VSOut) -> @location(0) vec4f {
+@fragment fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
   let N = i32(u.resolution);
-  let coord = vec2i(in.pos.xy - vec2f(0.5));
+  let coord = vec2i(position.xy - vec2f(0.5));
   let dx = u.worldSize / u.resolution;
 
-  let c = wrapLoad(u_displacement, coord, N).xyz * u.displacementScale;
   let r = wrapLoad(u_displacement, coord + vec2i(1, 0), N).xyz * u.displacementScale;
   let l = wrapLoad(u_displacement, coord - vec2i(1, 0), N).xyz * u.displacementScale;
   let t = wrapLoad(u_displacement, coord + vec2i(0, 1), N).xyz * u.displacementScale;

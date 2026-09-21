@@ -1,45 +1,53 @@
-import type { Gpu, Target } from 'vgpu';
+import { frame, type Gpu, type Target } from 'vgpu';
 
-import type { ThumbnailOptions } from '../../lib/example-renderer';
 import {
   createEffects,
   createTargets,
   destroyTargets,
   prewarm,
-  renderAt,
+  renderChain,
   setBindings,
-  setConstants,
 } from './pipeline';
 
-interface ThumbOptions extends ThumbnailOptions {
-  onVariantRendered?: (
+type ThumbOptions = {
+  time?: number;
+  onVariantRendered?(
     variant: 'time-delta' | 'pointer-orbit',
     pixels: Uint8Array,
-    size: readonly [number, number]
-  ) => void | Promise<void>;
-}
+    size: readonly [number, number],
+  ): void | Promise<void>;
+};
 
 export async function renderThumbnail(
   gpu: Gpu,
   colorTarget: Target,
-  opts: ThumbOptions = {}
+  opts: ThumbOptions = {},
 ): Promise<void> {
-  const effects = createEffects(gpu, 'black-hole-thumb');
-  const targets = createTargets(gpu, colorTarget.size, 'black-hole-thumb');
+  const targets = createTargets(gpu, colorTarget.size);
   try {
+    const effects = createEffects(gpu, targets);
     const time = opts.time ?? 8.5;
-    setConstants(effects);
-    setBindings(effects, targets, colorTarget);
+    setBindings(effects, targets);
     await prewarm(effects, targets, colorTarget);
-    renderAt(gpu, effects, targets, colorTarget, time, [0, 0.05]);
+    const render = (at: number, pointer: readonly [number, number]) => {
+      effects.scene.set({ params: { pointer, time: at } });
+      frame(gpu, (current) => renderChain(current, effects, targets, colorTarget));
+    };
+    render(time + 7, [0, 0.05]);
     await gpu.gpu.queue.onSubmittedWorkDone();
-    renderAt(gpu, effects, targets, colorTarget, time + 7, [0, 0.05]);
+    await opts.onVariantRendered?.(
+      'time-delta',
+      await colorTarget.color.read({ mipLevel: 0, region: "all" }),
+      colorTarget.size,
+    );
+    render(time, [0.72, 0.34]);
     await gpu.gpu.queue.onSubmittedWorkDone();
-    await opts.onVariantRendered?.('time-delta', await colorTarget.read(), colorTarget.size);
-    renderAt(gpu, effects, targets, colorTarget, time, [0.72, 0.34]);
-    await gpu.gpu.queue.onSubmittedWorkDone();
-    await opts.onVariantRendered?.('pointer-orbit', await colorTarget.read(), colorTarget.size);
-    renderAt(gpu, effects, targets, colorTarget, time, [0, 0.05]);
+    await opts.onVariantRendered?.(
+      'pointer-orbit',
+      await colorTarget.color.read({ mipLevel: 0, region: "all" }),
+      colorTarget.size,
+    );
+    render(time, [0, 0.05]);
   } finally {
     await Promise.allSettled([
       Promise.resolve().then(() => gpu.gpu.queue.onSubmittedWorkDone()),

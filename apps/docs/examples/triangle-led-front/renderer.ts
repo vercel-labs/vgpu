@@ -1,18 +1,22 @@
-import type { Gpu, Surface } from 'vgpu';
-import type { BrowserRendererOptions, ExampleRenderer, RenderSize } from '../../lib/example-renderer';
+import GUI from 'lil-gui';
+import { clock, frameLoop, surface, type Gpu, type Surface } from 'vgpu';
 import { createHeroRenderer, type HeroRenderer } from './scene-renderer';
-import { DEFAULT_BRUSH } from './settings';
+import { DEFAULT_BRUSH, canonicalTriangleGeometry, type RenderSize } from './settings';
 import { brushState, heroStateForActiveClick, simulationBrushState } from './sim-sizing';
-import { isPointInsideTriangle } from './triangle-hit';
-import { DEFAULT_TRIANGLE_LED_CONTROLS, isTriangleLedMode, type TriangleLedControls } from './types';
-import { clock, frameLoop, surface } from "vgpu";
+import { DEFAULT_TRIANGLE_LED_CONTROLS, isTriangleLedMode, type TriangleLedControls, type TriangleLedMode } from './types';
 
-export function createRenderer(options: BrowserRendererOptions<TriangleLedControls>): ExampleRenderer<TriangleLedControls> {
+interface RendererOptions {
+  readonly canvas: HTMLCanvasElement;
+  readonly initialControls?: Readonly<TriangleLedControls>;
+}
+
+export function createRenderer(options: RendererOptions) {
   let disposed = false;
-  let reportedError = false;
   let gpu: Gpu | undefined;
   let canvasSurface: Surface | undefined;
   let scene: HeroRenderer | undefined;
+  let gui: GUI | undefined;
+  let refreshGui: (() => void) | undefined;
   let loop: { stop(): void } | undefined;
   let observer: ResizeObserver | undefined;
   let input: ReturnType<typeof installCanvasInput> | undefined;
@@ -20,16 +24,13 @@ export function createRenderer(options: BrowserRendererOptions<TriangleLedContro
   let resizeGeneration = 0;
   let pendingSize: RenderSize | undefined;
   let lastDpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio;
-  let controls = { ...(options.initialControls ?? DEFAULT_TRIANGLE_LED_CONTROLS) };
-  if (!isTriangleLedMode(controls.mode)) controls = { ...DEFAULT_TRIANGLE_LED_CONTROLS };
+  const initialMode = options.initialControls?.mode ?? DEFAULT_TRIANGLE_LED_CONTROLS.mode;
+  let mode = isTriangleLedMode(initialMode) ? initialMode : DEFAULT_TRIANGLE_LED_CONTROLS.mode;
+  const guiState: { mode: TriangleLedMode } = { mode };
 
-  const fail = (error: unknown) => {
-    if (disposed) return;
-    if (!reportedError) {
-      reportedError = true;
-      try { options.onError?.(error); } catch { /* Error reporting must not bypass teardown. */ }
-    }
+  const fail = (error: unknown): never => {
     dispose();
+    throw error;
   };
   const applyResize = () => {
     resizeFrame = 0;
@@ -56,7 +57,7 @@ export function createRenderer(options: BrowserRendererOptions<TriangleLedContro
   };
   const measure = () => {
     const rect = options.canvas.getBoundingClientRect();
-    resize({ width: rect.width, height: rect.height, dpr: Math.min(2, Math.max(1, window.devicePixelRatio || 1)) });
+    resize({ width: rect.width, height: rect.height });
   };
   const onWindowResize = () => {
     if (window.devicePixelRatio === lastDpr) return;
@@ -64,9 +65,11 @@ export function createRenderer(options: BrowserRendererOptions<TriangleLedContro
     measure();
   };
   const setControls = (next: Readonly<TriangleLedControls>) => {
-    if (disposed || !isTriangleLedMode(next.mode) || next.mode === controls.mode) return;
-    controls = { mode: next.mode };
-    scene?.setHero(heroStateForActiveClick(controls.mode));
+    if (disposed || !isTriangleLedMode(next.mode) || next.mode === mode) return;
+    mode = next.mode;
+    guiState.mode = mode;
+    refreshGui?.();
+    scene?.setHero(heroStateForActiveClick(mode));
   };
   const dispose = () => {
     if (disposed) return;
@@ -82,6 +85,9 @@ export function createRenderer(options: BrowserRendererOptions<TriangleLedContro
     if (typeof window !== 'undefined') window.removeEventListener('resize', onWindowResize);
     input?.dispose();
     input = undefined;
+    gui?.destroy();
+    gui = undefined;
+    refreshGui = undefined;
     scene?.destroy();
     scene = undefined;
     canvasSurface?.dispose();
@@ -99,9 +105,10 @@ export function createRenderer(options: BrowserRendererOptions<TriangleLedContro
     const nextScene = createHeroRenderer(gpu, { theme: 'dark', css: cssSizeOf(options.canvas, canvasSurface.dpr) });
     scene = nextScene;
     nextScene.setOutputTarget(canvasSurface);
-    nextScene.setHero(heroStateForActiveClick(controls.mode));
+    nextScene.setHero(heroStateForActiveClick(mode));
     await nextScene.prewarm();
     if (disposed) { nextScene.destroy(); return; }
+    ({ gui, refresh: refreshGui } = buildGui(options.canvas.parentElement, guiState, setControls));
     input = installCanvasInput(options.canvas);
     observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure);
     observer?.observe(options.canvas);
@@ -118,9 +125,31 @@ export function createRenderer(options: BrowserRendererOptions<TriangleLedContro
   const ready = initialize().catch((error: unknown) => {
     if (disposed) return;
     fail(error);
-    throw error;
   });
-  return { ready, setControls, invalidate() {}, resize, dispose };
+  return { ready, setControls, resize, dispose };
+}
+
+function buildGui(
+  container: HTMLElement | null,
+  state: { mode: TriangleLedMode },
+  setControls: (controls: TriangleLedControls) => void,
+) {
+  const gui = new GUI({ title: 'Triangle LEDs', container: container ?? undefined, width: 180 });
+  Object.assign(gui.domElement.style, {
+    position: 'absolute',
+    top: '16px',
+    right: '16px',
+    zIndex: '10',
+  });
+  const controller = gui.add(state, 'mode', {
+    Default: -1,
+    'Edge 1': 0,
+    'Edge 2': 1,
+    'Edge 3': 2,
+  }).name('Mode').onChange((value: number) => {
+    if (isTriangleLedMode(value)) setControls({ mode: value });
+  });
+  return { gui, refresh: () => controller.updateDisplay() };
 }
 
 function cssSizeOf(canvas: HTMLCanvasElement, dpr: Surface['dpr']) {
@@ -196,4 +225,17 @@ function installCanvasInput(canvas: HTMLCanvasElement) {
       canvas.style.touchAction = previousTouchAction;
     },
   };
+}
+
+function isPointInsideTriangle(
+  point: { x: number; y: number },
+  size: { width: number; height: number },
+) {
+  const { top, left, right } = canonicalTriangleGeometry(size);
+  const side = (a: typeof top, b: typeof top) =>
+    (b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x);
+  const a = side(top, left);
+  const b = side(left, right);
+  const c = side(right, top);
+  return (a <= 0 && b <= 0 && c <= 0) || (a >= 0 && b >= 0 && c >= 0);
 }

@@ -1,14 +1,9 @@
-// Shared procedural building blocks for the earth example.
-//
-// Everything here is integer-hash driven so the baked maps are bit-identical on
-// every driver: the thumbnail pipeline compares PNGs across Dawn/lavapipe and a
-// `sin()`-based hash would drift between backends.
+// Deterministic procedural helpers shared by the bake and live shaders.
 
 import { pcg3d, unitFloat } from "@vgpu/wgsl-std/hash";
 
 export const PI: f32 = 3.141592653589793;
 
-/** Perlin's 12 edge gradients, picked by hash so the lattice never needs a normalize(). */
 fn latticeGradient(cell: vec3i) -> vec3f {
   let index = pcg3d(bitcast<vec3u>(cell)).x % 12u;
   switch (index) {
@@ -31,7 +26,6 @@ fn quinticFade(t: vec3f) -> vec3f {
   return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
 }
 
-/** Classic 3D Perlin noise in roughly [-1, 1]. */
 export fn perlin3(position: vec3f) -> f32 {
   let base = floor(position);
   let cell = vec3i(base);
@@ -54,7 +48,6 @@ export fn perlin3(position: vec3f) -> f32 {
   return mix(mix(x00, x10, w.y), mix(x01, x11, w.y), w.z);
 }
 
-/** Octave rotation matrices; rotating each octave hides the lattice axes. */
 fn octaveRotation() -> mat3x3f {
   return mat3x3f(
     vec3f(0.00, 0.80, 0.60),
@@ -63,7 +56,6 @@ fn octaveRotation() -> mat3x3f {
   );
 }
 
-/** Fractal Perlin sum normalized back to roughly [-1, 1]. */
 export fn fbm3(position: vec3f, octaves: i32) -> f32 {
   let rotation = octaveRotation();
   var point = position;
@@ -79,7 +71,6 @@ export fn fbm3(position: vec3f, octaves: i32) -> f32 {
   return sum / max(total, 1.0e-6);
 }
 
-/** Ridged fractal noise in [0, 1]; the creases read as mountain chains. */
 export fn ridged3(position: vec3f, octaves: i32) -> f32 {
   let rotation = octaveRotation();
   var point = position;
@@ -96,7 +87,6 @@ export fn ridged3(position: vec3f, octaves: i32) -> f32 {
   return sum / max(total, 1.0e-6);
 }
 
-/** A decorrelated 3-component fbm sample for domain warping. */
 export fn fbmVector(position: vec3f, octaves: i32) -> vec3f {
   return vec3f(
     fbm3(position, octaves),
@@ -105,11 +95,6 @@ export fn fbmVector(position: vec3f, octaves: i32) -> vec3f {
   );
 }
 
-/**
- * Equirectangular UV to a unit direction, matching `sphere()` from `vgpu/scene`:
- * `v = 0` is the north pole and `u` sweeps longitude, so a baked map lines up
- * with the mesh UVs texel for texel.
- */
 export fn equirectDirection(uv: vec2f) -> vec3f {
   let theta = uv.y * PI;
   let phi = uv.x * 2.0 * PI;
@@ -117,7 +102,6 @@ export fn equirectDirection(uv: vec2f) -> vec3f {
   return vec3f(ring * cos(phi), cos(theta), ring * sin(phi));
 }
 
-/** Remaps `value` from one range to another without clamping. */
 export fn valueRemap(value: f32, inMin: f32, inMax: f32, outMin: f32, outMax: f32) -> f32 {
   let span = inMax - inMin;
   if (span == 0.0) {
@@ -130,21 +114,13 @@ export fn saturate(value: f32) -> f32 {
   return clamp(value, 0.0, 1.0);
 }
 
-/** Soft band centred on `center`, falling to 0 at `width`. Used for climate belts. */
 export fn belt(value: f32, center: f32, width: f32) -> f32 {
   return 1.0 - smoothstep(0.0, width, abs(value - center));
 }
 
-/**
- * Sea level, tuned so the continents cover roughly a third of the sphere. Raising
- * it floods the map; lowering it turns the oceans into lakes.
- */
 const SEA_LEVEL: f32 = 0.13;
 
-/** Signed elevation field: > 0 is land, < 0 is ocean floor. Shared by every bake pass. */
 export fn elevation(direction: vec3f) -> f32 {
-  // Warping the continent field is what turns fbm blobs into coastlines with
-  // peninsulas and inland seas; the two finer terms add ranges and crinkle.
   let warp = fbmVector(direction * 1.05 + vec3f(4.7, -2.3, 8.1), 3) * 0.60;
   let continents = fbm3(direction * 1.25 + warp, 6);
   let ranges = fbm3(direction * 3.6 + vec3f(19.0), 4) * 0.26;
