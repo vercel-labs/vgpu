@@ -42,27 +42,27 @@ function entryPoints(wgsl: string): string[] {
   for (let token = read(); token !== undefined; token = read()) {
     let hasStage = false;
     while (token === "@") {
-      const attribute = read();
-      if (/^(vertex|fragment|compute)$/.test(attribute!)) hasStage = true;
+      if (/^(vertex|fragment|compute)$/.test(read()!)) hasStage = true;
 
       token = read();
-      if (token === "(" && !skipParentheses(read)) return names;
-      if (token === "(") token = read();
+      if (token === "(") {
+        if (!skipParentheses(read)) return names;
+        token = read();
+      }
     }
 
     if (token === "fn") {
       const name = read();
-      const open = read();
-      if (hasStage && open === "(" && name && IDENTIFIER.test(name)) names.push(name);
-      skipDeclaration(read, open);
-    } else {
-      skipDeclaration(read, token);
+      token = read();
+      if (hasStage && token === "(" && name && IDENTIFIER.test(name)) names.push(name);
     }
+    skipDeclaration(read, token);
   }
   return names;
 }
 
-const IDENTIFIER = /[_\p{XID_Start}][_\p{XID_Continue}]*/uy;
+// XIDC is Unicode's XID_Continue alias (including underscore); aliases keep the client bundle small.
+const IDENTIFIER = /[_\p{XID_Start}]\p{XIDC}*/uy;
 type TokenReader = () => string | undefined;
 
 function tokenReader(source: string): TokenReader {
@@ -71,13 +71,14 @@ function tokenReader(source: string): TokenReader {
     while (index < source.length) {
       const start = index;
 
-      if (/\s/.test(source[start]!)) {
+      // WGSL uses Pattern_White_Space, whose Unicode alias is Pat_WS.
+      if (/\p{Pat_WS}/u.test(source[start]!)) {
         index++;
         continue;
       }
       if (source.startsWith("//", start)) {
-        index = source.indexOf("\n", start + 2);
-        if (index < 0) return undefined;
+        // Leave the line ending for blankspace handling; EOF stays exhausted.
+        while (index < source.length && !/[\n-\r\u0085\u2028\u2029]/.test(source[index]!)) index++;
         continue;
       }
       if (source.startsWith("/*", start)) {

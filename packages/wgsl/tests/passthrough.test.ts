@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { expect, test } from "vitest";
 import { compile } from "../src/index.ts";
 
@@ -99,3 +100,35 @@ test("compile consumes incomplete attributes without matching a later declaratio
   expect(compile(source).entryPoints).toEqual(["before"]);
   expect(compile("@compute @workgroup_size(1) /* unterminated").entryPoints).toEqual([]);
 });
+
+test("compile terminates for incomplete declarations followed by a line comment at EOF", () => {
+  // Isolate the synchronous call so a regression cannot hang the test runner.
+  const sources = ["@vertex fn // EOF", "@ // EOF", "@vertex fn before() {} @fragment fn // EOF"];
+  const child = spawnSync(process.execPath, [
+    "--experimental-strip-types", "--input-type=module", "--eval",
+    `import { compile } from ${JSON.stringify(new URL("../src/index.ts", import.meta.url).href)};
+     console.log(JSON.stringify(${JSON.stringify(sources)}.map(source => compile(source).entryPoints)));`,
+  ], { encoding: "utf8", timeout: 3000 });
+
+  expect(child.error).toBeUndefined();
+  expect(child.status, child.stderr).toBe(0);
+  expect(JSON.parse(child.stdout)).toEqual([[], [], ["before"]]);
+});
+
+test.each(["\n", "\r\n", "\r", "\v", "\f", "\u0085", "\u2028", "\u2029"])(
+  "compile ends line comments at WGSL line ending %j",
+  (ending) => {
+    const source = `// @vertex fn commented() {}${ending}@fragment fn main() {}`;
+
+    expect(compile(source).entryPoints).toEqual(["main"]);
+  },
+);
+
+test.each(["\t", "\n", "\v", "\f", "\r", " ", "\u0085", "\u200e", "\u200f", "\u2028", "\u2029"])(
+  "compile accepts WGSL blankspace %j between tokens",
+  (space) => {
+    const source = `${space}@${space}fragment${space}fn${space}main${space}() {}`;
+
+    expect(compile(source).entryPoints).toEqual(["main"]);
+  },
+);
