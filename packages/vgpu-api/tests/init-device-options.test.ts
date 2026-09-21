@@ -34,6 +34,29 @@ test("browser adapter receives required features and limits unchanged", async ()
   gpu.dispose();
 });
 
+test("browser init reports an absent navigator.gpu as WebGPU being unavailable", async () => {
+  // Firefox does not expose WebGPU on Linux by default. Optional-chaining the
+  // request made that indistinguishable from an adapter request that came back
+  // empty, so the thrown error blamed the adapter for a missing API.
+  vi.stubGlobal("navigator", {});
+
+  await expect(initBrowser()).rejects.toMatchObject({
+    code: "VGPU-RING1-UNSUPPORTED",
+    message: expect.stringContaining("WebGPU is not available in this browser"),
+  });
+});
+
+test("browser init still reports a null adapter distinctly", async () => {
+  const requestAdapter = vi.fn(async () => null);
+  vi.stubGlobal("navigator", { gpu: { requestAdapter } });
+
+  await expect(initBrowser()).rejects.toMatchObject({
+    code: "VGPU-RING1-UNSUPPORTED",
+    message: expect.stringContaining("requestAdapter() returned null"),
+  });
+  expect(requestAdapter).toHaveBeenCalledOnce();
+});
+
 test("browser init fails clearly when the adapter lacks a requested feature", async () => {
   const requestDevice = vi.fn(async () => createMockGPUDevice());
   const requestAdapter = vi.fn(async () => ({ requestDevice, features: new Set<string>(), info: null } as unknown as GPUAdapter));
