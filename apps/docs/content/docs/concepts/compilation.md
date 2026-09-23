@@ -7,14 +7,13 @@ Pipelines compile lazily: the first `draw()` against a new target pays the pipel
 
 ## Pre-warming with a target
 
-Most of the time you already have the target in hand. `await draw.compile(target)` and `await effect.compile(target)` warm exactly that signature and resolve back to the same object:
+For an existing offscreen target, `await draw.compile(target)` and `await effect.compile(target)` warm exactly that signature and resolve back to the same object:
 
 ```ts
-import { init, draw, effect, surface } from "vgpu";
+import { init, draw, effect, target } from "vgpu";
 
 const gpu = await init();
-const canvas = document.querySelector("canvas")!;
-const canvasSurface = surface(gpu, canvas);
+const offscreen = target(gpu, { size: [512, 512] });
 
 // ---cut---
 const ocean = effect(gpu, `
@@ -35,33 +34,42 @@ const tri = draw(gpu, {
   `,
 });
 
-await Promise.all([ocean.compile(canvasSurface), tri.compile(canvasSurface)]);
-tri.draw(canvasSurface);
-ocean.draw(canvasSurface);
+await Promise.all([ocean.compile(offscreen), tri.compile(offscreen)]);
+tri.draw(offscreen);
+ocean.draw(offscreen);
 ```
 
 The pipelines are cached per signature at the device level, so those first `draw()` calls — and every draw after them — just encode work.
 
 ## Compiling without a target
 
-Sometimes the target doesn't exist yet. Pass a signature object instead: `colors` is required, `depth` and `sampleCount` are optional.
+Sometimes the target doesn't exist yet. Pass a signature object instead: `colors` is required, `depth` and `sampleCount` are optional. For a future canvas surface using the default format, query `navigator.gpu.getPreferredCanvasFormat()` rather than assuming a format:
 
 ```ts
-import { init, draw, geometry } from "vgpu";
-import { box } from "vgpu/scene";
+import { init, effect, frame, surface } from "vgpu";
 
 const gpu = await init();
-const sceneShader = `/* vertex + fragment WGSL */`;
-const msaaScene = draw(gpu, { shader: sceneShader, geometry: geometry(gpu, box({ size: 1 })) });
+const ocean = effect(gpu, `
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(uv, 0.8, 1.0);
+  }
+`);
 
-await msaaScene.compile({
-  colors: ['bgra8unorm'],
-  depth: 'depth24plus',
-  sampleCount: 4,
-});
+// ---cut---
+const format = navigator.gpu.getPreferredCanvasFormat();
+await ocean.compile({ colors: [format] });
+
+// Later, surface() selects the same preferred format by default.
+const canvas = document.querySelector("canvas")!;
+const canvasSurface = surface(gpu, canvas);
+frame(gpu, (frame) => frame.pass(canvasSurface, ocean));
 ```
 
-> Good to know: surface formats are platform-dependent — `bgra8unorm` on most browsers, `rgba8unorm` on others. Compiling the wrong signature doesn't error; it's just a warm-up you didn't need, and the real draw compiles lazily on first use anyway. When in doubt, compile against the actual target.
+For an existing surface, use `await ocean.compile({ colors: [canvasSurface.format] })` to respect its actual format, including an explicit `surface(..., { format })` override. Passing the surface itself to `compile()` outside a frame is rejected; a signature lets you pre-warm during loading without acquiring a canvas texture. Render to surfaces through `frame()` or `frameLoop()`.
+
+The signature must match the actual target's color formats, depth format, and sample count. A canvas surface has no depth attachment and a sample count of 1, so the example omits both optional fields. For offscreen targets, use their configured formats and include depth/MSAA when enabled, or pass the existing target directly to `compile()`.
+
+> Good to know: `getPreferredCanvasFormat()` returns the system's preferred `rgba8unorm` or `bgra8unorm` canvas texture format. Compiling a different valid signature can succeed, but it doesn't warm the pipeline needed by the actual target: the first render still compiles that pipeline lazily.
 
 ## `compileSync()`
 
@@ -95,10 +103,13 @@ A failed `compile()` rejects its promise — the error belongs to the call site,
 import { init, draw } from "vgpu";
 
 const gpu = await init();
-const tri = draw(gpu, { shader: `@vertex fn vs_main() -> @builtin(position) vec4f { return vec4f(0); }` });
+const tri = draw(gpu, { shader: `
+  @vertex fn vs_main() -> @builtin(position) vec4f { return vec4f(0, 0, 0, 1); }
+  @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1.0); }
+` });
 
 try {
-  await tri.compile({ colors: ['bgra8unorm'] });
+  await tri.compile({ colors: [navigator.gpu.getPreferredCanvasFormat()] });
 } catch (error) {
   console.error('Pipeline failed to compile', error);
 }
