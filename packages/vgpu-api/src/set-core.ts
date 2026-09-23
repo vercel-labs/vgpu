@@ -36,6 +36,7 @@ export interface SetCore {
   watchResources(onDestroyed: (change: BindingIdentityChange) => void): () => void;
   readonly groups: readonly number[];
   set(values: SetBag): readonly BindingIdentityChange[];
+  retainUniforms(): void;
   claimGroup(group: number, bindGroup: GPUBindGroup, expectedLayout: GPUBindGroupLayout): string | undefined;
   layout(group: number): GPUBindGroupLayout;
   bindGroups(capture?: UniformCapture): readonly { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimValidation?: { readonly label: string; readonly group: number } }[];
@@ -56,7 +57,10 @@ type MutableBindingState = {
   buffer?: Buffer;
   bytes?: ArrayBuffer;
   revision?: number;
+  uploadedRevision?: number;
+  liveUniform?: boolean;
   uniformValue?: () => UniformValue;
+  prepareUniform?: (retain: boolean) => void;
   libValue?: unknown;
   resource?: GPUBindingResource;
   identity?: BindGroupIdentityPart;
@@ -124,7 +128,25 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     if (!state.buffer) createLibBuffer(state, layout.size);
     state.bytes = bytes;
     state.revision = (state.revision ?? 0) + 1;
-    state.buffer!.write(bytes, 0);
+    if (state.liveUniform || state.info.addressSpace !== "uniform") prepareUniform(state, false);
+  }
+
+  function prepareUniform(state: MutableBindingState, retain: boolean): void {
+    state.prepareUniform?.(retain);
+    if (state.buffer && state.bytes && state.uploadedRevision !== state.revision) {
+      state.buffer.write(state.bytes, 0);
+      state.uploadedRevision = state.revision;
+    }
+    if (retain) state.liveUniform = true;
+  }
+
+  // A raw GPURenderBundle can outlive this draw's binding choices and bypass frame submission.
+  // Once recorded, its stable buffers must continue receiving set() updates immediately.
+  function retainUniforms(): void {
+    assertUsable();
+    for (const state of bindings.values()) {
+      if (state.info.addressSpace === "uniform" && bindingIsActive(state) && !claimedGroups.has(state.info.group)) prepareUniform(state, true);
+    }
   }
 
   function resourceContext(binding: BindingInfo) {
@@ -140,6 +162,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     state.unsubscribeRecreate?.();
     state.resource = normalized.resource;
     state.uniformValue = normalized.uniformValue;
+    state.prepareUniform = normalized.prepareUniform;
     state.identity = normalized.identity;
     state.destroyed = false;
     state.resourceLabel = normalized.resourceLabel;
@@ -218,6 +241,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
       const state = requiredState(binding);
       const value = state.uniformValue?.() ?? (state.bytes && binding.addressSpace === "uniform" ? { owner: state, revision: state.revision!, bytes: new Uint8Array(state.bytes) } : undefined);
       const captured = capture && value ? capture.capture(value, options.cache) : undefined;
+      if (!captured) prepareUniform(state, false);
       return { binding: binding.binding, resource: captured?.resource ?? state.resource!, identity: captured?.identity ?? state.identity! };
     });
     const entries = resolved.map(({ binding, resource }) => ({ binding, resource }));
@@ -261,6 +285,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     watchResources,
     get groups() { return groups; },
     set,
+    retainUniforms,
     claimGroup,
     layout,
     bindGroups,

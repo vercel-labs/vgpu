@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -6,6 +6,46 @@ import { init, compute, effect, frame, storage, target, uniforms, bundle, pingPo
 
 const native = process.env.VGPU_DOCKER_TEST === "1" || process.env.VGPU_NATIVE_COMPUTE_TEST === "1";
 describe.skipIf(!native)("native frame compute and uniform capture", () => {
+  test.each(["owned", "shared"] as const)("deferred %s uploads preserve frame, one-shot and raw bundle output", async ownership => {
+    const gpu = await init();
+    const writes = vi.spyOn(gpu.gpu.queue, "writeBuffer");
+    try {
+      const a = target(gpu, { size: [1, 1], format: "rgba8unorm" });
+      const b = target(gpu, { size: [1, 1], format: "rgba8unorm" });
+      const shared = ownership === "shared" ? uniforms(gpu, { value: 0.25 }) : undefined;
+      const fx = effect(gpu, `struct Params { value:f32 } @group(0) @binding(0) var<uniform> params:Params;
+        @fragment fn main() -> @location(0) vec4f { return vec4f(params.value, 0, 0, 1); }`, { set: { params: shared ?? { value: 0.25 } } });
+      const set = (value: number) => shared ? shared.set({ value }) : fx.set({ params: { value } });
+      await fx.compile(a);
+      const f = frame(gpu, f => {
+        f.pass(a, fx);
+        set(0.75);
+        f.pass(b, fx);
+        expect(writes).not.toHaveBeenCalled();
+      });
+      expect(writes).toHaveBeenCalledTimes(1);
+      await f.done;
+      const red = async (t: typeof a) => (await t.color.read({ mipLevel: 0, region: "all" }))[0];
+      expect(await Promise.all([red(a), red(b)])).toEqual([64, 191]);
+      set(0.5);
+      fx.draw(a);
+      fx.draw(b);
+      expect(writes).toHaveBeenCalledTimes(2);
+      expect(await Promise.all([red(a), red(b)])).toEqual([128, 128]);
+
+      const recorded = bundle(gpu, { target: a }, p => p.draw(fx));
+      // Captured shared resources must remain live even after this draw binds a different object.
+      if (shared) fx.set({ params: uniforms(gpu, { value: 0 }) });
+      set(0.25);
+      const encoder = gpu.gpu.createCommandEncoder();
+      const pass = encoder.beginRenderPass({ colorAttachments: [{ view: a.color.gpu.createView(), loadOp: "clear", storeOp: "store", clearValue: [0, 0, 0, 1] }] });
+      pass.executeBundles([recorded.gpu]);
+      pass.end();
+      gpu.gpu.queue.submit([encoder.finish()]);
+      expect(await red(a)).toBe(64);
+    } finally { writes.mockRestore(); gpu.dispose(); }
+  });
+
   test("render → two compute dispatches → render preserves data and uniform ordering", async () => {
     const gpu = await init();
     try {

@@ -95,7 +95,7 @@ describe("uniforms(gpu) shared uniforms", () => {
     gpu.dispose();
   });
 
-  test("shared canonical values stay live while frame consumers capture their own upload slices", async () => {
+  test("shared buffer identity stays stable while frame consumers capture their own upload slices", async () => {
     const gpu = await init();
     const globals = uniforms(gpu, { time: 0, mouse: [0, 0] });
     const wave = effect(gpu, WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
@@ -124,19 +124,20 @@ describe("uniforms(gpu) shared uniforms", () => {
     expect(mock.calls.createBuffer).toBe(3); // canonical plus two in-flight frame pages
     expect(mock.calls.createBindGroup).toBe(bindGroupsAfterFirstFrame + 2);
     expect(bindGroupsAfterFirstFrame).toBe(2);
-    expect("__vgpuMockBytes" in resource.buffer).toBe(true);
-    const bytes = resource.buffer.__vgpuMockBytes;
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const captured = [...mock.createBindGroupDescriptors.at(-1)!.entries][0]!.resource as GPUBufferBinding;
+    expect("__vgpuMockBytes" in captured.buffer).toBe(true);
+    const bytes = (captured.buffer as GPUBuffer & { __vgpuMockBytes: Uint8Array }).__vgpuMockBytes;
+    const view = new DataView(bytes.buffer, bytes.byteOffset + (captured.offset ?? 0), captured.size);
     expect(view.getFloat32(0, true)).toBe(2);
     expect(view.getFloat32(8, true)).toBe(3);
     expect(view.getFloat32(12, true)).toBe(4);
     gpu.dispose();
   });
 
-  test("set() batches a partial update into one writeBuffer call", async () => {
+  test("set() defers partial updates until a persistent draw needs them", async () => {
     const gpu = await init();
     const globals = uniforms(gpu, { time: 0, mouse: [0, 0] });
-    effect(gpu, WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
+    const wave = effect(gpu, WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
     let writes = 0;
     const originalWriteBuffer = gpu.device.gpu.queue.writeBuffer.bind(gpu.device.gpu.queue);
     gpu.device.gpu.queue.writeBuffer = ((...args: Parameters<GPUQueue["writeBuffer"]>) => {
@@ -145,7 +146,9 @@ describe("uniforms(gpu) shared uniforms", () => {
     }) as GPUQueue["writeBuffer"];
 
     globals.set({ time: 1, mouse: [2, 3] });
-
+    globals.set({ time: 2 });
+    expect(writes).toBe(0);
+    wave.draw(target(gpu, { size: [1, 1] }));
     expect(writes).toBe(1);
     gpu.dispose();
   });
@@ -154,6 +157,8 @@ describe("uniforms(gpu) shared uniforms", () => {
     const gpu = await init();
     const globals = uniforms(gpu, { time: 1, mouse: [2, 3] });
     const wave = effect(gpu, WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
+    const color = target(gpu, { size: [1, 1] });
+    wave.draw(color);
     const resource = drawBindingState(effectDraw(wave), "globals")?.resource as GPUBufferBinding;
     if (!("__vgpuMockBytes" in resource.buffer)) throw new Error("fixture did not expose mock buffer bytes");
     const before = resource.buffer.__vgpuMockBytes.slice();
@@ -167,6 +172,7 @@ describe("uniforms(gpu) shared uniforms", () => {
     expect(resource.buffer.__vgpuMockBytes).toEqual(before);
 
     globals.set({ time: 4 });
+    wave.draw(color);
     const bytes = resource.buffer.__vgpuMockBytes;
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     expect([view.getFloat32(0, true), view.getFloat32(8, true), view.getFloat32(12, true)]).toEqual([4, 2, 3]);

@@ -1115,6 +1115,11 @@ export function encodeDraw(draw: InternalDraw, pass: GPURenderPassEncoder, targe
   draw.encode(pass, target, opts, claimValidation, capture);
 }
 
+/** Stable uniform bindings recorded in a raw bundle must remain live after recording. */
+export function retainDrawUniforms(draw: InternalDraw): void {
+  drawState(draw).setCore.retainUniforms();
+}
+
 function drawState(draw: Draw): DrawState {
   const state = drawStates.get(draw);
   if (!state) throw new TypeError("Invalid Draw instance");
