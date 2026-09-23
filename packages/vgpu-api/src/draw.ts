@@ -1063,7 +1063,7 @@ export function drawReflection(draw: Draw): Reflection { return drawState(draw).
 
 export function drawBindingState(draw: Draw, name: string): BindingState | undefined { return drawState(draw).setCore.bindingState(name); }
 
-/** Internal bundle hook: observes the resources captured by one encoded draw, not future bindings. */
+/** Internal bundle hook: keeps captured uniforms live and observes resources of this encoded draw. */
 export function watchDrawResources(draw: InternalDraw, onDestroyed: (event: BundleStaleEvent) => void): () => void {
   return drawState(draw).setCore.watchResources(change => onDestroyed({ kind: "binding-identity", drawLabel: draw.label, ...change }));
 }

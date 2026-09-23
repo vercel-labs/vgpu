@@ -59,7 +59,11 @@ globals.set({ exposure: 1.25 });
 
 When used in the uniform address space, direct frame draws and compute dispatches capture the current values. Calling `set()` between operations changes only later operations. The same revision can share an upload slice across pipelines in a frame.
 
+`set()` validates and packs the merged values immediately, but frame-only consumers upload through the frame's captured pages instead of also writing the stable backing buffer. One-shot draws and dispatches flush pending stable-buffer values when used; repeated calls without an update do not upload them again. Canceled frames leave CPU updates applied but do not upload their captured pages.
+
 When adopted as storage, this object keeps a live backing buffer so GPU-written state persists. Render bundles, raw/low-level resources and claimed bind groups also retain live contents; they do not acquire per-operation uniform snapshots.
+
+Once a uniform is recorded in a render bundle, later updates keep its stable buffer live, including for raw WebGPU bundle replay. Accessing the implementation's `.buffer` or `.gpu` handle likewise flushes pending values and preserves immediate future writes for direct consumers; those handles are not part of the public `SharedUniforms` type.
 
 ## Notes
 

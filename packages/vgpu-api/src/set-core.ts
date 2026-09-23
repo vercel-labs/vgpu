@@ -33,6 +33,7 @@ export interface BindingIdentityChange {
 /** Ring-1 set() engine: latches ownership, validates completeness, and returns cached bind groups. */
 export interface SetCore {
   assertUsable(): void;
+  /** Retains live uniform contents and observes resources captured by a bundle. */
   watchResources(onDestroyed: (change: BindingIdentityChange) => void): () => void;
   readonly groups: readonly number[];
   set(values: SetBag): readonly BindingIdentityChange[];
@@ -56,7 +57,10 @@ type MutableBindingState = {
   buffer?: Buffer;
   bytes?: ArrayBuffer;
   revision?: number;
+  dirtyUniform?: boolean;
+  liveUniform?: boolean;
   uniformValue?: () => UniformValue;
+  prepareUniform?: (retain: boolean) => void;
   libValue?: unknown;
   resource?: GPUBindingResource;
   identity?: BindGroupIdentityPart;
@@ -124,7 +128,17 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     if (!state.buffer) createLibBuffer(state, layout.size);
     state.bytes = bytes;
     state.revision = (state.revision ?? 0) + 1;
-    state.buffer!.write(bytes, 0);
+    state.dirtyUniform = true;
+    if (state.liveUniform || state.info.addressSpace !== "uniform") prepareUniform(state, false);
+  }
+
+  function prepareUniform(state: MutableBindingState, retain: boolean): void {
+    state.prepareUniform?.(retain);
+    if (state.dirtyUniform) {
+      state.buffer!.write(state.bytes!, 0);
+      state.dirtyUniform = false;
+    }
+    if (retain) state.liveUniform = true;
   }
 
   function resourceContext(binding: BindingInfo) {
@@ -140,6 +154,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     state.unsubscribeRecreate?.();
     state.resource = normalized.resource;
     state.uniformValue = normalized.uniformValue;
+    state.prepareUniform = normalized.prepareUniform;
     state.identity = normalized.identity;
     state.destroyed = false;
     state.resourceLabel = normalized.resourceLabel;
@@ -186,7 +201,10 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     assertUsable();
     const unsubscribe: (() => void)[] = [];
     for (const state of bindings.values()) {
-      if (!bindingIsActive(state) || claimedGroups.has(state.info.group) || !state.subscribeDestroy) continue;
+      if (!bindingIsActive(state) || claimedGroups.has(state.info.group)) continue;
+      // Raw bundle replay bypasses frame submission hooks; keep captured buffers live.
+      if (state.info.addressSpace === "uniform") prepareUniform(state, true);
+      if (!state.subscribeDestroy) continue;
       // Capture this exact resource, independently of subsequent Draw.set() calls.
       const previousIdentity = identityString(state.identity);
       const { group, binding, name, kind } = state.info;
@@ -218,6 +236,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
       const state = requiredState(binding);
       const value = state.uniformValue?.() ?? (state.bytes && binding.addressSpace === "uniform" ? { owner: state, revision: state.revision!, bytes: new Uint8Array(state.bytes) } : undefined);
       const captured = capture && value ? capture.capture(value, options.cache) : undefined;
+      if (!captured) prepareUniform(state, false);
       return { binding: binding.binding, resource: captured?.resource ?? state.resource!, identity: captured?.identity ?? state.identity! };
     });
     const entries = resolved.map(({ binding, resource }) => ({ binding, resource }));

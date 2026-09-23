@@ -9,6 +9,8 @@ import { BINDING_RESOURCE, bindingResourceOf } from "./draw-protocols.ts";
 
 export interface NormalizedBindingResource {
   readonly uniformValue?: () => UniformValue;
+  /** Flush the stable uniform buffer; retain=true keeps future updates live for raw/bundle consumers. */
+  readonly prepareUniform?: (retain: boolean) => void;
   readonly resourceLabel?: string;
   readonly resource: GPUBindingResource;
   readonly identity: BindGroupIdentityPart;

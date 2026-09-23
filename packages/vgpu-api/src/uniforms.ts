@@ -26,25 +26,30 @@ interface SharedUniformLayoutState {
 export class SharedUniformsImpl<T extends Record<string, unknown>> implements SharedUniforms<T>, BindingResourceProvider {
   #values: Record<string, unknown>;
   #revision = 0;
-  #bytes?: Uint8Array;
+  #bytes?: Uint8Array<ArrayBuffer>;
   #state?: SharedUniformLayoutState;
   #bufferRef?: Buffer;
+  #dirty = false;
+  #liveUniform = false;
 
   constructor(private readonly device: Device, initialValues: T) {
     this.#values = cloneRecord(initialValues);
   }
 
-  get buffer(): Buffer | undefined { return this.#bufferRef; }
-  get gpu(): GPUBuffer | undefined { return this.#bufferRef?.gpu; }
+  get buffer(): Buffer | undefined { this.#prepareUniform(true); return this.#bufferRef; }
+  get gpu(): GPUBuffer | undefined { this.#prepareUniform(true); return this.#bufferRef?.gpu; }
   get size(): number | undefined { return this.#state?.layout.size; }
 
   set(values: Partial<T>): void {
     const next = cloneRecord(this.#values);
     mergeInto(next, values as Record<string, unknown>);
     if (this.#state && this.#bufferRef) {
+      assertBufferUsable(this.#bufferRef, "uniforms.set");
       const bytes = writeLayoutValue(this.#state.layout, next);
-      this.#bufferRef.write(bytes, 0);
+      const live = this.#liveUniform || this.#state.addressSpace === "storage";
+      if (live) this.#bufferRef.write(bytes, 0);
       this.#bytes = new Uint8Array(bytes);
+      this.#dirty = !live;
     }
     this.#values = next;
     this.#revision += 1;
@@ -63,7 +68,10 @@ export class SharedUniformsImpl<T extends Record<string, unknown>> implements Sh
     assertBufferUsable(buffer, `${sourceHint}.set`);
     return {
       resource: { buffer: buffer.gpu, offset: 0, size: adopted.layout.size },
-      ...(adopted.addressSpace === "uniform" ? { uniformValue: () => ({ owner: this, revision: this.#revision, bytes: this.#bytes! }) } : {}),
+      ...(adopted.addressSpace === "uniform" ? {
+        uniformValue: () => ({ owner: this, revision: this.#revision, bytes: this.#bytes! }),
+        prepareUniform: (retain: boolean) => this.#prepareUniform(retain),
+      } : {}),
       identity: buffer.resourceIdentity,
       unsubscribe: (cb) => buffer.onDestroy(cb),
     };
@@ -93,7 +101,7 @@ export class SharedUniformsImpl<T extends Record<string, unknown>> implements Sh
       label: `${binding.name}.sharedUniform`,
     });
     try {
-      buffer.write(bytes, 0);
+      if (addressSpace === "storage") buffer.write(bytes, 0);
     } catch (error) {
       buffer.destroy();
       throw error;
@@ -101,7 +109,19 @@ export class SharedUniformsImpl<T extends Record<string, unknown>> implements Sh
     this.#bytes = new Uint8Array(bytes);
     this.#state = state;
     this.#bufferRef = buffer;
+    this.#dirty = addressSpace === "uniform";
     return state;
+  }
+
+  // Accessors and bundle recording expose a buffer that can be submitted without our hooks.
+  // Keep it current from that point on; ordinary managed frame consumers only need CPU bytes.
+  #prepareUniform(retain: boolean): void {
+    if (!this.#bufferRef) return;
+    if (this.#dirty) {
+      this.#bufferRef.write(this.#bytes!, 0);
+      this.#dirty = false;
+    }
+    if (retain) this.#liveUniform = true;
   }
 
   #assertCompatibleLayout(binding: BindingInfo, layout: HostShareableLayout, addressSpace: "uniform" | "storage", sourceHint: string): void {
