@@ -1063,7 +1063,7 @@ export function drawReflection(draw: Draw): Reflection { return drawState(draw).
 
 export function drawBindingState(draw: Draw, name: string): BindingState | undefined { return drawState(draw).setCore.bindingState(name); }
 
-/** Internal bundle hook: observes the resources captured by one encoded draw, not future bindings. */
+/** Internal bundle hook: keeps captured uniforms live and observes resources of this encoded draw. */
 export function watchDrawResources(draw: InternalDraw, onDestroyed: (event: BundleStaleEvent) => void): () => void {
   return drawState(draw).setCore.watchResources(change => onDestroyed({ kind: "binding-identity", drawLabel: draw.label, ...change }));
 }
@@ -1113,11 +1113,6 @@ export function drawStencilWritingOps(draw: Draw): readonly string[] {
 
 export function encodeDraw(draw: InternalDraw, pass: GPURenderPassEncoder, target: Target | TargetSignature, opts: DrawCallOptions = {}, claimValidation?: (result: ClaimedGroupValidationResult) => void, capture?: UniformCapture): void {
   draw.encode(pass, target, opts, claimValidation, capture);
-}
-
-/** Stable uniform bindings recorded in a raw bundle must remain live after recording. */
-export function retainDrawUniforms(draw: InternalDraw): void {
-  drawState(draw).setCore.retainUniforms();
 }
 
 function drawState(draw: Draw): DrawState {

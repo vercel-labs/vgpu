@@ -33,10 +33,10 @@ export interface BindingIdentityChange {
 /** Ring-1 set() engine: latches ownership, validates completeness, and returns cached bind groups. */
 export interface SetCore {
   assertUsable(): void;
+  /** Retains live uniform contents and observes resources captured by a bundle. */
   watchResources(onDestroyed: (change: BindingIdentityChange) => void): () => void;
   readonly groups: readonly number[];
   set(values: SetBag): readonly BindingIdentityChange[];
-  retainUniforms(): void;
   claimGroup(group: number, bindGroup: GPUBindGroup, expectedLayout: GPUBindGroupLayout): string | undefined;
   layout(group: number): GPUBindGroupLayout;
   bindGroups(capture?: UniformCapture): readonly { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimValidation?: { readonly label: string; readonly group: number } }[];
@@ -57,7 +57,7 @@ type MutableBindingState = {
   buffer?: Buffer;
   bytes?: ArrayBuffer;
   revision?: number;
-  uploadedRevision?: number;
+  dirtyUniform?: boolean;
   liveUniform?: boolean;
   uniformValue?: () => UniformValue;
   prepareUniform?: (retain: boolean) => void;
@@ -128,25 +128,17 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     if (!state.buffer) createLibBuffer(state, layout.size);
     state.bytes = bytes;
     state.revision = (state.revision ?? 0) + 1;
+    state.dirtyUniform = true;
     if (state.liveUniform || state.info.addressSpace !== "uniform") prepareUniform(state, false);
   }
 
   function prepareUniform(state: MutableBindingState, retain: boolean): void {
     state.prepareUniform?.(retain);
-    if (state.buffer && state.bytes && state.uploadedRevision !== state.revision) {
-      state.buffer.write(state.bytes, 0);
-      state.uploadedRevision = state.revision;
+    if (state.dirtyUniform) {
+      state.buffer!.write(state.bytes!, 0);
+      state.dirtyUniform = false;
     }
     if (retain) state.liveUniform = true;
-  }
-
-  // A raw GPURenderBundle can outlive this draw's binding choices and bypass frame submission.
-  // Once recorded, its stable buffers must continue receiving set() updates immediately.
-  function retainUniforms(): void {
-    assertUsable();
-    for (const state of bindings.values()) {
-      if (state.info.addressSpace === "uniform" && bindingIsActive(state) && !claimedGroups.has(state.info.group)) prepareUniform(state, true);
-    }
   }
 
   function resourceContext(binding: BindingInfo) {
@@ -209,7 +201,10 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     assertUsable();
     const unsubscribe: (() => void)[] = [];
     for (const state of bindings.values()) {
-      if (!bindingIsActive(state) || claimedGroups.has(state.info.group) || !state.subscribeDestroy) continue;
+      if (!bindingIsActive(state) || claimedGroups.has(state.info.group)) continue;
+      // Raw bundle replay bypasses frame submission hooks; keep captured buffers live.
+      if (state.info.addressSpace === "uniform") prepareUniform(state, true);
+      if (!state.subscribeDestroy) continue;
       // Capture this exact resource, independently of subsequent Draw.set() calls.
       const previousIdentity = identityString(state.identity);
       const { group, binding, name, kind } = state.info;
@@ -285,7 +280,6 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     watchResources,
     get groups() { return groups; },
     set,
-    retainUniforms,
     claimGroup,
     layout,
     bindGroups,

@@ -1,5 +1,5 @@
 import { createRenderBundle } from "./core/render-bundle.ts";
-import { InternalDraw, drawUsesBlendConstant, drawUsesStencilReference, encodeDraw, registerDrawBundle, retainDrawUniforms, watchDrawResources, type BundleBackReference, type BundleStaleEvent, type Draw, type DrawCallOptions } from "./draw.ts";
+import { InternalDraw, drawUsesBlendConstant, drawUsesStencilReference, encodeDraw, registerDrawBundle, watchDrawResources, type BundleBackReference, type BundleStaleEvent, type Draw, type DrawCallOptions } from "./draw.ts";
 import { InternalEffect, effectDraw, type Effect } from "./effect.ts";
 import type { CompileTarget, Target, TargetSignature } from "./target.ts";
 import { normalizeSignature, signatureKeyOf, validateTargetSignature } from "./pipeline-store.ts";
@@ -125,7 +125,6 @@ class ExplicitBundleRecorder implements BundleRecorder {
     // Likewise the stencil reference: GPURenderBundleEncoder has no setStencilReference. Stencil pipeline state without ref records fine.
     if (drawUsesStencilReference(draw)) throw bundleStencilReferenceError(this.bundle.id, draw.label);
     this.bundle.remember(draw);
-    retainDrawUniforms(draw);
     encodeDraw(draw, this.encoder, this.bundle.signature, opts);
   }
 }
