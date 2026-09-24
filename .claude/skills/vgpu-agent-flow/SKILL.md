@@ -137,16 +137,29 @@ For each lane that can start:
 
 ## Personal access (per user, not committed)
 
-Research runs on fx through AI Gateway, which needs an explicit connection in the main checkout's
-`.subharness/agents.local.json` (auto-excluded from Git). Without it the researchers fall back to
-Codex. Example:
+Research runs on fx through AI Gateway, which needs an explicit connection. Use the OIDC token of
+the `vercel-labs/vgpu` project, configured once in the **main checkout** (worktrees read it from
+there):
+
+```sh
+cd <main-checkout>
+vercel link --yes --project vgpu --scope vercel-labs   # writes .vercel/project.json
+vercel env pull .env.local --yes                       # writes VERCEL_OIDC_TOKEN
+```
+
+`vercel link` may append `.vercel` / `.env*.local` to `.gitignore`; revert that and add them to
+`.git/info/exclude` instead. Then create `<main-checkout>/.subharness/agents.local.json`
+(auto-excluded from Git):
 
 ```json
 {
   "access": {
-    "fx": [{ "type": "vercel-api-key", "env": "AI_GATEWAY_API_KEY", "envFile": ".env.local" }]
+    "fx": [{ "type": "vercel-oidc", "project": ".", "envFile": ".env.local" }]
   }
 }
 ```
 
-Codex and Claude Code use their native subscription logins by default.
+Verify with `npx subharness check repo:graphics-researcher`. The OIDC token expires after about
+12 hours; when fx fails with an expired-token error, re-run `vercel env pull .env.local --yes` in
+the main checkout. Without fx access the researchers fall back to Codex. Codex and Claude Code use
+their native subscription logins by default.
