@@ -43,7 +43,8 @@
     "adaptive-quality": 63030,
     "atmosphere": 106538,
     "glass-sculpture": 72804,
-    "spiral-galaxy": 86662
+    "spiral-galaxy": 87196,
+    "liquid-layout": 137375
   },
   "exampleGrowth": {
     "percent": 2,
@@ -70,5 +71,7 @@
     }
   },
   "$comment:spiral-galaxy": "Measured at 86662 B gzip on Node 22.21.1 against canary c290dd32, with batched compute/render submission, compute prewarming, unchanged shader output, and a static vgpu import inside the lazy-loaded example.",
-  "$comment:spiral-galaxy-shared-chunks": "Adding Spiral Galaxy changes Turbopack chunk factoring: an isolated clean-canary control at 7d51e9db measures Atmosphere at 111457 B gzip, versus 111604 B with this example, using the same Node 22.21.1 and lockfile. Increase only Atmosphere's baseline by the measured 147 B delta (106391 to 106538), preserving its existing 54 B remaining allowance; its source and all growth rules remain unchanged. The updated c290dd32 candidate reproduces the same 111604 B measurement."
+  "$comment:spiral-galaxy-shared-chunks": "Adding Spiral Galaxy changes Turbopack chunk factoring: an isolated clean-canary control at 7d51e9db measures Atmosphere at 111457 B gzip, versus 111604 B with this example, using the same Node 22.21.1 and lockfile. Increase only Atmosphere's baseline by the measured 147 B delta (106391 to 106538), preserving its existing 54 B remaining allowance; its source and all growth rules remain unchanged. The updated c290dd32 candidate reproduces the same 111604 B measurement.",
+  "$comment:liquid-layout": "Measured at 137375 B gzip from a production build of canary cdf24a18 plus this example on Node 22.21.1 / Next 16.3.3. Motion's React layer (layout projection, layoutId, drag, AnimatePresence) is the largest route-owned chunk at 45172 B; the example code and WGSL add 25740 B, and the rest is the two chunks every route loads (49880 B, including the vgpu runtime) plus the 16583 B lil-gui/vgpu chunk shared with Glass Sculpture and Spiral Galaxy.",
+  "$comment:liquid-layout-shared-chunks": "Adding Liquid Layout changes Turbopack chunk factoring: Spiral Galaxy's raw bytes stay at 272348 B, but its lil-gui code moves into the lil-gui/vgpu chunk that Glass Sculpture already loads, now shared by all three lil-gui routes. A same-machine control of the same tree with this example removed measures Spiral Galaxy at 86777 B gzip, versus 87311 B with it, on the same Node 22.21.1 and lockfile. Increase only Spiral Galaxy's baseline by the measured 534 B delta (86662 to 87196); its source and all growth rules remain unchanged. Atmosphere measures the same 111816 B in both local builds, so this example does not move it (canary CI run 36044722520 measures it at 111628 B)."
 }
