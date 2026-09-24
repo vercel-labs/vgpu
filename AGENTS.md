@@ -29,3 +29,11 @@ conditions apply; the linked steps are mandatory, not optional reference materia
 | Submitting an external PR or changing its type/checks/merge policy. | [Contribution policy rollout](CONTRIBUTING.md#contribution-policy-rollout) |
 
 Normal development targets `canary`. The linked production/release workflows define the exceptions.
+
+## Agent team
+
+Repository specialists (researchers, API designer, planner, implementer, writer, reviewer, builder)
+are defined in `.subharness/agents/` and run through the `subharness` CLI. The lead workflow —
+research, API design, human-validated decisions, planning, parallel implementation, integration —
+is in `.claude/skills/vgpu-agent-flow/SKILL.md`. Pipeline artifacts live in the gitignored
+`.context/work/<topic>/`.

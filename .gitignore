@@ -8,6 +8,8 @@ packages/*/dist/
 coverage/
 /artifacts/
 /docs/plans/
+# Agent pipeline scratch (research, decisions, plans, lane worktrees); see .claude/skills/vgpu-agent-flow
+/.context/
 .vscode/
 .idea/
 # Editor backup/swap files
