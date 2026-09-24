@@ -22,7 +22,8 @@ talk to the human and never see this conversation — each prompt must carry the
 | `repo:writer` | Claude `claude-opus-5.5` high → Codex `gpt-5.6-sol` high | Docs in house style (called by implementer, or by you for docs-only work) |
 | `repo:reviewer` | Claude `claude-opus-5.5` high → Codex `gpt-6-astra` high | Read-only review (called by implementer per task, and by you after integration) |
 | `repo:builder` | Codex `gpt-5.6-sol` high → Claude `claude-opus-5.5` high | Applies a bounded list of integration-review findings |
-| `repo:example-builder` | Claude `claude-opus-5.5` xhigh | One docs gallery example end to end from a brief; sees it running through `capture_preview`; runs `reviewer`; commits |
+| `repo:example-builder` | Claude `claude-opus-5.5` xhigh | One docs gallery example end to end from a brief; sees it running through `capture_preview`; runs `example-reviewer`; commits |
+| `repo:example-reviewer` | Claude `claude-opus-5.5` high | Example review: code plus hands-on interaction checks through `capture_preview` (called by example-builder) |
 
 Fallback (→) only happens when the first harness is unavailable before the task starts (missing
 CLI, no login, no fx Gateway access). A task that fails after starting is never retried elsewhere;
@@ -166,11 +167,14 @@ reference examples) and run one builder session per example in the target checko
 npx subharness run repo:example-builder --prompt "Topic: <topic>. Build the example in .context/work/<topic>/briefs/<slug>.md. Base ref: origin/canary."
 ```
 
-The builder carries the example contract in `.subharness/tools/example-playbook.ts` and a
-`capture_preview` tool (`.subharness/tools/preview/`) that loads `/preview/<slug>` from the
-checkout's docs dev server in headless WebGPU Chrome, replays scripted pointer input, and returns
-screenshots, console problems, and frame timing. The same capture runs from a shell:
-`node .subharness/tools/preview/cli.ts <slug> --steps '<json>'`.
+The builder carries the example contract in `.subharness/tools/example-playbook.ts` and these tools:
+`capture_preview` (`.subharness/tools/preview/`) loads `/preview/<slug>` from the checkout's docs dev
+server in headless WebGPU Chrome, replays scripted mouse/touch/keyboard input, and returns
+screenshots, burst contact sheets, console problems, and GPU/frame timing; `render_thumbnail`,
+`verify_example`, and `bundle_report` (`.subharness/tools/example/`) cover thumbnails, the
+pre-commit checklist, and chunk budgets. Two also run from a shell:
+`node .subharness/tools/preview/cli.ts <slug> --steps '<json>'` and
+`node .subharness/tools/thumbs/mesa.ts <slug> [--update]` (CI's pinned Mesa renderer).
 
 When several examples are built in sequence, improve the builder between them: ask its session what
 context or tooling would have saved time (`subharness send <session-id> --prompt "..."`), evaluate

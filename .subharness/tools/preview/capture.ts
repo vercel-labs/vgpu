@@ -1,27 +1,12 @@
 // Opens a docs preview in headless WebGPU Chrome, replays a scripted interaction, and captures frames.
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { launchChrome, type CdpEvent, type ChromePage } from "./chrome.ts";
 import { ensureDocsServer } from "./docs-server.ts";
-import { imageStats, type ImageStats } from "./image-stats.ts";
+import { nextOverlayExpression, perfInitScript, summaryExpression, twoFramesExpression } from "./page-scripts.ts";
+import { evaluate, runSteps, sleep, type CaptureStep, type StepResults } from "./steps.ts";
 
-export interface Point {
-  readonly x: number;
-  readonly y: number;
-}
-
-export type CaptureStep =
-  | { readonly type: "wait"; readonly ms: number }
-  | { readonly type: "screenshot"; readonly label?: string }
-  | { readonly type: "move"; readonly to: Point; readonly durationMs?: number }
-  | { readonly type: "down"; readonly at?: Point }
-  | { readonly type: "up"; readonly at?: Point }
-  | { readonly type: "click"; readonly at?: Point; readonly selector?: string }
-  | { readonly type: "drag"; readonly points: readonly Point[]; readonly durationMs?: number; readonly release?: boolean }
-  | { readonly type: "wheel"; readonly at: Point; readonly deltaY: number; readonly deltaX?: number }
-  | { readonly type: "key"; readonly key: string }
-  | { readonly type: "eval"; readonly expression: string; readonly label?: string }
-  | { readonly type: "fps"; readonly ms: number };
+export type { CaptureShot, CaptureStep } from "./steps.ts";
 
 export interface CaptureOptions {
   readonly root: string;
@@ -29,27 +14,20 @@ export interface CaptureOptions {
   readonly path?: string;
   readonly width: number;
   readonly height: number;
+  readonly dpr: number;
+  readonly touch: boolean;
   readonly settleMs: number;
   readonly waitFor: string;
   readonly reducedMotion: boolean;
   readonly steps: readonly CaptureStep[];
 }
 
-export interface CaptureShot {
-  readonly label: string;
-  readonly file: string;
-  readonly png: Buffer;
-  readonly stats: ImageStats;
-}
-
-export interface CaptureResult {
+export interface CaptureResult extends StepResults {
   readonly url: string;
   readonly server: { readonly url: string; readonly started: boolean };
   readonly webgpu: unknown;
+  readonly devicePixelRatio: number;
   readonly ready: { readonly selector: string; readonly found: boolean; readonly ms: number };
-  readonly shots: readonly CaptureShot[];
-  readonly evals: readonly { readonly label: string; readonly value?: unknown; readonly error?: string }[];
-  readonly fps: readonly unknown[];
   readonly previewError: string | null;
   readonly nextOverlay: string | null;
   readonly pageText: string;
@@ -64,15 +42,15 @@ const noise = /Download the React DevTools|\[HMR\]|\[Fast Refresh\]/;
 /**
  * Captures `/preview/<slug>` (or `path`) from the checkout's docs dev server, starting it when
  * needed. Steps run in order after the page is ready; pointer steps use CSS pixels of the viewport
- * and interpolate moves in real time so gesture velocity (drag inertia, flicks) is realistic.
- * A final screenshot is added when the steps contain none. PNGs are written under
+ * (or element anchors) and interpolate moves in real time so gesture velocity is realistic. A final
+ * screenshot is added when the steps contain no screenshot or burst. PNGs land under
  * `.context/shots/<slug>/`.
  *
  * @example
  *   const result = await capturePreview({
- *     root, slug: "fluid", width: 1280, height: 720, settleMs: 2000, waitFor: "canvas",
- *     reducedMotion: false,
- *     steps: [{ type: "drag", points: [{ x: 300, y: 360 }, { x: 900, y: 360 }], durationMs: 250 }, { type: "screenshot" }],
+ *     root, slug: "fluid", width: 1280, height: 720, dpr: 2, touch: false, settleMs: 2000,
+ *     waitFor: "canvas", reducedMotion: false,
+ *     steps: [{ type: "drag", from: { x: 300, y: 360 }, by: { dx: 600, dy: 0 }, durationMs: 250 }, { type: "perf", ms: 2000 }],
  *   });
  */
 export async function capturePreview(options: CaptureOptions): Promise<CaptureResult> {
@@ -86,17 +64,20 @@ export async function capturePreview(options: CaptureOptions): Promise<CaptureRe
   try {
     await openPage(page, options, url);
     const ready = await waitForSelector(page, options.waitFor);
-    await evaluate(page, "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+    await evaluate(page, twoFramesExpression);
     await sleep(options.settleMs);
     const nextOverlay = await evaluate(page, nextOverlayExpression) as string | null;
-    const steps = options.steps.some((step) => step.type === "screenshot") ? options.steps : [...options.steps, { type: "screenshot" as const }];
-    const run = await runSteps(page, steps, outDir);
-    const summary = await evaluate(page, summaryExpression) as { webgpu: unknown; text: string; canvases: unknown };
+    const hasImage = options.steps.some((step) => step.type === "screenshot" || step.type === "burst");
+    const steps = hasImage ? options.steps : [...options.steps, { type: "screenshot" as const }];
+    const viewport = { width: options.width, height: options.height, dpr: options.dpr, touch: options.touch };
+    const run = await runSteps({ page, outDir, viewport }, steps);
+    const summary = await evaluate(page, summaryExpression) as { webgpu: unknown; text: string; canvases: unknown; devicePixelRatio: number };
     const previewError = summary.text.includes("Preview error") ? summary.text.slice(0, 1500) : null;
     return {
       url,
       server: { url: server.url, started: server.started },
       webgpu: summary.webgpu,
+      devicePixelRatio: summary.devicePixelRatio,
       ready,
       ...run,
       previewError,
@@ -116,7 +97,9 @@ async function openPage(page: ChromePage, options: CaptureOptions, url: string):
   await page.send("Page.enable");
   await page.send("Runtime.enable");
   await page.send("Log.enable");
-  await page.send("Emulation.setDeviceMetricsOverride", { width: options.width, height: options.height, deviceScaleFactor: 1, mobile: false });
+  await page.send("Page.addScriptToEvaluateOnNewDocument", { source: perfInitScript });
+  await page.send("Emulation.setDeviceMetricsOverride", { width: options.width, height: options.height, deviceScaleFactor: options.dpr, mobile: false });
+  if (options.touch) await page.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
   if (options.reducedMotion) await page.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
   const loaded = new Promise<void>((resolve) => page.onEvent((event) => {
     if (event.method === "Page.loadEventFired") resolve();
@@ -126,95 +109,6 @@ async function openPage(page: ChromePage, options: CaptureOptions, url: string):
   await withTimeout(loaded, 180_000, `Timed out loading ${url}.`);
 }
 
-async function runSteps(page: ChromePage, steps: readonly CaptureStep[], outDir: string) {
-  const shots: CaptureShot[] = [];
-  const evals: { label: string; value?: unknown; error?: string }[] = [];
-  const fps: unknown[] = [];
-  const pointer = { x: 0, y: 0, pressed: false };
-  const stamp = Date.now();
-  for (const step of steps) {
-    if (step.type === "wait") await sleep(step.ms);
-    else if (step.type === "screenshot") shots.push(await screenshot(page, outDir, `${stamp}-${shots.length + 1}-${slugify(step.label ?? "frame")}`, step.label ?? `frame ${shots.length + 1}`));
-    else if (step.type === "move") await glide(page, pointer, [step.to], step.durationMs ?? 200);
-    else if (step.type === "down") await press(page, pointer, step.at, true);
-    else if (step.type === "up") await press(page, pointer, step.at, false);
-    else if (step.type === "click") {
-      const at = step.selector ? await centerOf(page, step.selector) : step.at;
-      await glide(page, pointer, at ? [at] : [], 60);
-      await press(page, pointer, undefined, true);
-      await press(page, pointer, undefined, false);
-    } else if (step.type === "drag") {
-      const [first, ...rest] = step.points;
-      await glide(page, pointer, [first], 60);
-      await press(page, pointer, undefined, true);
-      await glide(page, pointer, rest, step.durationMs ?? 400);
-      if (step.release ?? true) await press(page, pointer, undefined, false);
-    } else if (step.type === "wheel") {
-      await page.send("Input.dispatchMouseEvent", { type: "mouseWheel", x: step.at.x, y: step.at.y, deltaX: step.deltaX ?? 0, deltaY: step.deltaY });
-    } else if (step.type === "key") {
-      await page.send("Input.dispatchKeyEvent", { type: "keyDown", key: step.key });
-      await page.send("Input.dispatchKeyEvent", { type: "keyUp", key: step.key });
-    } else if (step.type === "eval") {
-      const label = step.label ?? `eval ${evals.length + 1}`;
-      try {
-        evals.push({ label, value: await evaluate(page, step.expression) });
-      } catch (error) {
-        evals.push({ label, error: error instanceof Error ? error.message : String(error) });
-      }
-    } else if (step.type === "fps") fps.push(await evaluate(page, fpsExpression(step.ms)));
-  }
-  return { shots, evals, fps };
-}
-
-async function screenshot(page: ChromePage, outDir: string, name: string, label: string): Promise<CaptureShot> {
-  const { data } = await page.send("Page.captureScreenshot", { format: "png" }) as { data: string };
-  const png = Buffer.from(data, "base64");
-  const file = path.join(outDir, `${name}.png`);
-  await writeFile(file, png);
-  return { label, file, png, stats: imageStats(png) };
-}
-
-async function glide(page: ChromePage, pointer: { x: number; y: number; pressed: boolean }, points: readonly Point[], durationMs: number): Promise<void> {
-  if (points.length === 0) return;
-  const frames = Math.max(points.length, Math.round(durationMs / 16));
-  const route = [{ x: pointer.x, y: pointer.y }, ...points];
-  for (let frame = 1; frame <= frames; frame++) {
-    const along = (frame / frames) * (route.length - 1);
-    const segment = Math.min(route.length - 2, Math.floor(along));
-    const t = along - segment;
-    const x = route[segment].x + (route[segment + 1].x - route[segment].x) * t;
-    const y = route[segment].y + (route[segment + 1].y - route[segment].y) * t;
-    await page.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: pointer.pressed ? "left" : "none", buttons: pointer.pressed ? 1 : 0 });
-    pointer.x = x;
-    pointer.y = y;
-    await sleep(durationMs / frames);
-  }
-}
-
-async function press(page: ChromePage, pointer: { x: number; y: number; pressed: boolean }, at: Point | undefined, down: boolean): Promise<void> {
-  if (at) await glide(page, pointer, [at], 60);
-  pointer.pressed = down;
-  await page.send("Input.dispatchMouseEvent", {
-    type: down ? "mousePressed" : "mouseReleased",
-    x: pointer.x,
-    y: pointer.y,
-    button: "left",
-    buttons: down ? 1 : 0,
-    clickCount: 1,
-  });
-}
-
-async function centerOf(page: ChromePage, selector: string): Promise<Point> {
-  const center = await evaluate(page, `(() => {
-    const element = document.querySelector(${JSON.stringify(selector)});
-    if (!element) return null;
-    const rect = element.getBoundingClientRect();
-    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-  })()`) as Point | null;
-  if (!center) throw new Error(`No element matches ${selector}.`);
-  return center;
-}
-
 async function waitForSelector(page: ChromePage, selector: string) {
   const started = Date.now();
   while (Date.now() - started < 60_000) {
@@ -222,15 +116,6 @@ async function waitForSelector(page: ChromePage, selector: string) {
     await sleep(200);
   }
   return { selector, found: false, ms: Date.now() - started };
-}
-
-async function evaluate(page: ChromePage, expression: string): Promise<unknown> {
-  const response = await page.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true, userGesture: true }) as {
-    result?: { value?: unknown };
-    exceptionDetails?: { text?: string; exception?: { description?: string } };
-  };
-  if (response.exceptionDetails) throw new Error(response.exceptionDetails.exception?.description ?? response.exceptionDetails.text ?? "evaluation failed");
-  return response.result?.value;
 }
 
 function createJournal(page: ChromePage) {
@@ -256,55 +141,6 @@ function createJournal(page: ChromePage) {
   return { problems, logs };
 }
 
-// Next dev renders its indicator and error dialogs in <nextjs-portal>. Report any error text, then
-// hide the portal so screenshots show only the example.
-const nextOverlayExpression = `(() => {
-  const portals = [...document.querySelectorAll("nextjs-portal")];
-  const textOf = (root) => {
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    let text = "";
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      const tag = node.parentElement?.tagName;
-      if (tag !== "STYLE" && tag !== "SCRIPT") text += " " + node.textContent;
-    }
-    return text;
-  };
-  const text = portals.map((portal) => textOf(portal.shadowRoot ?? portal)).join(" ").replace(/\\s+/g, " ").trim();
-  for (const portal of portals) portal.style.display = "none";
-  return /error|issue|failed/i.test(text) ? text.slice(0, 1500) : null;
-})()`;
-
-const summaryExpression = `(async () => {
-  const adapter = navigator.gpu ? await navigator.gpu.requestAdapter() : null;
-  return {
-    webgpu: { available: Boolean(navigator.gpu), adapter: adapter ? { vendor: adapter.info?.vendor, architecture: adapter.info?.architecture } : null },
-    text: document.body.innerText,
-    canvases: [...document.querySelectorAll("canvas")].map((canvas) => ({ width: canvas.width, height: canvas.height, cssWidth: canvas.clientWidth, cssHeight: canvas.clientHeight })),
-  };
-})()`;
-
-function fpsExpression(ms: number): string {
-  return `new Promise((resolve) => {
-    const deltas = [];
-    let last = performance.now();
-    const end = last + ${ms};
-    const tick = (now) => {
-      deltas.push(now - last);
-      last = now;
-      if (now < end) return requestAnimationFrame(tick);
-      deltas.shift();
-      const sorted = [...deltas].sort((a, b) => a - b);
-      const avg = deltas.reduce((sum, value) => sum + value, 0) / Math.max(1, deltas.length);
-      resolve({ frames: deltas.length, avgMs: +avg.toFixed(2), p95Ms: +(sorted[Math.floor(sorted.length * 0.95)] ?? 0).toFixed(2), maxMs: +(sorted.at(-1) ?? 0).toFixed(2) });
-    };
-    requestAnimationFrame(tick);
-  })`;
-}
-
-function slugify(label: string): string {
-  return label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "frame";
-}
-
 async function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
@@ -315,8 +151,4 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, message: string):
   } finally {
     clearTimeout(timer);
   }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
