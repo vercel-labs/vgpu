@@ -22,6 +22,7 @@ talk to the human and never see this conversation — each prompt must carry the
 | `repo:writer` | Claude `claude-opus-5.5` high → Codex `gpt-5.6-sol` high | Docs in house style (called by implementer, or by you for docs-only work) |
 | `repo:reviewer` | Claude `claude-opus-5.5` high → Codex `gpt-6-astra` high | Read-only review (called by implementer per task, and by you after integration) |
 | `repo:builder` | Codex `gpt-5.6-sol` high → Claude `claude-opus-5.5` high | Applies a bounded list of integration-review findings |
+| `repo:example-builder` | Claude `claude-opus-5.5` xhigh | One docs gallery example end to end from a brief; sees it running through `capture_preview`; runs `reviewer`; commits |
 
 Fallback (→) only happens when the first harness is unavailable before the task starts (missing
 CLI, no login, no fx Gateway access). A task that fails after starting is never retried elsewhere;
@@ -155,6 +156,27 @@ For each lane that can start:
    merging, closing sources, or releasing.
 4. Remove finished worktrees: `git worktree remove .context/worktrees/<topic>-<lane>`.
 
+## Gallery examples
+
+A new `apps/docs/examples/<slug>` example skips Phases 1–4: write
+`.context/work/<topic>/briefs/<slug>.md` (idea, quality bar, interactions, constraints, closest
+reference examples) and run one builder session per example in the target checkout:
+
+```sh
+npx subharness run repo:example-builder --prompt "Topic: <topic>. Build the example in .context/work/<topic>/briefs/<slug>.md. Base ref: origin/canary."
+```
+
+The builder carries the example contract in `.subharness/tools/example-playbook.ts` and a
+`capture_preview` tool (`.subharness/tools/preview/`) that loads `/preview/<slug>` from the
+checkout's docs dev server in headless WebGPU Chrome, replays scripted pointer input, and returns
+screenshots, console problems, and frame timing. The same capture runs from a shell:
+`node .subharness/tools/preview/cli.ts <slug> --steps '<json>'`.
+
+When several examples are built in sequence, improve the builder between them: ask its session what
+context or tooling would have saved time (`subharness send <session-id> --prompt "..."`), evaluate
+each suggestion against the next brief and the repository rules, apply the ones that generalize to
+the playbook or tools, and log feedback, verdicts, and changes in `.context/work/<topic>/iterations.md`.
+
 ## Running specialists
 
 - Prefer one ordinary `subharness run ...` per specialist through your background-command
@@ -193,3 +215,8 @@ Verify with `npx subharness check repo:graphics-researcher`. The OIDC token expi
 12 hours; when fx fails with an expired-token error, re-run `vercel env pull .env.local --yes` in
 the main checkout. Without fx access the researchers fall back to Codex. Codex and Claude Code use
 their native subscription logins by default.
+
+`claude-opus-5.5` is served through AI Gateway, not every Claude subscription: when a Claude
+specialist fails with `HARNESS_ERROR` or "selected a different model than requested", add the same
+connection for Claude Code (`"claudeCode": [{ "type": "vercel-oidc", "project": ".", "envFile":
+".env.local" }]`) to `agents.local.json`. That bills Claude specialists to the linked project.
