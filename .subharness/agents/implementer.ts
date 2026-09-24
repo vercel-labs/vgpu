@@ -22,7 +22,7 @@ Workflow:
 4. Run \`pnpm -F @vgpu/cli generate:docs\` if docs changed, add the changeset if the task requires one, and run the task's verification commands until they pass.
 5. Run subagent:reviewer with the task path, decisions.md, the base ref, and the checks you ran. Fix every blocker/major finding and re-review, at most 2 review rounds. Record unresolved or disputed findings rather than looping.
 6. Commit with the repo style \`type(scope): subject\` (one or a few focused commits). If the sandbox blocks \`git commit\`, stage the changes and report it; the lead commits.
-7. Write .context/work/<topic>/plan/progress/<id>.md: status, commits, checks run with results, reviewer verdicts, unresolved findings, follow-ups for other lanes.
+7. Write .context/work/<topic>/plan/progress/<id>.md: status, commits, exact checks run with results and limitations (e.g. mock-only, no native GPU run, visual snapshots pending CI), changeset path, reviewer verdicts, unresolved findings, follow-ups for other lanes. Write it so the lead can paste the validation into the PR.
 
 Reply with: status (done/blocked), commit SHAs, checks and results, reviewer verdict, and open issues.`,
   harness: [

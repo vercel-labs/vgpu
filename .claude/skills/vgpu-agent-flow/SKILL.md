@@ -47,6 +47,27 @@ All pipeline artifacts are gitignored scratch under `.context/work/<topic>/` (ke
 
 Never commit `.context/`.
 
+## Phase 0 — Select the repository workflow
+
+Before Phase 1, follow AGENTS.md and `.github/guides/workflow-context.md`: establish the directing
+person's role (run its `gh` permission lookup if unknown) and the task's origin, then select
+`maintainer-original` (internal work), `maintainer-adoption` (anything originating from an external
+issue/PR), or `external-contributor`. Announce the workflow and record it in `brief.md`:
+
+```text
+Workflow: maintainer-original | maintainer-adoption
+Origin: internal request, or source issue/PR URL + author
+Triage: confirmed problem, evidence, disposition
+Scope: accepted outcome and non-goals
+```
+
+The phases below implement that workflow's plan and implementation stages; they do not replace its
+rules on baseline, changesets, PR delivery, or merge authorization. Every lane branches from a
+freshly fetched `origin/canary` (`<base>` below) unless the task is a documented production lane.
+For adoption, pass the source links to every specialist as evidence and state that the external
+implementation must not be copied, cherry-picked, or merged. Stop at the stage the human asked for:
+a research or design request ends with findings, a planning request with the plan.
+
 ## Phase 1 — Research
 
 1. Write `brief.md`. Split the question into 2–5 independent angles (e.g. "three.js / Babylon
@@ -84,7 +105,8 @@ npx subharness run repo:planner --prompt "Topic: <topic>. Plan the implementatio
 ```
 
 Review `plan/index.md` for lane isolation (disjoint files between lanes) and missing tasks
-(docs, changeset, examples). Show the human the lane summary before starting implementation.
+(docs, changeset, examples, bundle budgets, native GPU tests), and check that its PR record is
+self-contained. Show the human the lane summary before starting implementation.
 
 ## Phase 5 — Implement
 
@@ -92,7 +114,8 @@ For each lane that can start:
 
 1. Create an isolated worktree and bring the pipeline folder into it:
    ```sh
-   git worktree add .context/worktrees/<topic>-<lane> -b <topic>/<lane> <base>
+   git fetch origin canary
+   git worktree add .context/worktrees/<topic>-<lane> -b <topic>/<lane> <base>   # <base> = origin/canary
    mkdir -p .context/worktrees/<topic>-<lane>/.context/work
    cp -R .context/work/<topic> .context/worktrees/<topic>-<lane>/.context/work/
    (cd .context/worktrees/<topic>-<lane> && pnpm install --frozen-lockfile && pnpm build)
@@ -122,7 +145,14 @@ For each lane that can start:
    npx subharness run repo:builder --prompt "Topic: <topic>. Fix these findings on the current branch: 1. ... 2. ... Verify with: <commands>."
    ```
    Re-review if the builder changed behavior. Then summarize to the human: what shipped, checks
-   run, remaining findings, and the PR text (`## PR type`, `## Release impact` per AGENTS.md).
+   run, and remaining findings. When the human asks for a PR, follow
+   `.github/guides/pull-requests.md` and `.github/pull_request_template.md` against `canary`. Build
+   the description from `plan/index.md`'s PR record, the key `decisions.md` entries, and the
+   implementers' validation notes; reviewers cannot see `.context/`. Declare exactly one PR type
+   (`development` for normal work) and one release impact matching the diff, and run
+   `pnpm migrations:check`. For adoption, link the sources and credit the actual contribution; add a
+   `Co-authored-by` trailer only when verified and warranted. Opening a PR does not authorize
+   merging, closing sources, or releasing.
 4. Remove finished worktrees: `git worktree remove .context/worktrees/<topic>-<lane>`.
 
 ## Running specialists

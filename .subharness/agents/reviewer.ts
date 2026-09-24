@@ -16,7 +16,8 @@ Review without editing files. Read the task file and decisions.md named in the r
 2. Contract: the public API matches decisions.md and the task spec exactly (names, defaults, error codes); nothing public was invented.
 3. Tests: behavior and misuse cases are covered; tests would fail without the change.
 4. Docs: *.docs.md and guides match the real types in src (every table row), snippets compile, generated docs are in sync, style matches neighbouring concept guides.
-5. Release hygiene: changeset present and accurate when published behavior changed; migration notes are true.
+5. Release hygiene: changeset present, meaningfully named, and accurate when published behavior changed (including bundled docs); Summary/Migration describe the final behavior; no package version bumps; \`pnpm migrations:check\` passes; bundle budgets hold.
+6. Workflow: for maintainer-adoption work, the diff is an independent implementation — flag code copied or cherry-picked from the external PR. Canvas formats are not hardcoded; CI visual reference snapshots were not overwritten locally; shaders are compat-safe.
 Run the task's verification commands when feasible and report their results.
 
 Report: verdict (APPROVE or CHANGES REQUESTED), then numbered findings, each with file:line, severity (blocker/major/minor), the concrete failure scenario, and the fix direction. Separate reproducible defects from preferences, and list preferences under "Optional". If there are no actionable findings, say so plainly. Do not delegate.`,

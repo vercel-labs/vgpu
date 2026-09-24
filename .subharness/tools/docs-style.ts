@@ -40,6 +40,8 @@ The primary reader is an AI agent that copies examples literally; the second rea
 - Short trailing comments explain intent, not syntax: "// the offscreen result becomes the post input", "// call it when your component unmounts".
 - Follow each snippet with 1–2 sentences on what happened or the rule it demonstrates.
 - WGSL inside template strings uses fs_main / vs_main and realistic but tiny shaders.
+- Never hardcode a canvas format: use \`navigator.gpu.getPreferredCanvasFormat()\` or \`canvasSurface.format\`. Multi-pass and surface rendering goes through \`frame(gpu)\` / \`frameLoop(gpu)\`.
+- Partial or historical snippets that should not compile use a \`ts illustrative\` fence; everything else is plain \`ts\`.
 
 ## Symbol docs (co-located *.docs.md)
 Follow docs/DOCS-TEMPLATE.md exactly: # symbol, 1–2 line purpose + when to use, ## Import, ## Signature, ## Parameters table (Default column never empty; "—" only for required), **Returns:**, **Throws:** bullets "VGPU-CODE when <condition> — <fix>", ## Examples (minimal, compiling), ## Notes with anti-patterns and **See also:**.
