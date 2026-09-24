@@ -48,8 +48,6 @@ export interface LiquidFrame {
   readonly panelHue: number;
   readonly panelEnergy: number;
   readonly panelLift: number;
-  /** 0 at rest; rises with speed, drips and tethers. Drives the caustics. */
-  readonly activity: number;
 }
 
 type Strain = [number, number, number];
@@ -546,19 +544,8 @@ export function createDynamics(options: DynamicsOptions) {
   }
 
   return {
-    get options(): Readonly<DynamicsOptions> {
-      return settings;
-    },
     setOptions(next: Partial<DynamicsOptions>) {
       Object.assign(settings, next);
-    },
-    /** Forget velocities, e.g. after a resize moved every card at once. */
-    reset() {
-      for (const blob of blobs.values()) {
-        blob.vx = blob.vy = blob.vw = blob.vh = 0;
-        blob.strain = [0, 0, 0];
-        blob.strainVelocity = [0, 0, 0];
-      }
     },
     /**
      * Advances by `dt` seconds. `viewport` is the canvas size in CSS px; pass
@@ -602,10 +589,8 @@ export function createDynamics(options: DynamicsOptions) {
       let panelHue = 0;
       let panelEnergy = 0;
       let panelLift = 0;
-      let activity = 0;
       for (const blob of blobs.values()) {
         emitBlob(blob, step);
-        activity = Math.max(activity, blob.energy);
         if (blob.lift > panelLift) {
           panelLift = blob.lift;
           panelHue = blob.hue;
@@ -615,14 +600,7 @@ export function createDynamics(options: DynamicsOptions) {
       for (let i = drips.length - 1; i >= 0; i--) {
         if (!emitDrip(drips[i]!, step)) drips.splice(i, 1);
       }
-      if (drips.length > 0) activity = Math.max(activity, 0.6);
-      return { data, count, panelHue, panelEnergy, panelLift, activity };
-    },
-    get dripCount() {
-      return drips.length;
-    },
-    get blobCount() {
-      return blobs.size;
+      return { data, count, panelHue, panelEnergy, panelLift };
     },
   };
 }

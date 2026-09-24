@@ -24,7 +24,7 @@ export function Example() {
 
   return (
     <div ref={rootRef} className="relative h-full w-full overflow-hidden bg-black">
-      <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full touch-none" />
+      <canvas ref={canvasRef} aria-hidden="true" className="absolute inset-0 block h-full w-full touch-none" />
       <LiquidCards store={store} />
     </div>
   );

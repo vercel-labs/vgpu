@@ -209,7 +209,12 @@ function Card({
       // Neighbours stay muted until the snap-back lands, not just until release.
       onDragTransitionEnd={() => onDragChange(card.id, false)}
       onClick={() => {
-        if (dragged.current) return;
+        // The click that ends a drag does not open the card; the next one does,
+        // including a keyboard press, which sends no pointerdown.
+        if (dragged.current) {
+          dragged.current = false;
+          return;
+        }
         onOpen(card.id);
       }}
       onLayoutAnimationStart={takeOff}
@@ -318,8 +323,8 @@ function Panel({ card, store, bounds, spring, autoFocus, onClose }: PanelProps) 
     <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
       <motion.div
         ref={setRef}
+        // Non-modal: the cards behind it are inert, but the controls stay reachable.
         role="dialog"
-        aria-modal="true"
         aria-labelledby={titleId}
         data-panel={card.id}
         layoutId={card.id}
@@ -384,7 +389,6 @@ export function LiquidCards({ store }: { store: LayoutStore }) {
   const bounds = useRef<HTMLDivElement | null>(null);
   const size = useElementSize(bounds);
   const returnFocus = useRef<string | null>(null);
-  const seen = useRef<Set<string> | null>(null);
 
   const visible = store.visible(state);
   const spring = { stiffness: state.stiffness, damping: state.damping };
@@ -397,12 +401,15 @@ export function LiquidCards({ store }: { store: LayoutStore }) {
   const areaHeight = Math.max(0, size.height - top - bottom);
   const layout = gridLayout(areaWidth, areaHeight, Math.max(1, visible.length));
 
-  // Cards joining the grid fade their text in as their droplet lands, in reading order.
-  const previous = seen.current;
-  const entering = visible.filter((id) => !previous || !previous.has(id));
-  useEffect(() => {
-    seen.current = new Set(visible);
-  });
+  // Cards joining the grid fade their text in as their droplet lands, in reading
+  // order. The previous list lives in state, so every render agrees on who is new.
+  const visibleKey = visible.join(',');
+  const [entry, setEntry] = useState({ key: visibleKey, entering: visible });
+  if (entry.key !== visibleKey) {
+    const before = new Set(entry.key.split(','));
+    setEntry({ key: visibleKey, entering: visible.filter((id) => !before.has(id)) });
+  }
+  const { entering } = entry;
 
   const expanded = state.expanded ? CARD_BY_ID.get(state.expanded) : undefined;
   const userOpen = expanded !== undefined && state.openedBy === 'user';
@@ -414,14 +421,19 @@ export function LiquidCards({ store }: { store: LayoutStore }) {
   }, []);
   const onClose = useCallback(() => {
     const { expanded: id, openedBy } = store.getState();
-    if (id && openedBy === 'user') returnFocus.current = id;
+    // Focus goes back to the card when the panel had it, whoever opened it.
+    const focusInPanel = document.activeElement?.closest('[data-panel]') != null;
+    if (id && (openedBy === 'user' || focusInPanel)) returnFocus.current = id;
     store.collapse();
   }, [store]);
 
   useEffect(() => {
     if (!state.expanded) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      // Escape in a field (a GUI number box, the docs search) belongs to that field.
+      if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable]')) return;
+      onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -521,7 +533,7 @@ export function LiquidCards({ store }: { store: LayoutStore }) {
           className="pointer-events-none absolute inset-x-0 select-none text-center text-[11.5px] tracking-wide text-white/45"
           style={{ bottom: narrow ? 18 : 22 }}
         >
-          Drag a card · click to open · shuffle and filter from the panel
+          {narrow ? 'Drag a card · tap to open' : 'Drag a card · click to open · shuffle and filter from the controls'}
         </p>
       </div>
     </MotionConfig>

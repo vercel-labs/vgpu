@@ -334,23 +334,142 @@ test('autoplay starts after its first pause and waits while the user interacts',
   env.play(4);
   expect(env.store.getState().order).not.toBe(shuffled);
 
+  // So does a mouse moving over the demo.
+  const moved = env.store.getState();
+  env.containerListeners.get('pointermove')?.({ clientX: 100, clientY: 100 });
+  env.play(5.5);
+  expect(env.store.getState()).toBe(moved);
+  env.play(4);
+  expect(env.store.getState()).not.toBe(moved);
+
+  // A mouse resting on a card holds it for as long as it stays.
+  const hovered = handle('drag', { left: 40, top: 60, width: 200, height: 240 });
+  env.store.register(hovered);
+  hovered.hovered = true;
+  const resting = env.store.getState();
+  env.play(12);
+  expect(env.store.getState()).toBe(resting);
+  hovered.hovered = false;
+
   // A panel the user opened holds the autoplay until it closes.
-  env.store.expand('drag', 'user');
+  env.store.collapse();
+  env.store.expand(env.store.visible()[0]!, 'user');
   const held = env.store.getState();
+  expect(held.openedBy).toBe('user');
   env.play(12);
   expect(env.store.getState()).toBe(held);
   renderer.dispose();
 });
 
-test('reduced motion turns the autoplay off', async () => {
+function focusable(id: string, focusVisible: boolean) {
+  return {
+    matches: (selector: string) => selector === ':focus-visible' && focusVisible,
+    getAttribute: (name: string) => (name === 'data-card' ? id : null),
+  };
+}
+
+function focus(env: ReturnType<typeof setup>, element: unknown) {
+  const body = {};
+  vi.stubGlobal('document', { activeElement: element ?? body, body });
+  (env.container as unknown as { contains: (node: unknown) => boolean }).contains = (node) => node === element;
+}
+
+test('keyboard focus inside the demo holds the autoplay', async () => {
+  const env = setup();
+  const renderer = start(env);
+  await renderer.ready;
+  const initial = env.store.getState();
+
+  // Someone tabbed to a card: nothing moves under them, however long they read.
+  focus(env, focusable(env.store.visible()[0]!, true));
+  env.play(12);
+  expect(env.store.getState()).toBe(initial);
+
+  focus(env, null);
+  env.play(3);
+  expect(env.store.getState().order).not.toBe(initial.order);
+  renderer.dispose();
+});
+
+test('the autoplay never opens the card that holds focus', async () => {
+  const env = setup();
+  const renderer = start(env);
+  await renderer.ready;
+  // Two shuffles and two filters; the next step opens the third card.
+  env.play(15.5);
+  expect(env.store.getState()).toMatchObject({ expanded: null, filter: 'all' });
+
+  // A card focused by a click (no focus ring) does not hold the autoplay…
+  const focused = env.store.visible()[2]!;
+  focus(env, focusable(focused, false));
+  env.play(1);
+  // …but it is not swapped for the panel under the focus.
+  expect(env.store.getState()).toMatchObject({ expanded: env.store.visible()[3], openedBy: 'auto' });
+  renderer.dispose();
+});
+
+test('reduced motion turns the autoplay off, and the checkbox turns it back on', async () => {
   const env = setup({ reducedMotion: true });
   const renderer = start(env);
   await renderer.ready;
+  const gui = guiHarness.instances[0]!;
   const state = env.store.getState();
   env.play(12);
   expect(env.store.getState()).toBe(state);
-  expect(guiHarness.instances[0]!.control('Autoplay').model.autoplay).toBe(false);
+  expect(gui.control('Autoplay').model.autoplay).toBe(false);
+
+  gui.set('Autoplay', true);
+  env.play(3);
+  expect(env.store.getState().order).not.toBe(state.order);
   renderer.dispose();
+});
+
+test('the Autoplay checkbox follows a reduced-motion change mid-session', async () => {
+  const env = setup();
+  const renderer = start(env);
+  await renderer.ready;
+  const autoplay = guiHarness.instances[0]!.control('Autoplay');
+  expect(autoplay.model.autoplay).toBe(true);
+  const onChange = env.media.addEventListener.mock.calls[0]![1] as () => void;
+
+  env.media.matches = true;
+  onChange();
+  expect(autoplay.model.autoplay).toBe(false);
+  expect(autoplay.updateDisplay).toHaveBeenCalledOnce();
+  const state = env.store.getState();
+  env.play(12);
+  expect(env.store.getState()).toBe(state);
+
+  env.media.matches = false;
+  onChange();
+  expect(autoplay.model.autoplay).toBe(true);
+  renderer.dispose();
+});
+
+test('a frame that throws stops the renderer once and reports the error', async () => {
+  const env = setup();
+  const renderer = start(env);
+  await renderer.ready;
+  const tick = motion.postRender.mock.calls[0]![0];
+  const reported: Array<() => void> = [];
+  vi.stubGlobal('queueMicrotask', (callback: () => void) => reported.push(callback));
+  env.frame.mockImplementationOnce(() => {
+    throw new Error('device lost');
+  });
+
+  env.tick();
+  expect(motion.cancelFrame).toHaveBeenCalledWith(tick);
+  expect(env.gpu.dispose).toHaveBeenCalledOnce();
+  expect(guiHarness.instances[0]!.destroy).toHaveBeenCalledOnce();
+  expect(reported).toHaveLength(1);
+  expect(() => reported[0]!()).toThrow('device lost');
+
+  // Motion's pending call after the cancel does nothing.
+  env.tick();
+  expect(env.frame).toHaveBeenCalledOnce();
+  expect(reported).toHaveLength(1);
+  renderer.dispose();
+  expect(env.gpu.dispose).toHaveBeenCalledOnce();
 });
 
 test('dispose is idempotent and releases the frame callback, listeners and the GUI', async () => {

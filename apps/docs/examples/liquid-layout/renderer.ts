@@ -5,7 +5,7 @@
 // into liquid and renders in the same browser frame. React never re-renders
 // per frame: the layout store only carries discrete state.
 
-import GUI from 'lil-gui';
+import GUI, { type Controller } from 'lil-gui';
 import { cancelFrame, frame as motionFrame, frameData } from 'motion';
 import { clock, frame, init, surface, type Gpu, type Surface } from 'vgpu';
 
@@ -32,7 +32,8 @@ interface Settings {
   damping: number;
 }
 
-type Step = (store: LayoutStore) => number;
+/** `focused` is the id of the card that holds focus, which the autoplay never replaces. */
+type Step = (store: LayoutStore, focused: string | null) => number;
 
 const MAX_DPR = 2;
 const LIGHT_HEIGHT = 380;
@@ -46,7 +47,7 @@ const SCRIPT: readonly Step[] = [
   (store) => (store.shuffle(), 3.2),
   (store) => (store.setFilter('vgpu'), 3.4),
   (store) => (store.setFilter('all'), 3.4),
-  (store) => (store.expand(store.visible()[2] ?? '', 'auto'), 3),
+  (store, focused) => (store.expand(store.visible().filter((id) => id !== focused)[2] ?? '', 'auto'), 3),
   (store) => (store.collapse(), 2.8),
   (store) => (store.shuffle(), 3.2),
   (store) => (store.setFilter('motion'), 3.4),
@@ -107,6 +108,7 @@ export function createRenderer({ canvas, container = canvas.parentElement ?? und
   let dynamics: Dynamics | undefined;
   let gui: GUI | undefined;
   let motion: MediaQueryList | undefined;
+  let autoplayToggle: Controller | undefined;
   let unsubscribe: (() => void) | undefined;
   let ticking = false;
 
@@ -129,7 +131,10 @@ export function createRenderer({ canvas, container = canvas.parentElement ?? und
   const light = { x: 0, y: 0, placed: false };
   let dim = 0;
 
-  // Autoplay: runs while nobody interacts, pauses for RESUME_AFTER seconds after input.
+  // Autoplay: runs while nobody interacts, pauses for RESUME_AFTER seconds after
+  // input, and holds while a press, a hovering mouse, a user-opened panel or
+  // keyboard focus is inside the demo: it must not reorder the cards under
+  // someone reading them.
   let step = 0;
   let nextStepIn = FIRST_STEP;
   let quietFor = RESUME_AFTER;
@@ -149,6 +154,7 @@ export function createRenderer({ canvas, container = canvas.parentElement ?? und
   const onPointerMove = (event: PointerEvent) => {
     pointer = { x: event.clientX - origin.left, y: event.clientY - origin.top };
     pointerIdle = 0;
+    interact();
   };
   const onPointerLeave = () => {
     pointer = null;
@@ -156,18 +162,31 @@ export function createRenderer({ canvas, container = canvas.parentElement ?? und
   const onMotionPreference = () => {
     reducedMotion = motion?.matches ?? false;
     dynamics?.setOptions({ reducedMotion });
+    // Follow the system setting; the checkbox can still turn autoplay back on.
+    settings.autoplay = !reducedMotion;
+    autoplayToggle?.updateDisplay();
+  };
+
+  const focusedElement = (): Element | null => {
+    if (typeof document === 'undefined') return null;
+    const active = document.activeElement;
+    return active && active !== document.body && container?.contains(active) ? active : null;
   };
 
   const autoplay = (dt: number) => {
     const state = store.getState();
     const userOpen = state.expanded !== null && state.openedBy !== 'auto';
-    if (!pressed && !userOpen) quietFor += dt;
-    if (!settings.autoplay || reducedMotion || pressed || userOpen || quietFor < RESUME_AFTER) return;
+    const focused = focusedElement();
+    const keyboardFocus = focused?.matches(':focus-visible') ?? false;
+    const hovering = Array.from(store.handles()).some((handle) => handle.hovered);
+    const held = pressed || hovering || userOpen || keyboardFocus;
+    if (!held) quietFor += dt;
+    if (!settings.autoplay || held || quietFor < RESUME_AFTER) return;
     nextStepIn -= dt;
     if (nextStepIn > 0) return;
     const action = SCRIPT[step % SCRIPT.length]!;
     step++;
-    nextStepIn = action(store);
+    nextStepIn = action(store, focused?.getAttribute('data-card') ?? null);
   };
 
   const updateLight = (dt: number) => {
@@ -192,6 +211,19 @@ export function createRenderer({ canvas, container = canvas.parentElement ?? und
   };
 
   const tick = () => {
+    try {
+      render();
+    } catch (error) {
+      // A frame that throws would throw again on every tick: stop once and
+      // report it outside Motion's frameloop, which keeps animating the cards.
+      dispose();
+      queueMicrotask(() => {
+        throw error;
+      });
+    }
+  };
+
+  const render = () => {
     if (disposed || !gpu || !output || !pipeline || !dynamics) return;
     const dt = clamp(frameData.delta, 0, 50) / 1000;
     clock(gpu).advance(dt);
@@ -292,6 +324,7 @@ export function createRenderer({ canvas, container = canvas.parentElement ?? und
       spring: () => store.setSpring({ stiffness: settings.stiffness, damping: settings.damping }),
     });
     const filterController = gui.controllers.find((controller) => controller.property === 'filter');
+    autoplayToggle = gui.controllers.find((controller) => controller.property === 'autoplay');
     unsubscribe = store.subscribe(() => {
       const { filter } = store.getState();
       if (filter === settings.filter) return;

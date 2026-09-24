@@ -47,6 +47,7 @@ function prims(frame: LiquidFrame) {
       hue: p[7]!,
       matrix: [p[8]!, p[9]!, p[10]!, p[11]!],
       erode: p[12]!,
+      energy: p[13]!,
     };
   });
 }
@@ -72,7 +73,7 @@ describe('card bodies', () => {
     expect(rest).toHaveLength(0);
     expect(body).toMatchObject({ type: 0, cx: 400, cy: 300, hw: 100, hh: 120, corner: CORNER, k: K_REST, hue: 1 });
     expectUnstrained(body!.matrix, 3);
-    expect(frame.activity).toBeLessThan(0.01);
+    expect(body!.energy).toBeLessThan(0.01);
   });
 
   test('new cards fall in as droplets, one after another in reading order', () => {
@@ -101,7 +102,7 @@ describe('card bodies', () => {
     expect(body!.hw).toBeLessThan(130);
     // Stretched along the motion: the world → local matrix shrinks x.
     expect(body!.matrix[0]).toBeLessThan(0.95);
-    expect(frame.activity).toBeGreaterThan(0.5);
+    expect(body!.energy).toBeGreaterThan(0.5);
   });
 
   test('small cards reach less far than large ones at the same speed', () => {
@@ -145,9 +146,8 @@ describe('leaving cards', () => {
   test('a removed card drains into a falling drop that finishes offscreen', () => {
     const liquid = dynamics();
     run(liquid, 2, () => [sample({ id: 'a', hue: 1 })]);
+    // The card is gone, its liquid is not: the body drains in place.
     const first = liquid.update([], DT, VIEWPORT);
-    expect(liquid.blobCount).toBe(0);
-    expect(liquid.dripCount).toBe(1);
     expect(prims(first).map((prim) => [prim.type, prim.hue])).toEqual([[0, 1]]);
     // The drop grows at the bottom edge, then lets go.
     const hanging = run(liquid, 0.4, () => []);
@@ -155,17 +155,13 @@ describe('leaving cards', () => {
       [0, 1],
       [1, 1],
     ]);
-    expect(liquid.dripCount).toBe(1);
-    run(liquid, 2.5, () => []);
-    expect(liquid.dripCount).toBe(0);
-    expect(liquid.update([], DT, VIEWPORT).count).toBe(0);
+    expect(run(liquid, 2.5, () => []).count).toBe(0);
   });
 
   test('a card removed before it grew leaves nothing behind', () => {
     const liquid = dynamics();
     liquid.update([sample({ id: 'a' })], DT, VIEWPORT);
-    liquid.update([], DT, VIEWPORT);
-    expect(liquid.dripCount).toBe(0);
+    expect(liquid.update([], DT, VIEWPORT).count).toBe(0);
   });
 });
 
@@ -227,10 +223,10 @@ describe('reduced motion', () => {
     expectUnstrained(moving!.matrix);
     expect(moving!.hw).toBe(100);
 
-    liquid.update([], DT, VIEWPORT);
-    expect(liquid.dripCount).toBe(1);
-    run(liquid, 0.5, () => []);
-    expect(liquid.dripCount).toBe(0);
+    // A removed card fades where it stood: no drop forms and nothing falls.
+    expect(prims(liquid.update([], DT, VIEWPORT)).map((prim) => [prim.type, prim.cy])).toEqual([[0, 300]]);
+    expect(prims(run(liquid, 0.25, () => [])).map((prim) => [prim.type, prim.cy])).toEqual([[0, 300]]);
+    expect(run(liquid, 0.3, () => []).count).toBe(0);
   });
 
   test('switching mid-flight calms a moving card at once', () => {
