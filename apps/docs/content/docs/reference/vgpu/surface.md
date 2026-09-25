@@ -66,7 +66,7 @@ interface Surface extends Target {
 
 **Returns:** `surface(gpu)` returns `Surface`; `onResize()` returns an unsubscribe function; `dispose()` returns `void`.
 
-**Throws:** `VGPU-SURFACE-CONTEXT` when `getContext("webgpu")` returns `null`; `VGPU-SURFACE-DUPLICATE` when a live surface already owns the canvas; `VGPU-SURFACE-AUTORESIZE-UNSUPPORTED` for explicit `autoResize: true` on buffer-only canvases; `VGPU-SURFACE-DISPOSED` when using a disposed surface; `VGPU-SURFACE-RESIZE-REENTRANT` when resizing the same surface from its own resize callback; `VGPU-FRAME-REENTRANT` when `frame(gpu)` is called from any `onResize` callback. The immediate `onResize` fire on subscription also counts as being inside an `onResize` callback, so call `frame(gpu)` before subscribing or from code outside the callback.
+**Throws:** `VGPU-SURFACE-CONTEXT` when `getContext("webgpu")` returns `null`; `VGPU-SURFACE-DUPLICATE` when a live surface already owns the canvas; `VGPU-SURFACE-AUTORESIZE-UNSUPPORTED` for explicit `autoResize: true` on buffer-only canvases; `VGPU-SURFACE-DISPOSED` when using a disposed surface; `VGPU-SURFACE-RESIZE-REENTRANT` when resizing the same surface from its own resize callback; `VGPU-SURFACE-READ-UNAVAILABLE` when `surface.color.read()` / `readFloats()` does not refer to the current texture submitted by a completed frame in the current canvas presentation frame; `VGPU-FRAME-REENTRANT` when `frame(gpu)` is called from any `onResize` callback. The immediate `onResize` fire on subscription also counts as being inside an `onResize` callback, so call `frame(gpu)` before subscribing or from code outside the callback.
 
 ## Examples
 
@@ -82,6 +82,11 @@ const wave = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return 
 frame(gpu, (currentFrame) => {
   currentFrame.pass({ target: canvasSurface }, (pass) => pass.draw(wave));
 });
+
+// Read immediately, before the browser advances the canvas texture. For deferred readback,
+// render to an offscreen target instead.
+const pixels = await canvasSurface.color.read({ mipLevel: 0, region: "all" });
+console.log(pixels.byteLength);
 ```
 
 ```ts
@@ -167,7 +172,7 @@ frame(gpu, (currentFrame) => currentFrame.pass({ target: canvasSurface }, (pass)
 - Layout-backed detection is structural: `typeof canvas.clientWidth === "number"`; it does not use `instanceof`.
 - Resize callbacks run in surface creation order at the frame boundary, before the user frame callback.
 - Manual `surface.resize()` fires callbacks synchronously at the call site and works for `OffscreenCanvas`.
-- `surface.color.read({ mipLevel: 0, region: "all" })` returns RGBA bytes. Canvas formats `bgra8unorm` and `bgra8unorm-srgb` are supported and swizzled to RGBA, which matters on platforms where `navigator.gpu.getPreferredCanvasFormat()` returns BGRA.
-- `surface.color.readFloats({ mipLevel: 0, region: "all" })` returns the same pixels decoded to a `Float32Array` of components (`unorm8` canvas formats normalized to `[0, 1]`); it is the readback to use if a surface is ever configured with a float format.
+- `surface.color.read({ mipLevel: 0, region: "all" })` returns RGBA bytes only for the current canvas texture submitted by a completed `frame(gpu, ...)` in the current presentation frame. Read immediately after `frame()` returns; once the browser presents and advances the canvas, `getCurrentTexture()` provides a fresh, unrendered swapchain image and readback throws `VGPU-SURFACE-READ-UNAVAILABLE`. Use an offscreen `Target` for deferred or reliable readback. Canvas formats `bgra8unorm` and `bgra8unorm-srgb` are supported and swizzled to RGBA, which matters on platforms where `navigator.gpu.getPreferredCanvasFormat()` returns BGRA.
+- `surface.color.readFloats({ mipLevel: 0, region: "all" })` follows the same current-presentation-frame constraint and returns those pixels decoded to a `Float32Array` of components (`unorm8` canvas formats normalized to `[0, 1]`); it is the readback to use if a surface is ever configured with a float format.
 - A canvas can have only one live surface. Call `surface.dispose()` before creating another one for the same canvas.
 - **See also:** `init`, `surface`, `Target`, `Frame`, `Bundle`.

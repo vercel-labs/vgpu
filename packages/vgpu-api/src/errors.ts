@@ -516,6 +516,15 @@ export function surfaceNotInFrameError(where: string): VGPUError {
   });
 }
 
+export function surfaceReadUnavailableError(label: string | undefined, where: string): VGPUError {
+  return new VGPUError({
+    code: "VGPU-SURFACE-READ-UNAVAILABLE",
+    message: `Surface '${label ?? "surface"}' color readback is unavailable because this canvas texture was not submitted by a completed frame for the current presentation frame.`,
+    fix: "Read surface.color immediately after frame(gpu, ...) returns, before the browser advances the canvas texture; use target(gpu, ...) for deferred or reliable readback.",
+    where,
+  });
+}
+
 export function surfaceContextError(): VGPUError {
   return new VGPUError({
     code: "VGPU-SURFACE-CONTEXT",

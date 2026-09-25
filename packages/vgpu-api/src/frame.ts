@@ -286,6 +286,10 @@ export class Frame {
       // Mirrors the WebGPU pass descriptor rule: occlusionQuerySet must be a valid query set of type "occlusion".
       if (occlusion) descriptor = { ...descriptor, occlusionQuerySet: occlusion.querySet };
       encoder = this.#encoder.beginRenderPass(descriptor);
+      if (isSurface(resolvedTarget)) {
+        resolvedTarget.attachFrame(this);
+        this.#owners.add(resolvedTarget);
+      }
       if (viewport) encoder.setViewport(viewport.x, viewport.y, viewport.width, viewport.height, viewport.minDepth, viewport.maxDepth);
       if (scissor) encoder.setScissorRect(scissor[0], scissor[1], scissor[2], scissor[3]);
       this.#passActive = true;

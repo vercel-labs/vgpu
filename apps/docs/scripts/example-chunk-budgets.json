@@ -41,7 +41,7 @@
     "particle-orbit": 160967,
     "typegpu-liquid-glass": 150554,
     "adaptive-quality": 63030,
-    "atmosphere": 106538,
+    "atmosphere": 106916,
     "glass-sculpture": 72804,
     "spiral-galaxy": 86662
   },
@@ -70,5 +70,6 @@
     }
   },
   "$comment:spiral-galaxy": "Measured at 86662 B gzip on Node 22.21.1 against canary c290dd32, with batched compute/render submission, compute prewarming, unchanged shader output, and a static vgpu import inside the lazy-loaded example.",
-  "$comment:spiral-galaxy-shared-chunks": "Adding Spiral Galaxy changes Turbopack chunk factoring: an isolated clean-canary control at 7d51e9db measures Atmosphere at 111457 B gzip, versus 111604 B with this example, using the same Node 22.21.1 and lockfile. Increase only Atmosphere's baseline by the measured 147 B delta (106391 to 106538), preserving its existing 54 B remaining allowance; its source and all growth rules remain unchanged. The updated c290dd32 candidate reproduces the same 111604 B measurement."
+  "$comment:spiral-galaxy-shared-chunks": "Adding Spiral Galaxy changes Turbopack chunk factoring: an isolated clean-canary control at 7d51e9db measures Atmosphere at 111457 B gzip, versus 111604 B with this example, using the same Node 22.21.1 and lockfile. Increase only Atmosphere's baseline by the measured 147 B delta (106391 to 106538), preserving its existing 54 B remaining allowance; its source and all growth rules remain unchanged. The updated c290dd32 candidate reproduces the same 111604 B measurement.",
+  "$comment:surface-readback-shared-chunks": "The surface readback validation changes shared vgpu code included in every preview. The exact canary base 80f98da2 measured Atmosphere at 111420 B gzip; the PR merge build measured 111798 B with the same Node 22.23.2 / Next 16.3.3 toolchain. Increase only Atmosphere's baseline by that 378 B delta (106538 to 106916), preserving its existing 238 B remaining allowance; its source and all growth rules remain unchanged."
 }

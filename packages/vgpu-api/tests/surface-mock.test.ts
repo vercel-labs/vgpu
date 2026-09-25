@@ -8,10 +8,12 @@ const SOLID = `
 `;
 
 function canvasLike(width = 10, height = 5, layout = true): HTMLCanvasElement {
+  let currentTexture = { createView: () => ({}) };
   const context = {
     configure: vi.fn(),
     unconfigure: vi.fn(),
-    getCurrentTexture: () => ({ createView: () => ({}) }),
+    getCurrentTexture: () => currentTexture,
+    advanceCurrentTexture() { currentTexture = { createView: () => ({}) }; },
   };
   const canvas: Record<string, unknown> = {
     width: 0,
@@ -33,7 +35,11 @@ function canvasLike(width = 10, height = 5, layout = true): HTMLCanvasElement {
 }
 
 function contextOf(canvas: HTMLCanvasElement) {
-  return (canvas as unknown as { __context: { configure: ReturnType<typeof vi.fn>; unconfigure: ReturnType<typeof vi.fn> } }).__context;
+  return (canvas as unknown as { __context: {
+    configure: ReturnType<typeof vi.fn>;
+    unconfigure: ReturnType<typeof vi.fn>;
+    advanceCurrentTexture(): void;
+  } }).__context;
 }
 
 test("surface configures layout-backed canvas, syncs initial physical size, and respects fixed size defaulting autoResize false", async () => {
@@ -175,6 +181,42 @@ test("surface lifecycle rejects duplicates, disposes, unregisters, and allows re
   expect(recreated.disposed).toBe(false);
   gpu.dispose();
   expect(recreated.disposed).toBe(true);
+});
+
+test("surface color readback requires the current texture from a submitted frame", async () => {
+  const gpu = await initBrowser({ adapter: createMockAdapter() });
+  const canvas = canvasLike(2, 2, false);
+  const canvasSurface = surface(gpu, canvas, { label: "preview" });
+  const readTexture = vi.spyOn(gpu.device.readback, "readTexture").mockResolvedValue(new Uint8Array([1, 2, 3, 4]));
+  const selection = { mipLevel: 0, region: "all" } as const;
+
+  await expect(canvasSurface.color.read(selection)).rejects.toMatchObject({ code: "VGPU-SURFACE-READ-UNAVAILABLE", where: "Surface.color.read" });
+
+  expect(() => frame(gpu, (currentFrame) => {
+    currentFrame.pass({ target: canvasSurface }, () => undefined);
+    throw new Error("cancel surface frame");
+  })).toThrowError("cancel surface frame");
+  await expect(canvasSurface.color.read(selection)).rejects.toMatchObject({ code: "VGPU-SURFACE-READ-UNAVAILABLE", where: "Surface.color.read" });
+
+  let activeRead: Promise<Uint8Array> | undefined;
+  frame(gpu, (currentFrame) => {
+    currentFrame.pass({ target: canvasSurface }, () => undefined);
+    activeRead = canvasSurface.color.read(selection);
+  });
+  await expect(activeRead).rejects.toMatchObject({ code: "VGPU-SURFACE-READ-UNAVAILABLE", where: "Surface.color.read" });
+
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: canvasSurface }, () => undefined));
+  const renderedColor = canvasSurface.color;
+  await expect(renderedColor.read(selection)).resolves.toEqual(new Uint8Array([1, 2, 3, 4]));
+
+  contextOf(canvas).advanceCurrentTexture();
+  await expect(renderedColor.read(selection)).rejects.toMatchObject({ code: "VGPU-SURFACE-READ-UNAVAILABLE", where: "Surface.color.read" });
+  await expect(canvasSurface.color.readFloats(selection)).rejects.toMatchObject({
+    code: "VGPU-SURFACE-READ-UNAVAILABLE",
+    where: "Surface.color.readFloats",
+  });
+  expect(readTexture).toHaveBeenCalledTimes(1);
+  gpu.dispose();
 });
 
 test("resize and frame reentrancy are guarded, but resizing another surface and creating resources is allowed", async () => {
