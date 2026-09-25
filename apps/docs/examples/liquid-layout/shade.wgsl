@@ -34,6 +34,8 @@ const VGPU_TINT = vec3f(0.35, 0.66, 1.0);
 const MOTION_TINT = vec3f(0.66, 0.46, 1.0);
 const FRINGE_BLUE = vec3f(0.3, 0.56, 1.0);
 const WHITE = vec3f(0.93, 0.96, 1.0);
+// Direction to the key light in the screen plane (upper left).
+const KEY = vec2f(-0.6219, -0.7831);
 // Width of the rim in CSS px, up to its dark band.
 const TUBE = 6.5;
 // How much of the lit grid shows through the middle of the top layer.
@@ -118,13 +120,9 @@ fn refractUv(uv: vec2f, surface: Surface, strength: f32, channel: f32) -> vec2f 
 // key light (upper left), a softer counter-highlight on the opposite edge, and
 // a little extra where it faces the pointer.
 fn rimGain(surface: Surface, p: vec2f, energy: f32) -> f32 {
-  let n = surface.slope;
-  let toKey = normalize(vec2f(-0.62, -0.78));
-  let key = pow(max(dot(n, toKey), 0.0), 1.5);
-  let counter = pow(max(dot(n, -toKey), 0.0), 2.0);
   let toLight = shade.light.xy - p;
-  let pointer = pow(max(dot(n, toLight / max(length(toLight), 1.0)), 0.0), 4.0);
-  return (0.35 + 0.75 * key + 0.4 * counter + 0.3 * pointer) * (1.0 + 0.25 * energy);
+  let pointer = pow(max(dot(surface.slope, toLight / max(length(toLight), 1.0)), 0.0), 4.0);
+  return (1.0 + 0.35 * pointer) * (1.0 + 0.25 * energy);
 }
 
 fn lineWidth() -> f32 {
@@ -145,27 +143,34 @@ fn iridescence(n: vec2f, p: vec2f) -> vec3f {
 fn glass(surface: Surface, under: vec3f, veins: f32, hue: f32, gain: f32, energy: f32, p: vec2f) -> vec3f {
   let s = surface.depth;
   let colour = tint(hue);
+  // How squarely the edge faces the key light: +1 on the upper-left edges,
+  // -1 on the lower-right ones.
+  let facing = dot(surface.slope, KEY);
+  let lit = max(facing, 0.0);
+  let away = max(-facing, 0.0);
   // Clear glass: almost no absorption, a whisper of the card's library colour.
   let clear = mix(vec3f(0.965, 0.975, 1.0), vec3f(0.985, 0.965, 1.0), clamp(hue, 0.0, 1.0));
   var result = under * clear + colour * (0.004 + 0.01 * energy);
   result += mix(colour, WHITE, 0.35) * veins * (0.16 + 0.22 * surface.lens);
-  // Thickness shading: the bevel facing the key light (upper left) gathers
-  // light, the one facing away darkens, fading out across the lens band.
-  let toKey = normalize(vec2f(-0.62, -0.78));
-  result *= 1.0 + 0.3 * dot(surface.slope, toKey) * surface.lens;
-  // A soft inner shadow a few px inside the rim, then the rim lines.
-  result *= 1.0 - 0.08 * band(s, TUBE + 1.8, 2.0);
+  // The bevel is lit on the key side and falls into grey on the far side,
+  // fading out across the lens band.
+  result *= 1.0 + (0.2 * lit - 0.46 * away) * surface.lens;
+  // A faint ring where the lens band ends, as in thick system glass.
+  result *= 1.0 - 0.06 * band(s, shade.lens, 0.9);
   let w = lineWidth();
-  var rim = WHITE * band(s, 1.1, w + 0.2) * 0.42;
-  let bevel = smoothstep(0.8, 2.8, s) * exp(-s / 3.4);
-  rim += WHITE * bevel * 0.16;
-  // A broad sheen inside the lit bevel, like light caught in thick glass.
-  let sheen = max(dot(surface.slope, toKey), 0.0) * surface.lens * smoothstep(2.0, 10.0, s);
-  rim += WHITE * sheen * 0.14;
-  result += rim * gain;
+  // The edge itself is a crisp dark line (the glass reflecting the room at a
+  // grazing angle), darkest where it faces away from the light.
+  result *= 1.0 - band(s, 0.6, w * 0.8 + 0.2) * (0.42 + 0.5 * away) * (1.0 - 0.5 * lit);
+  // Key-light reflection: a bright crescent just inside the lit edges and a
+  // softer glow behind it. It is HDR, so it still reads on the pale floor.
+  let crescent = band(s, 2.0, w + 1.2) * pow(lit, 1.4);
+  let glow = smoothstep(0.5, 3.0, s) * exp(-s / 12.0) * pow(lit, 2.0);
+  result += WHITE * (2.4 * crescent + 0.7 * glow) * gain;
+  // A thin counter reflection inside the dark edge on the far side.
+  result += WHITE * band(s, 2.2, w + 0.4) * pow(away, 1.5) * 0.22 * gain;
   // A faint iridescent line along the lower edge, where the bevel faces down.
   let down = pow(max(surface.slope.y, 0.0), 2.0);
-  result += iridescence(surface.slope, p) * band(s, 1.8, w + 0.5) * down * 0.18;
+  result += iridescence(surface.slope, p) * band(s, 1.8, w + 0.5) * down * 0.12;
   return result;
 }
 
@@ -184,7 +189,7 @@ fn gridShade(uv: vec2f, centre: vec4f) -> vec3f {
   let p = uv * shade.viewport;
   let shadowTap = fieldAt(uv - vec2f(-6.0, 14.0) / shade.viewport).r;
   let shadow = (1.0 - smoothstep(-20.0, 48.0, shadowTap)) * 0.16;
-  let outline = 0.22 * exp(-max(d, 0.0) / 1.6);
+  let outline = 0.16 * exp(-max(d, 0.0) / 1.0);
   let outside = backdropAt(uv).rgb * (1.0 - shadow) * (1.0 - outline);
   if (d > 4.0) {
     return outside * fade;
