@@ -24,7 +24,7 @@ struct Shade {
   refraction: f32,
   // Spread between the colour channels' reach, as a fraction.
   dispersion: f32,
-  // Bezel width, CSS px.
+  // Bezel width, CSS px; the pipeline keeps it under every corner radius.
   lens: f32,
   gridDim: f32,
   panelHue: f32,
@@ -40,9 +40,7 @@ struct Shade {
 
 // Widths (CSS px) over which the Fresnel and glare bands fade from the rim.
 const FRESNEL_WIDTH = 5.4;
-// The big soft light: how far (CSS px) it reaches inside the rim, and its
-// HDR colour at the rim.
-const SOFT_WIDTH = 36.0;
+// The big soft light's HDR colour at the rim; it spans the bezel.
 const SOFT_LIGHT = vec3f(0.62, 0.63, 0.66);
 // How tightly the soft light gathers into the corner facing the key.
 const SOFT_FOCUS = 3.0;
@@ -58,6 +56,8 @@ const MOTION_TINT = vec3f(0.66, 0.46, 1.0);
 const SHADOW_OFFSET = vec2f(4.0, 14.0);
 const SHADOW_FALLOFF = 22.0;
 const SHADOW = 0.16;
+// How far (CSS px) inside the shape the shadow fades out.
+const SHADOW_INNER = 18.0;
 // How much of the lit grid shows through the middle of the top layer.
 const GRID_THROUGH = 0.2;
 
@@ -91,22 +91,6 @@ fn gradientAt(uv: vec2f) -> vec4f {
   return vec4f(gx.x, gy.x, gx.y, gy.y);
 }
 
-// A normal that turns smoothly around corners, from the field's gradient over
-// a wide span: inside a rounded rect the plain gradient jumps along the
-// diagonal, so lights shaped by it would end in a straight seam there.
-const SMOOTH_SPAN = 18.0;
-
-fn smoothNormal(uv: vec2f, panel: bool) -> vec2f {
-  let span = SMOOTH_SPAN / shade.viewport;
-  let r = fieldAt(uv + vec2f(span.x, 0.0));
-  let l = fieldAt(uv - vec2f(span.x, 0.0));
-  let d = fieldAt(uv + vec2f(0.0, span.y));
-  let u = fieldAt(uv - vec2f(0.0, span.y));
-  let g = select(vec2f(r.r - l.r, d.r - u.r), vec2f(r.g - l.g, d.g - u.g), panel);
-  let len = length(g);
-  return select(vec2f(0.0, -1.0), g / len, len > 1e-4);
-}
-
 struct Rim {
   // Depth inside the edge, CSS px (negative outside).
   depth: f32,
@@ -123,9 +107,9 @@ fn rimAt(d: f32, grad: vec2f) -> Rim {
   return Rim(-d, n, smoothstep(0.0, 0.7, len));
 }
 
-// Past the bezel and the soft light the glass is flat and unlit.
+// Past the bezel the glass is flat, clear and unlit.
 fn deep(d: f32) -> bool {
-  return -d > max(shade.lens, SOFT_WIDTH * 3.0) + 2.0;
+  return -d > shade.lens + 2.0;
 }
 
 // How far inward the bezel reaches for what it shows, in CSS px: the full
@@ -143,9 +127,13 @@ fn rimBand(s: f32, width: f32) -> f32 {
   return clamp(pow(max(1.2 - s / width, 0.0), 5.0), 0.0, 1.0);
 }
 
+// The soft shadow the glass casts: it falls off outside the offset shape and
+// fades out a short way inside it, where the field is still smooth (a
+// rounded rect's field folds along its corner diagonals deeper in).
 fn shadowAt(uv: vec2f) -> f32 {
   let d = fieldAt(uv - SHADOW_OFFSET / shade.viewport).r;
-  return exp(-abs(d) / SHADOW_FALLOFF) * SHADOW;
+  let inside = smoothstep(-SHADOW_INNER, 0.0, d);
+  return select(inside, exp(-d / SHADOW_FALLOFF), d > 0.0) * SHADOW;
 }
 
 fn gridFade() -> f32 {
@@ -167,11 +155,13 @@ fn clearGlass(floorColour: vec3f, hue: f32, energy: f32) -> vec3f {
 
 // Glass on the bezel at uv: refraction with dispersion, the Fresnel band and
 // the glare.
-fn bezel(uv: vec2f, rim: Rim, hue: f32, energy: f32, gain: f32, panel: bool) -> vec3f {
+fn bezel(uv: vec2f, rim: Rim, hue: f32, energy: f32, gain: f32) -> vec3f {
   let s = rim.depth;
-  // Everything on the bezel follows the smoothly turning normal, so nothing
-  // seams along the diagonals inside the corners.
-  let n = smoothNormal(uv, panel);
+  // The bezel is never wider than the corner radius (see `lens`), so inside it
+  // the field's own normal turns smoothly around each corner; deeper in, a
+  // rounded rect's field folds along the corner diagonals, so no light or
+  // bend reaches past the bezel.
+  let n = rim.normal;
   let reach = -n * edgeReach(s) * rim.strength * (1.0 + 0.3 * energy);
   let spread = shade.dispersion;
   let r = backdropAt(uv + reach * (1.0 - spread) / shade.viewport).r;
@@ -185,11 +175,11 @@ fn bezel(uv: vec2f, rim: Rim, hue: f32, energy: f32, gain: f32, panel: bool) -> 
   // Thick glass dims a little on the bevel facing away from the light.
   let lens = pow(clamp(1.0 - s / max(shade.lens, 1.0), 0.0, 1.0), 2.0) * rim.strength;
   colour *= 1.0 - 0.12 * away * lens;
-  // The big soft light: a broad glow inside the rim that curves around the
-  // corner facing the key light, fading along both edges away from it and
-  // inward; a fainter one sits in the opposite corner.
+  // The big soft light: a broad glow across the bezel that curves around the
+  // corner facing the key light and fades along both edges away from it and
+  // toward the bezel's inner edge; a fainter one sits in the opposite corner.
   let corner = pow(lit, SOFT_FOCUS) + 0.3 * pow(away, SOFT_FOCUS + 1.0);
-  let soft = corner * exp(-s / SOFT_WIDTH) * rim.strength;
+  let soft = corner * pow(clamp(1.0 - s / max(shade.lens, 1.0), 0.0, 1.0), 1.5) * rim.strength;
   colour += SOFT_LIGHT * soft * gain;
   let fresnel = rimBand(s, FRESNEL_WIDTH) * rim.strength;
   colour = mix(colour, colour * 1.12 + vec3f(0.03), fresnel * 0.5);
@@ -231,7 +221,7 @@ fn gridShade(uv: vec2f, centre: vec4f) -> vec3f {
   let cov = coverage(d);
   var color = outside;
   if (cov > 0.0) {
-    color = mix(color, bezel(uv, rim, centre.b, centre.a, gain, false), cov);
+    color = mix(color, bezel(uv, rim, centre.b, centre.a, gain), cov);
   }
   return color * fade;
 }
@@ -249,7 +239,8 @@ fn gridShade(uv: vec2f, centre: vec4f) -> vec3f {
   }
   // The top layer casts a wider, softer shadow on the grid.
   let panelShadow = fieldAt(uv - vec2f(6.0, 24.0) / shade.viewport).g;
-  color *= 1.0 - exp(-abs(panelShadow) / 36.0) * 0.2 * lift;
+  let panelFall = select(smoothstep(-24.0, 0.0, panelShadow), exp(-panelShadow / 36.0), panelShadow > 0.0);
+  color *= 1.0 - panelFall * 0.2 * lift;
   // Under the top layer the grid fades toward the plain floor, so the rims
   // behind never cross the panel's text; it comes back near the panel's rim.
   if (deep(dp)) {
@@ -260,7 +251,7 @@ fn gridShade(uv: vec2f, centre: vec4f) -> vec3f {
     let cov = coverage(dp) * lift;
     if (cov > 0.0) {
       let gain = pointerGain(rim.normal, p, shade.panelEnergy);
-      let lit = bezel(uv, rim, shade.panelHue, shade.panelEnergy, gain, true);
+      let lit = bezel(uv, rim, shade.panelHue, shade.panelEnergy, gain);
       let through = GRID_THROUGH + (1.0 - GRID_THROUGH) * rimBand(rim.depth, shade.lens * 0.5);
       color = mix(color, mix(lit * gridFade(), lit * 0.5 + grid * 0.5, through * 0.5), cov);
     }

@@ -50,6 +50,8 @@ export interface LiquidFrame {
   readonly panelHue: number;
   readonly panelEnergy: number;
   readonly panelLift: number;
+  /** Smallest corner radius (CSS px) among the cards; the glass bezel stays inside it. */
+  readonly minCorner: number;
 }
 
 type Strain = [number, number, number];
@@ -652,7 +654,9 @@ export function createDynamics(options: DynamicsOptions) {
       let panelHue = 0;
       let panelEnergy = 0;
       let panelLift = 0;
+      let minCorner = Number.POSITIVE_INFINITY;
       for (const blob of blobs.values()) {
+        minCorner = Math.min(minCorner, cornerRadius(2 * blob.hw, 2 * blob.hh));
         emitBlob(blob, step);
         if (blob.lift > panelLift) {
           panelLift = blob.lift;
@@ -663,7 +667,7 @@ export function createDynamics(options: DynamicsOptions) {
       for (let i = drips.length - 1; i >= 0; i--) {
         if (!emitDrip(drips[i]!, step)) drips.splice(i, 1);
       }
-      return { data, count, flow, panelHue, panelEnergy, panelLift };
+      return { data, count, flow, panelHue, panelEnergy, panelLift, minCorner };
     },
   };
 }

@@ -206,6 +206,9 @@ export function createPipeline(gpu: Gpu, size: Size, dpr: number, initialLook: L
           panelHue: liquid.panelHue,
           panelEnergy: liquid.panelEnergy,
           panelLift: liquid.panelLift,
+          // A bezel wider than a corner's radius would reach the fold in the
+          // rounded rect's field along the corner diagonal and draw a seam there.
+          lens: Math.max(4, Math.min(look.lens, liquid.minCorner - 1)),
         },
       });
     },
