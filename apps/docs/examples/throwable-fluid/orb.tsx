@@ -213,7 +213,6 @@ export function Orb({ store }: { readonly store: OrbStore }) {
         onDragEnd={() => {
           interaction.dragging = false;
           interaction.pressed = false;
-          store.markThrown();
         }}
         onKeyDown={onKeyDown}
         onClick={onClick}
@@ -222,14 +221,6 @@ export function Orb({ store }: { readonly store: OrbStore }) {
           Drag and throw it to stir the ink. Arrow keys flick it, Shift flicks harder, and Enter swirls the ink.
         </span>
       </motion.button>
-      <p
-        aria-hidden="true"
-        className={`absolute bottom-4 left-5 select-none text-[11px] font-medium uppercase tracking-[0.2em] text-white/45 transition-opacity duration-700 ${
-          state.thrown ? 'opacity-0' : 'opacity-100'
-        }`}
-      >
-        Grab the glass orb and throw it
-      </p>
     </div>
   );
 }

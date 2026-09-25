@@ -2,7 +2,7 @@ export const meta = {
   slug: 'spring-choreography',
   title: 'Spring Choreography',
   description:
-    'A quarter of a million GPU particles (up to a million) morph between a hello triangle, a ringed planet, a torus knot, a galaxy and a wave field in staggered waves. Every particle rides a real Motion spring baked into a lookup table, delayed by Motion’s stagger() from the centre, the edges, a sweep, noise bands, a spiral or the cursor, so overlapping morphs keep their momentum and overshoot. A Motion animate() timeline plays, pauses, scrubs, speeds up and jumps between shapes, and because each frame is a pure function of its playhead, scrubbing is exact. The pointer pushes the swarm aside on a Motion spring value and a click sends a spring burst through it; streaks, bloom and ACES tone mapping finish the HDR sparks. Retune stiffness, damping and mass live.',
+    'A quarter of a million GPU particles morph between shapes, each on a real Motion spring and stagger, sequenced by a scrubbable Motion timeline.',
   tags: ['motion', 'particles', 'spring', 'animation', 'compute', 'instancing', 'bloom', 'hdr'],
   capabilities: [
     'webgpu',

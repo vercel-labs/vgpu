@@ -36,8 +36,6 @@ export interface ThrowSettings {
 
 export interface OrbState extends ThrowSettings {
   readonly reduced: boolean;
-  /** The visitor has thrown the orb at least once; hides the hint. */
-  readonly thrown: boolean;
 }
 
 /** The part of the mounted orb the renderer reads each frame. */
@@ -61,7 +59,6 @@ export interface OrbStore {
   subscribe(listener: () => void): () => void;
   setSettings(patch: Partial<ThrowSettings>): void;
   setReduced(reduced: boolean): void;
-  markThrown(): void;
   readonly interaction: Interaction;
   requestRipple(): void;
   /** Ripples requested since the last call. */
@@ -131,7 +128,7 @@ export function rescaleOffset(position: number, from: number, to: number): numbe
 
 export function createOrbStore(): OrbStore {
   const listeners = new Set<() => void>();
-  let state: OrbState = { ...DEFAULT_SETTINGS, reduced: false, thrown: false };
+  let state: OrbState = { ...DEFAULT_SETTINGS, reduced: false };
   let current: OrbHandle | null = null;
   let ripples = 0;
   const interaction: Interaction = { hovered: false, pressed: false, dragging: false };
@@ -151,7 +148,6 @@ export function createOrbStore(): OrbStore {
     },
     setSettings: (patch) => update(patch),
     setReduced: (reduced) => update({ reduced }),
-    markThrown: () => update({ thrown: true }),
     interaction,
     requestRipple() {
       ripples++;

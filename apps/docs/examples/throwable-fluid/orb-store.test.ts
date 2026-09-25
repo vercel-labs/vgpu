@@ -18,7 +18,7 @@ test('settings changes notify subscribers, and repeating a value does not', () =
   const store = createOrbStore();
   const listener = vi.fn();
   const unsubscribe = store.subscribe(listener);
-  expect(store.getState()).toMatchObject({ ...DEFAULT_SETTINGS, reduced: false, thrown: false });
+  expect(store.getState()).toMatchObject({ ...DEFAULT_SETTINGS, reduced: false });
 
   store.setSettings({ power: 0.9 });
   expect(store.getState().power).toBe(0.9);
@@ -29,12 +29,10 @@ test('settings changes notify subscribers, and repeating a value does not', () =
   expect(store.getState()).toBe(state);
   expect(listener).toHaveBeenCalledOnce();
 
-  store.markThrown();
-  store.markThrown();
-  expect(store.getState().thrown).toBe(true);
+  store.setReduced(true);
   expect(listener).toHaveBeenCalledTimes(2);
   unsubscribe();
-  store.setReduced(true);
+  store.setReduced(false);
   expect(listener).toHaveBeenCalledTimes(2);
 });
 

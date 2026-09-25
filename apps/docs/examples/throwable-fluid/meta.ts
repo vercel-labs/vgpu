@@ -2,7 +2,7 @@ export const meta = {
   slug: 'throwable-fluid',
   title: 'Throwable Fluid',
   description:
-    'A glass orb you can throw. The orb is a real, focusable DOM button that Motion drags: release it and Motion’s inertia coasts it with the tuned power and time constant, springs it back from past the walls, and scales it with hover and press springs. Every frame, inside Motion’s frameloop, vgpu reads the orb’s rect and steps a Navier–Stokes solver on half-float render targets: the orb drags the fluid along its whole swept path and lays luminous ink behind it, a wall impact throws the fluid back off the wall with a burst of ink, both scaled by the impact speed, and the orb itself is drawn as a glass lens that refracts the ink with chromatic dispersion, a Fresnel rim, a highlight and a soft shadow and caustic. Grab it, throw it, flick it with the arrow keys, or watch the idle flicks.',
+    'Throw a glass orb with Motion’s drag and inertia; it stirs a GPU fluid simulation and refracts the ink like a lens.',
   tags: [
     'motion',
     'fluid',
