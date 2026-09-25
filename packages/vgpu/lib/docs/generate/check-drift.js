@@ -18,6 +18,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateDocs } from "./generate.js";
+import { isAuthoredSkillPath } from "./skill.js";
 import { DEFAULT_CONTENT_DIR, generateGeistdocs } from "./generate-geistdocs.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -85,7 +86,10 @@ function diffManifest(committedPath, freshPath) {
 }
 
 function diffSkillDir(committedDir, freshDir) {
-  const committedFiles = listFiles(committedDir);
+  // Blender references are authored in place; only generated files can drift from this generator.
+  const committedFiles = new Set(
+    [...listFiles(committedDir)].filter(path => !isAuthoredSkillPath(path.split(sep).join("/"))),
+  );
   const freshFiles = listFiles(freshDir);
   const issues = [];
 
