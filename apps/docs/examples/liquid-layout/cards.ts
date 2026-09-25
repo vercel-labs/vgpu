@@ -91,7 +91,7 @@ export const CARDS: readonly CardData[] = [
     title: 'AnimatePresence',
     line: 'Filter the grid. Cards drip away and re-form.',
     detail:
-      'A card that exits hands its blob to a drip: it drains, necks and falls. A card that enters falls into its slot as a droplet and splashes into shape.',
+      'A card that exits hands its blob to a drip: it drains, necks and falls. A card that enters opens out of its centre as a circle and spreads into shape.',
     code: '<AnimatePresence mode="popLayout" />',
     hue: 1,
   },

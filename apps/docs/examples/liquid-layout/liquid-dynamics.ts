@@ -1,9 +1,9 @@
 // Pure per-frame liquid dynamics. The renderer measures the laid-out cards and
 // hands over one sample per card; this module turns them into the primitives
-// the field shader blends (rounded rects for card bodies, capsules for droplets
-// and drips). It owns everything the DOM does not have: speed-driven softness,
-// a jelly strain spring, drips for cards that leave and splashes
-// for cards that arrive. Every card, a dragged one included, merges in the grid layer; only
+// the field shader blends (rounded rects for card bodies, capsules for drips).
+// It owns everything the DOM does not have: speed-driven softness, a jelly
+// strain spring, drips for cards that leave and circles that open out of the
+// centre of cards that arrive. Every card, a dragged one included, merges in the grid layer; only
 // the open panel and the card flying back from it float in the layer above.
 // No DOM, no GPU.
 
@@ -37,7 +37,7 @@ export interface CardSample {
 export interface DynamicsOptions {
   /** Multiplies every smooth-min radius; 1 is the tuned default. */
   smoothness: number;
-  /** Calmer path: no stretch, slow wobble, fades instead of drips and splashes. */
+  /** Calmer path: no stretch, fades instead of drips and opening circles. */
   reducedMotion: boolean;
 }
 
@@ -87,7 +87,6 @@ interface Blob {
   enter: number;
   grow: number;
   growVelocity: number;
-  splashed: boolean;
   offsetX: number;
   offsetY: number;
   scale: number;
@@ -147,11 +146,13 @@ const SIZE_KICK = 0.35;
 const LAG_SECONDS = 0.012;
 const LAG_LIMIT = 18;
 
-const ENTER_FALL = 0.26;
+// Entry: circles open out of each card on a gentle spring (reaches the card in
+// about 0.4 s, swells ~4% past it), one card after another in reading order.
 const ENTER_TOTAL = 1.1;
 const ENTER_STAGGER = 0.06;
-const GROW_OMEGA = 2 * Math.PI * 2.4;
-const GROW_DAMPING = 0.5;
+const ENTER_SWELL = 0.5;
+const GROW_OMEGA = 2 * Math.PI * 1.1;
+const GROW_DAMPING = 0.62;
 
 const DRAIN = 1.05;
 const DRIP_RELEASE = 0.5;
@@ -232,7 +233,7 @@ export function createDynamics(options: DynamicsOptions) {
     data[o + 15] = wobbleCode(prim.seed ?? 0, prim.wobble ?? 0);
   }
 
-  /** A tapered capsule (drips and splashes); skipped while it has no radius. */
+  /** A tapered capsule (drips); skipped while it has no radius. */
   function capsule(
     ax: number,
     ay: number,
@@ -308,7 +309,6 @@ export function createDynamics(options: DynamicsOptions) {
       enter: 0,
       grow: 0,
       growVelocity: 0,
-      splashed: false,
       offsetX: sample.offsetX,
       offsetY: sample.offsetY,
       scale: sample.scale,
@@ -504,47 +504,34 @@ export function createDynamics(options: DynamicsOptions) {
       });
       return;
     }
-    const radius = 0.42 * Math.min(blob.hw, blob.hh);
-    const fallFrom = blob.cy - blob.hh - 90;
-    if (t < ENTER_FALL) {
-      const u = t / ENTER_FALL;
-      const y = fallFrom + (blob.cy - fallFrom) * u * u;
-      const velocity = (2 * (blob.cy - fallFrom) * u) / ENTER_FALL;
-      const tail = Math.min(velocity * 0.03, 70);
-      capsule(blob.cx, y - tail, blob.cx, y, radius * 0.55, radius * smoothstep(0, 0.4, u), K_DRIP, blob.layer, blob.hue, 1);
-      return;
-    }
-    if (!blob.splashed) {
-      blob.splashed = true;
-      // A wide squash on impact, released through the jelly spring.
-      blob.strainVelocity = [4, 0, -4];
-    }
+    // A circle opens out of the card's centre. It grows until it meets the
+    // card's nearer sides, stretches into a pill along the longer axis, then
+    // squares off into the card's corners, all on one spring that swells the
+    // card a touch past its size before it settles.
     const accel = GROW_OMEGA * GROW_OMEGA * (1 - blob.grow) - 2 * GROW_DAMPING * GROW_OMEGA * blob.growVelocity;
     blob.growVelocity += accel * dt;
     blob.grow += blob.growVelocity * dt;
-    const grow = Math.min(blob.grow, 1.1);
-    const settle = smoothstep(ENTER_FALL, ENTER_TOTAL, t);
-    const hw = radius + (blob.hw - radius) * grow;
-    const hh = radius + (blob.hh - radius) * grow;
-    const blend = Math.min(1, Math.max(0, grow));
+    const short = Math.min(blob.hw, blob.hh);
+    const long = Math.max(blob.hw, blob.hh);
+    // The circle's radius runs from 0 to the short half-size, on to the long
+    // one, then on by as much as the corners have left to tighten.
+    const radius = Math.max(0, blob.grow) * (long + Math.max(0, short - corner));
+    const swell = 1 + ENTER_SWELL * Math.max(0, blob.grow - 1);
     rect({
       cx: blob.cx,
       cy: blob.cy,
-      hw,
-      hh,
-      corner: radius + (corner - radius) * blend,
-      k: k + K_DRIP * (1 - settle),
+      hw: Math.min(radius, blob.hw) * swell,
+      hh: Math.min(radius, blob.hh) * swell,
+      // While the circle is smaller than the card the rect clamps this to its
+      // half-size, so it stays round.
+      corner: clamp(Math.min(radius, short) - Math.max(0, radius - long), corner, short),
+      k,
       layer: blob.layer,
       hue: blob.hue,
-      energy: Math.max(energy, 1 - settle),
+      energy: Math.max(energy, 1 - clamp(blob.grow, 0, 1)),
       rotation: blob.rotation,
       strain: blob.strain,
-      wobble: wobbleOf(blob) * settle,
-      seed: blob.seed,
     });
-    // The last of the droplet sinks into the new body.
-    const sink = 1 - smoothstep(ENTER_FALL, ENTER_FALL + 0.2, t);
-    if (sink > 0) capsule(blob.cx, blob.cy, blob.cx, blob.cy, 0, radius * sink, K_DRIP, blob.layer, blob.hue, 1);
     if (t >= ENTER_TOTAL && Math.abs(blob.grow - 1) < 0.01 && Math.abs(blob.growVelocity) < 0.05) {
       blob.enter = Infinity;
       blob.grow = 1;
@@ -638,7 +625,7 @@ export function createDynamics(options: DynamicsOptions) {
         if (blob.enter !== Infinity) blob.enter += step;
       }
 
-      // Cards arriving together fall in reading order, one after another.
+      // Cards arriving together open in reading order, one after another.
       entering.sort((a, b) => a.cy - b.cy || a.cx - b.cx);
       entering.forEach((blob, rank) => {
         blob.enter = -rank * ENTER_STAGGER;

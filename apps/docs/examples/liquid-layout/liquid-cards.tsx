@@ -55,7 +55,7 @@ interface Spring {
   readonly damping: number;
 }
 
-const ENTER_DELAY = 0.3;
+const ENTER_DELAY = 0.22;
 const ENTER_STAGGER = 0.06;
 const FLIGHT_COPY_MS = 420;
 const HELP_ID = 'liquid-layout-help';
@@ -472,7 +472,7 @@ export function LiquidCards({ store }: { store: LayoutStore }) {
   const spring = { stiffness: state.stiffness, damping: state.damping };
   const frame = gridFrame(size.width, size.height, Math.max(1, visible.length));
 
-  // Cards joining the grid fade their text in as their droplet lands, in reading
+  // Cards joining the grid fade their text in as their circle opens out, in reading
   // order. The previous list lives in state, so every render agrees on who is new.
   const visibleKey = visible.join(',');
   const [entry, setEntry] = useState({ key: visibleKey, entering: visible });

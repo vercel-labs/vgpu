@@ -85,20 +85,34 @@ describe('card bodies', () => {
     expect(body!.energy).toBeLessThan(0.01);
   });
 
-  test('new cards fall in as droplets, one after another in reading order', () => {
+  test('new cards open out of their centres as circles, one after another in reading order', () => {
     const liquid = dynamics();
     const cards = [sample({ id: 'b', cx: 700 }), sample({ id: 'a', cx: 400 })];
-    const first = prims(liquid.update(cards, DT, VIEWPORT));
-    expect(first).toHaveLength(1);
-    expect(first[0]!.type).toBe(1);
-    // The capsule starts above the card and falls towards it.
-    expect(first[0]!.cx).toBe(400);
-    expect(first[0]!.cy).toBeLessThan(300 - 120);
-    const later = prims(run(liquid, 0.1, () => cards));
-    expect(later.filter((prim) => prim.type === 1)).toHaveLength(2);
-    // After the fall each droplet grows into its card, then only the bodies remain.
-    const landed = prims(run(liquid, 2, () => cards));
-    expect(landed.map((prim) => prim.type)).toEqual([0, 0]);
+    // The first card in reading order starts as a small circle at its centre.
+    const [first, ...others] = prims(liquid.update(cards, DT, VIEWPORT));
+    expect(others).toHaveLength(0);
+    expect(first).toMatchObject({ type: 0, cx: 400, cy: 300 });
+    expect(first!.hw).toBeLessThan(10);
+    expect(first!.hh).toBe(first!.hw);
+    expect(first!.corner).toBe(first!.hw);
+    // Both grow as circles, the second a step behind the first.
+    const growing = prims(run(liquid, 0.1, () => cards));
+    expect(growing.map((prim) => [prim.type, prim.cx])).toEqual([
+      [0, 700],
+      [0, 400],
+    ]);
+    const [late, early] = growing;
+    expect(early!.hw).toBeGreaterThan(late!.hw);
+    for (const circle of growing) {
+      expect(circle.hh).toBe(circle.hw);
+      expect(circle.corner).toBe(circle.hw);
+    }
+    // Then each squares off into its card.
+    const settled = prims(run(liquid, 2, () => cards));
+    expect(settled.map((prim) => [prim.type, prim.hw, prim.hh, prim.corner])).toEqual([
+      [0, 100, 120, CORNER],
+      [0, 100, 120, CORNER],
+    ]);
   });
 
   test('a resting card is an exact rounded rect: no wobble', () => {
