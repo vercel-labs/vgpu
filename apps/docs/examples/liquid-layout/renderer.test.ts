@@ -80,7 +80,7 @@ const guiHarness = vi.hoisted(() => {
 const vgpuFns = vi.hoisted(
   () =>
     Object.fromEntries(
-      ['surface', 'target', 'effect', 'sampler', 'frame'].map((name) => [
+      ['surface', 'target', 'effect', 'draw', 'sampler', 'frame'].map((name) => [
         name,
         // Each test's GPU double carries its factory fakes in `fns`.
         (gpu: any, ...args: any[]) => gpu.fns[name](...args),
@@ -159,6 +159,7 @@ function setup(options: { compile?: () => Promise<void>; reducedMotion?: boolean
 
   const targets: Array<{ size: readonly [number, number]; texelSize: readonly [number, number]; resize: ReturnType<typeof vi.fn> }> = [];
   const effects: Array<{ set: ReturnType<typeof vi.fn>; compile: ReturnType<typeof vi.fn> }> = [];
+  const draws: Array<{ set: ReturnType<typeof vi.fn>; compile: ReturnType<typeof vi.fn> }> = [];
   const compile = vi.fn(options.compile ?? (async () => {}));
   const surface = {
     size: [1280, 720] as const,
@@ -169,12 +170,15 @@ function setup(options: { compile?: () => Promise<void>; reducedMotion?: boolean
       return () => {};
     }),
   };
-  const passes: Array<{ target: unknown }> = [];
+  const passes: Array<{ target: unknown; draws: Array<[unknown, unknown?]> }> = [];
   const frame = vi.fn((callback: (frame: { pass: typeof pass }) => void) => callback({ pass }));
-  const pass = vi.fn((descriptor: { target: unknown }, body: (pass: { draw: () => void }) => void) => {
-    passes.push(descriptor);
-    body({ draw: vi.fn() });
-  });
+  const pass = vi.fn(
+    (descriptor: { target: unknown }, body: (pass: { draw: (object: unknown, options?: unknown) => void }) => void) => {
+      const recorded = { ...descriptor, draws: [] as Array<[unknown, unknown?]> };
+      passes.push(recorded);
+      body({ draw: (object, options) => recorded.draws.push(options === undefined ? [object] : [object, options]) });
+    },
+  );
   const gpu = {
     gpu: { queue: { onSubmittedWorkDone: vi.fn(async () => {}) } },
     settled: vi.fn(async () => {}),
@@ -196,6 +200,11 @@ function setup(options: { compile?: () => Promise<void>; reducedMotion?: boolean
         effects.push(created);
         return created;
       }),
+      draw: vi.fn(() => {
+        const created = { set: vi.fn(), compile };
+        draws.push(created);
+        return created;
+      }),
       sampler: vi.fn(() => ({})),
       frame,
     },
@@ -211,6 +220,7 @@ function setup(options: { compile?: () => Promise<void>; reducedMotion?: boolean
     media,
     targets,
     effects,
+    draws,
     compile,
     surface,
     passes,
@@ -248,8 +258,9 @@ test('renders from Motion’s postRender with Motion’s delta and the live card
 
   expect(mocks.init).toHaveBeenCalledOnce();
   expect(env.gpu.fns.surface).toHaveBeenCalledWith(env.canvas, { dpr: [1, 2] });
-  // Every pass is compiled before the first frame; the output effect against the surface format.
-  expect(env.compile).toHaveBeenCalledTimes(9);
+  // Seven effects and the bubble draw are compiled before the first frame; the output effect
+  // against the surface format.
+  expect(env.compile).toHaveBeenCalledTimes(8);
   expect(env.compile).toHaveBeenCalledWith({ colors: ['rgba8unorm'] });
   expect(motion.postRender).toHaveBeenCalledOnce();
   expect(motion.postRender).toHaveBeenCalledWith(expect.any(Function), true);
@@ -258,15 +269,39 @@ test('renders from Motion’s postRender with Motion’s delta and the live card
   env.tick(20);
   expect(env.gpu.clock.advance).toHaveBeenCalledWith(0.02);
   expect(env.frame).toHaveBeenCalledOnce();
-  // backdrop → field → shade → bright → four blurs → composite into the surface.
-  expect(env.passes).toHaveLength(9);
+  // backdrop → field → shade (+ bubbles) → bright → two blurs → composite into the surface.
+  expect(env.passes).toHaveLength(7);
   expect(env.passes.at(-1)?.target).toBe(env.surface);
   const field = env.effects[1]!.set.mock.calls.at(-1)?.[0].field;
   expect(field.count).toBeGreaterThan(0);
+  // The card is still falling in: no bubbles yet, so the scene pass only shades.
+  expect(env.passes[2]!.draws).toEqual([[env.effects[2]]]);
 
   // A long stall (a background tab) advances the clock by at most 50 ms.
   env.tick(500);
   expect(env.gpu.clock.advance).toHaveBeenLastCalledWith(0.05);
+  renderer.dispose();
+});
+
+test('a settled card’s bubbles are one instanced triangle-strip draw over the shading', async () => {
+  const env = setup();
+  env.store.register(handle('surface', { left: 40, top: 60, width: 200, height: 240 }));
+  const renderer = start(env);
+  await renderer.ready;
+  expect(env.gpu.fns.draw).toHaveBeenCalledWith(
+    expect.objectContaining({ geometry: { topology: 'triangle-strip' }, vertices: 4 }),
+  );
+
+  env.play(2);
+  const bubbles = env.draws[0]!;
+  const layer = bubbles.set.mock.calls.at(-1)?.[0].layer;
+  expect(layer.bubbles).toHaveLength(28);
+  const scene = env.passes.at(-5)!;
+  expect(scene.draws[0]).toEqual([env.effects[2]]);
+  expect(scene.draws[1]?.[0]).toBe(bubbles);
+  const { instances } = scene.draws[1]![1] as { instances: number };
+  expect(instances).toBeGreaterThan(0);
+  expect(instances).toBeLessThanOrEqual(28);
   renderer.dispose();
 });
 
@@ -320,10 +355,12 @@ test('autoplay starts after its first pause and waits while the user interacts',
   await renderer.ready;
   const initial = env.store.getState().order;
 
-  env.play(2.4);
+  // The first step waits for the cards to land and a neck to grow, then carries a card across.
+  env.play(4);
   expect(env.store.getState().order).toBe(initial);
   env.play(0.4);
   expect(env.store.getState().order).not.toBe(initial);
+  expect(env.store.getState().order.indexOf(initial[0]!)).toBe(3);
 
   // Input pauses the choreography for six seconds.
   const shuffled = env.store.getState().order;
@@ -334,13 +371,22 @@ test('autoplay starts after its first pause and waits while the user interacts',
   env.play(4);
   expect(env.store.getState().order).not.toBe(shuffled);
 
-  // So does a mouse moving over the demo.
+  // So does a finger sliding over the demo; once lifted it leaves nothing hovering.
   const moved = env.store.getState();
-  env.containerListeners.get('pointermove')?.({ clientX: 100, clientY: 100 });
+  env.containerListeners.get('pointermove')?.({ clientX: 100, clientY: 100, pointerType: 'touch' });
   env.play(5.5);
   expect(env.store.getState()).toBe(moved);
   env.play(4);
   expect(env.store.getState()).not.toBe(moved);
+
+  // A mouse resting anywhere over the demo, even in a gap, holds it until it leaves.
+  const still = env.store.getState();
+  env.containerListeners.get('pointermove')?.({ clientX: 30, clientY: 40, pointerType: 'mouse' });
+  env.play(12);
+  expect(env.store.getState()).toBe(still);
+  env.containerListeners.get('pointerleave')?.();
+  env.play(10);
+  expect(env.store.getState()).not.toBe(still);
 
   // A mouse resting on a card holds it for as long as it stays.
   const hovered = handle('drag', { left: 40, top: 60, width: 200, height: 240 });
@@ -386,7 +432,7 @@ test('keyboard focus inside the demo holds the autoplay', async () => {
   expect(env.store.getState()).toBe(initial);
 
   focus(env, null);
-  env.play(3);
+  env.play(4.5);
   expect(env.store.getState().order).not.toBe(initial.order);
   renderer.dispose();
 });
@@ -395,16 +441,31 @@ test('the autoplay never opens the card that holds focus', async () => {
   const env = setup();
   const renderer = start(env);
   await renderer.ready;
-  // Two shuffles and two filters; the next step opens the third card.
-  env.play(15.5);
+  // Two moves, a shuffle and two filters; the next step opens the third card.
+  env.play(19.5);
   expect(env.store.getState()).toMatchObject({ expanded: null, filter: 'all' });
 
   // A card focused by a click (no focus ring) does not hold the autoplay…
   const focused = env.store.visible()[2]!;
   focus(env, focusable(focused, false));
-  env.play(1);
+  env.play(1.5);
   // …but it is not swapped for the panel under the focus.
   expect(env.store.getState()).toMatchObject({ expanded: env.store.visible()[3], openedBy: 'auto' });
+  renderer.dispose();
+});
+
+test('the autoplay never carries the focused card across the grid', async () => {
+  const env = setup();
+  const renderer = start(env);
+  await renderer.ready;
+  const initial = env.store.getState().order;
+  // The first step would move the first card; a click left the focus on it.
+  focus(env, focusable(initial[0]!, false));
+  env.play(4.6);
+  expect(env.store.getState().order).toBe(initial);
+  focus(env, null);
+  env.play(9.6);
+  expect(env.store.getState().order).not.toBe(initial);
   renderer.dispose();
 });
 
@@ -419,7 +480,7 @@ test('reduced motion turns the autoplay off, and the checkbox turns it back on',
   expect(gui.control('Autoplay').model.autoplay).toBe(false);
 
   gui.set('Autoplay', true);
-  env.play(3);
+  env.play(4.5);
   expect(env.store.getState().order).not.toBe(state.order);
   renderer.dispose();
 });

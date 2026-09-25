@@ -38,18 +38,29 @@ type Step = (store: LayoutStore, focused: string | null) => number;
 const MAX_DPR = 2;
 const LIGHT_HEIGHT = 380;
 const RESUME_AFTER = 6;
-const FIRST_STEP = 2.6;
+const FIRST_STEP = 4.2;
 const GUI_OPEN_MIN_WIDTH = 1440;
+
+/** Carries the card in visible slot `from` across the grid to slot `to`; the focused card stays put. */
+function moveStep(from: number, to: number): Step {
+  return (store, focused) => {
+    const shown = store.visible();
+    const id = shown[Math.min(from, shown.length - 1)];
+    if (id && id !== focused) store.move(id, to);
+    return 3.2;
+  };
+}
 
 // The idle choreography: each step acts on the store and returns the pause before the next.
 const SCRIPT: readonly Step[] = [
+  moveStep(0, 3),
   (store) => (store.shuffle(), 3.2),
-  (store) => (store.shuffle(), 3.2),
+  moveStep(7, 4),
   (store) => (store.setFilter('vgpu'), 3.4),
   (store) => (store.setFilter('all'), 3.4),
   (store, focused) => (store.expand(store.visible().filter((id) => id !== focused)[2] ?? '', 'auto'), 3),
   (store) => (store.collapse(), 2.8),
-  (store) => (store.shuffle(), 3.2),
+  moveStep(1, 6),
   (store) => (store.setFilter('motion'), 3.4),
   (store) => (store.setFilter('all'), 3.4),
 ];
@@ -132,13 +143,15 @@ export function createRenderer({ canvas, container = canvas.parentElement ?? und
   let dim = 0;
 
   // Autoplay: runs while nobody interacts, pauses for RESUME_AFTER seconds after
-  // input, and holds while a press, a hovering mouse, a user-opened panel or
-  // keyboard focus is inside the demo: it must not reorder the cards under
-  // someone reading them.
+  // input, and holds while a press, a mouse resting anywhere over the demo, a
+  // user-opened panel or keyboard focus is inside it: it must not reorder the
+  // cards under someone reading them.
   let step = 0;
   let nextStepIn = FIRST_STEP;
   let quietFor = RESUME_AFTER;
   let pressed = false;
+  // A mouse or pen over the demo; a finger leaves nothing hovering once lifted.
+  let mouseOver = false;
 
   const interact = () => {
     quietFor = 0;
@@ -154,10 +167,12 @@ export function createRenderer({ canvas, container = canvas.parentElement ?? und
   const onPointerMove = (event: PointerEvent) => {
     pointer = { x: event.clientX - origin.left, y: event.clientY - origin.top };
     pointerIdle = 0;
+    mouseOver = event.pointerType !== 'touch';
     interact();
   };
   const onPointerLeave = () => {
     pointer = null;
+    mouseOver = false;
   };
   const onMotionPreference = () => {
     reducedMotion = motion?.matches ?? false;
@@ -179,7 +194,7 @@ export function createRenderer({ canvas, container = canvas.parentElement ?? und
     const focused = focusedElement();
     const keyboardFocus = focused?.matches(':focus-visible') ?? false;
     const hovering = Array.from(store.handles()).some((handle) => handle.hovered);
-    const held = pressed || hovering || userOpen || keyboardFocus;
+    const held = pressed || mouseOver || hovering || userOpen || keyboardFocus;
     if (!held) quietFor += dt;
     if (!settings.autoplay || held || quietFor < RESUME_AFTER) return;
     nextStepIn -= dt;
@@ -241,13 +256,7 @@ export function createRenderer({ canvas, container = canvas.parentElement ?? und
     dim += ((expanded ? 1 : 0) - dim) * (1 - Math.exp(-dt / 0.2));
 
     const liquid = dynamics.update(sampleCards(store, origin), dt, [origin.width, origin.height], resized);
-    pipeline.update({
-      time,
-      liquid,
-      light: [light.x, light.y, LIGHT_HEIGHT],
-      dim,
-      causticSpeed: reducedMotion ? 0.08 : 0.35,
-    });
+    pipeline.update({ liquid, light: [light.x, light.y, LIGHT_HEIGHT], dim });
     const target = output;
     const chain = pipeline;
     frame(gpu, (currentFrame) => chain.encode(currentFrame, target));
@@ -371,7 +380,7 @@ function createGui(
     gui.add(settings, 'autoplay').name('Autoplay');
     const liquid = gui.addFolder('Liquid');
     liquid.add(settings, 'smoothness', 0, 2, 0.05).name('Merge radius').onChange(actions.liquid);
-    liquid.add(settings, 'refraction', 0, 48, 1).name('Refraction').onChange(actions.liquid);
+    liquid.add(settings, 'refraction', 0, 24, 1).name('Refraction').onChange(actions.liquid);
     liquid.add(settings, 'dispersion', 0, 0.5, 0.01).name('Dispersion').onChange(actions.liquid);
     liquid.add(settings, 'bloom', 0, 1.5, 0.05).name('Bloom').onChange(actions.liquid);
     const spring = gui.addFolder('Layout spring');

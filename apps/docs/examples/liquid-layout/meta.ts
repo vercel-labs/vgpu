@@ -2,7 +2,7 @@ export const meta = {
   slug: 'liquid-layout',
   title: 'Liquid Layout',
   description:
-    'Motion lays out eight real DOM cards and vgpu pours them as liquid glass. Shuffles and filters are Motion layout animations, opening a card is a shared layoutId hand-off to a panel, and dragged cards snap back on a spring. Every frame, inside Motion’s own frameloop, the renderer reads each card’s rect and velocity and turns them into a smooth-union distance field: moving cards stretch tethers and shed droplets, then the field is lit as refracting, dispersive glass over an aurora backdrop with caustics, bloom and ACES tone mapping. Drag a card, click to open, or let the autoplay run.',
+    'Drag to reorder, shuffle and filter eight DOM cards with Motion while vgpu renders them as one refracting water-glass field that necks between neighbours.',
   tags: [
     'motion',
     'liquid',
@@ -21,6 +21,7 @@ export const meta = {
     'webgpu',
     'fragment-shader',
     'multi-pass',
+    'instanced-rendering',
     'render-targets',
     'hdr',
     'textures',
@@ -34,7 +35,7 @@ export const meta = {
     'continuous-rendering',
   ],
   thumb: {
-    warmupFrames: 60,
+    warmupFrames: 3,
     dt: 1 / 60,
     time: 4,
   },
@@ -49,6 +50,7 @@ export const meta = {
     'backdrop.wgsl',
     'field.wgsl',
     'shade.wgsl',
+    'bubbles.wgsl',
     'bright.wgsl',
     'blur.wgsl',
     'composite.wgsl',

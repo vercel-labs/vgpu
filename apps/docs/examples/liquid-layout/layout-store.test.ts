@@ -1,7 +1,19 @@
 import { describe, expect, test, vi } from 'vitest';
 
 import { CARDS, CARD_BY_ID } from './cards';
-import { createLayoutStore, DEFAULT_SPRING, gridLayout, shuffled, createRandom, type CardHandle } from './layout-store';
+import {
+  cornerRadius,
+  createLayoutStore,
+  createRandom,
+  DEFAULT_SPRING,
+  gridFrame,
+  gridLayout,
+  isArrowKey,
+  keyedIndex,
+  shuffled,
+  slotAt,
+  type CardHandle,
+} from './layout-store';
 
 const ids = CARDS.map((card) => card.id);
 const library = (id: string) => CARD_BY_ID.get(id)?.library;
@@ -129,6 +141,29 @@ describe('layout store', () => {
     expect(store.getState()).toMatchObject({ stiffness: 300, damping: 30 });
   });
 
+  test('move reorders the visible cards and reports whether anything changed', () => {
+    const store = createLayoutStore();
+    const listener = vi.fn();
+    store.subscribe(listener);
+    expect(store.move('surface', 2)).toBe(true);
+    expect(store.getState().order.slice(0, 4)).toEqual(['effect', 'target', 'surface', 'frame']);
+    // Out-of-range indices clamp; staying put or an unknown card changes nothing.
+    expect(store.move('surface', 99)).toBe(true);
+    expect(store.getState().order.at(-1)).toBe('surface');
+    expect(store.move('surface', 7)).toBe(false);
+    expect(store.move('missing', 0)).toBe(false);
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  test('a filtered move keeps the hidden cards in their places', () => {
+    const store = createLayoutStore();
+    store.setFilter('motion');
+    // Visible: layout, layoutId, drag, presence.
+    expect(store.move('presence', 0)).toBe(true);
+    expect(store.visible()).toEqual(['presence', 'layout', 'layoutId', 'drag']);
+    expect(store.getState().order.slice(0, 4)).toEqual(['surface', 'effect', 'target', 'frame']);
+  });
+
   test('a stale unregister keeps the handle that replaced it', () => {
     const store = createLayoutStore();
     const first = handle('drag');
@@ -147,15 +182,14 @@ describe('gridLayout', () => {
     const layout = gridLayout(width, height, count);
     expect(layout.width).toBeLessThanOrEqual(width);
     expect(layout.height).toBeLessThanOrEqual(height);
-    expect(layout.cardWidth / layout.cardHeight).toBeGreaterThanOrEqual(0.72);
-    expect(layout.cardWidth / layout.cardHeight).toBeLessThanOrEqual(1.15 + 1 / layout.cardHeight);
+    expect(layout.cardWidth / layout.cardHeight).toBeGreaterThanOrEqual(0.98);
+    expect(layout.cardWidth / layout.cardHeight).toBeLessThanOrEqual(1.3 + 1 / layout.cardHeight);
     expect(layout.columns * layout.rows).toBeGreaterThanOrEqual(count);
     return layout;
   };
 
-  test('landscape frames get four columns', () => {
-    // The fullscreen preview and the gallery iframe after padding, header and hint.
-    expect(fits(1192, 584, 8)).toMatchObject({ columns: 4, rows: 2, cardWidth: 250 });
+  test('landscape frames get four columns of slightly wide cards', () => {
+    expect(fits(1192, 584, 8)).toMatchObject({ columns: 4, rows: 2, cardWidth: 279, cardHeight: 232, gap: 25 });
     expect(fits(744, 332, 8)).toMatchObject({ columns: 4, rows: 2 });
   });
 
@@ -165,7 +199,7 @@ describe('gridLayout', () => {
     expect(fits(1192, 584, 1)).toMatchObject({ columns: 1, rows: 1 });
   });
 
-  test('keeps a portrait-ish card in every frame', () => {
+  test('keeps a square to slightly wide card in every frame', () => {
     for (const [width, height] of [
       [2400, 300],
       [300, 2400],
@@ -175,5 +209,89 @@ describe('gridLayout', () => {
     ] as const) {
       for (const count of [2, 4, 8]) fits(width, height, count);
     }
+  });
+});
+
+describe('gridFrame', () => {
+  test.each([
+    [1280, 720, 8],
+    [832, 468, 8],
+    [390, 844, 8],
+    [832, 468, 4],
+  ] as const)('%i×%i with %i cards sits below the GUI bar inside the padding', (width, height, count) => {
+    const frame = gridFrame(width, height, count);
+    const padX = width < 560 ? 14 : 20;
+    expect(frame.left).toBeGreaterThanOrEqual(padX);
+    expect(frame.left + frame.width).toBeLessThanOrEqual(width - padX);
+    // Room for the closed lil-gui bar above (and the first row's bulge on a
+    // phone, where the bar spans it), centred vertically when it fits.
+    expect(frame.top).toBeGreaterThanOrEqual(width < 560 ? 62 : 52);
+    expect(frame.top + frame.height).toBeLessThanOrEqual(height - 16);
+    expect(Math.abs(frame.left - (width - frame.width - frame.left))).toBeLessThanOrEqual(1);
+  });
+
+  test('a phone gets two columns', () => {
+    expect(gridFrame(390, 844, 8)).toMatchObject({ columns: 2, rows: 4 });
+  });
+});
+
+describe('cornerRadius', () => {
+  test('scales with the short side between 18 and 32 px', () => {
+    expect(cornerRadius(279, 232)).toBe(30);
+    expect(cornerRadius(100, 80)).toBe(18);
+    expect(cornerRadius(600, 400)).toBe(32);
+  });
+});
+
+describe('keyedIndex', () => {
+  test('left and right step through reading order across rows', () => {
+    expect(keyedIndex('ArrowRight', 0, 8, 4)).toBe(1);
+    expect(keyedIndex('ArrowRight', 3, 8, 4)).toBe(4);
+    expect(keyedIndex('ArrowLeft', 4, 8, 4)).toBe(3);
+  });
+
+  test('up and down keep the column', () => {
+    expect(keyedIndex('ArrowDown', 1, 8, 4)).toBe(5);
+    expect(keyedIndex('ArrowUp', 6, 8, 4)).toBe(2);
+    expect(keyedIndex('ArrowDown', 0, 8, 2)).toBe(2);
+  });
+
+  test('the grid edges, a short last row and other keys go nowhere', () => {
+    expect(keyedIndex('ArrowLeft', 0, 8, 4)).toBeNull();
+    expect(keyedIndex('ArrowRight', 7, 8, 4)).toBeNull();
+    expect(keyedIndex('ArrowUp', 2, 8, 4)).toBeNull();
+    expect(keyedIndex('ArrowDown', 5, 8, 4)).toBeNull();
+    // Six cards in four columns: nothing sits below the third or fourth card.
+    expect(keyedIndex('ArrowDown', 2, 6, 4)).toBeNull();
+    expect(keyedIndex('ArrowDown', 1, 6, 4)).toBe(5);
+    expect(keyedIndex('Enter', 0, 8, 4)).toBeNull();
+    expect(keyedIndex('ArrowRight', -1, 8, 4)).toBeNull();
+  });
+
+  test('isArrowKey recognises exactly the four arrows', () => {
+    expect(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].every(isArrowKey)).toBe(true);
+    expect(['Enter', 'Home', 'toString', ' '].some(isArrowKey)).toBe(false);
+  });
+});
+
+describe('slotAt', () => {
+  const layout = gridLayout(1192, 584, 8);
+  const pitchX = layout.cardWidth + layout.gap;
+  const pitchY = layout.cardHeight + layout.gap;
+
+  test('maps a point to the visible index of the slot under it', () => {
+    expect(slotAt(layout, 10, 10, 8)).toBe(0);
+    expect(slotAt(layout, pitchX + 6, 10, 8)).toBe(1);
+    expect(slotAt(layout, 10, pitchY + 3, 8)).toBe(4);
+    expect(slotAt(layout, 3 * pitchX + 10, pitchY + 10, 8)).toBe(7);
+  });
+
+  test('gaps, the outside and empty slots are dead zones', () => {
+    expect(slotAt(layout, layout.cardWidth + layout.gap / 2, 10, 8)).toBe(-1);
+    expect(slotAt(layout, 10, layout.cardHeight + layout.gap / 2, 8)).toBe(-1);
+    expect(slotAt(layout, -1, 10, 8)).toBe(-1);
+    expect(slotAt(layout, 4 * pitchX + 1, 10, 8)).toBe(-1);
+    expect(slotAt(layout, 10, 2 * pitchY + 1, 8)).toBe(-1);
+    expect(slotAt(layout, 3 * pitchX + 10, pitchY + 10, 6)).toBe(-1);
   });
 });

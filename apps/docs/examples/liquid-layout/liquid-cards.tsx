@@ -1,11 +1,11 @@
 'use client';
 
 // The DOM half of the demo: eight real buttons laid out by CSS grid and moved
-// by Motion. Shuffles and filters are `layout` animations, filtering in and out
-// runs through AnimatePresence (popLayout), opening a card is a `layoutId`
-// hand-off to the panel, and cards drag with snap-back. The cards carry no
-// fill of their own: each one registers a handle with the store, and the
-// renderer pours liquid glass under it every frame.
+// by Motion. Shuffles, filters and drag reorders are `layout` animations,
+// filtering in and out runs through AnimatePresence (popLayout), and opening a
+// card is a `layoutId` hand-off to the panel. The cards carry no fill of their
+// own: each one registers a handle with the store, and the renderer pours
+// liquid glass under it every frame.
 
 import {
   AnimatePresence,
@@ -18,6 +18,7 @@ import {
   useTransform,
   useVelocity,
   type MotionValue,
+  type PanInfo,
 } from 'motion/react';
 import {
   useCallback,
@@ -27,12 +28,22 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type KeyboardEvent,
   type Ref,
   type RefObject,
 } from 'react';
 
 import { CARD_BY_ID, type CardData } from './cards';
-import { gridLayout, type CardHandle, type LayoutStore } from './layout-store';
+import {
+  cornerRadius,
+  gridFrame,
+  isArrowKey,
+  keyedIndex,
+  slotAt,
+  type CardHandle,
+  type GridLayout,
+  type LayoutStore,
+} from './layout-store';
 
 interface Size {
   readonly width: number;
@@ -47,9 +58,10 @@ interface Spring {
 const ENTER_DELAY = 0.3;
 const ENTER_STAGGER = 0.06;
 const FLIGHT_COPY_MS = 420;
+const HELP_ID = 'liquid-layout-help';
 
 const LIBRARY_LABEL = { vgpu: 'vgpu', motion: 'Motion' } as const;
-const LIBRARY_DOT = { vgpu: 'bg-sky-300', motion: 'bg-fuchsia-300' } as const;
+const LIBRARY_DOT = { vgpu: 'bg-[#8cc8f5]', motion: 'bg-[#c89bf5]' } as const;
 
 function assignRef<T>(ref: Ref<T> | undefined, value: T | null) {
   if (typeof ref === 'function') ref(value);
@@ -94,35 +106,36 @@ function useCardHandle(store: LayoutStore, id: string, layer: CardHandle['layer'
 interface CardProps {
   readonly card: CardData;
   readonly store: LayoutStore;
-  readonly width: number;
-  readonly height: number;
+  readonly layout: GridLayout;
+  readonly grid: RefObject<HTMLElement | null>;
   readonly enterDelay: number;
   readonly dimmed: boolean;
-  /** Another card is held or snapping back: this one's copy steps back. */
+  /** Another card is being dragged: this one's copy steps back. */
   readonly muted: boolean;
-  readonly lifted: boolean;
+  /** Dragged or flying back from the panel: drawn above the other cards. */
+  readonly raised: boolean;
   readonly spring: Spring;
-  readonly bounds: RefObject<HTMLElement | null>;
   readonly returnFocus: RefObject<string | null>;
   readonly onOpen: (id: string) => void;
   readonly onDragChange: (id: string, active: boolean) => void;
+  readonly onMoved: (id: string) => void;
   readonly ref?: Ref<HTMLElement>;
 }
 
 function Card({
   card,
   store,
-  width,
-  height,
+  layout,
+  grid,
   enterDelay,
   dimmed,
   muted,
-  lifted,
+  raised,
   spring,
-  bounds,
   returnFocus,
   onOpen,
   onDragChange,
+  onMoved,
   ref,
 }: CardProps) {
   const isPresent = useIsPresent();
@@ -134,6 +147,9 @@ function Card({
   const rotate = useSpring(tilt, { stiffness: 320, damping: 24 });
   const handle = useCardHandle(store, card.id, 'grid', { x, y, scale, rotate });
   const dragged = useRef(false);
+  const holding = useRef(false);
+  // Pointer position relative to the card centre when the drag began.
+  const grab = useRef({ x: 0, y: 0, index: -1 });
   const entered = useRef(enterDelay < 0);
   // Text sinks into the liquid while the card flies, so crossing cards do not
   // stack their copy. It resurfaces once most of the distance is covered.
@@ -149,6 +165,8 @@ function Card({
   useEffect(() => () => onDragChange(card.id, false), [card.id, onDragChange]);
 
   const takeOff = () => {
+    // The held card follows the pointer; only the cards it displaces fly.
+    if (holding.current) return;
     setFlying(true);
     clearTimeout(landing.current);
     landing.current = setTimeout(() => setFlying(false), FLIGHT_COPY_MS);
@@ -169,10 +187,35 @@ function Card({
     [handle, ref],
   );
 
+  // Motion keeps a dragged element under the pointer while its layout slot
+  // moves, so reordering is only a matter of picking the slot under the card's
+  // centre. Reorder.Group is a one-axis list; the grid does its own hit test.
+  const onDrag = (_event: unknown, info: PanInfo) => {
+    const box = grid.current?.getBoundingClientRect();
+    if (!box) return;
+    const centreX = info.point.x - window.scrollX - grab.current.x - box.left;
+    const centreY = info.point.y - window.scrollY - grab.current.y - box.top;
+    const visible = store.visible();
+    const slot = slotAt(layout, centreX, centreY, visible.length);
+    if (slot >= 0 && visible[slot] !== card.id) store.move(card.id, slot);
+  };
+
+  const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (!event.altKey || event.ctrlKey || event.metaKey || !isArrowKey(event.key)) return;
+    // Alt+Arrow is the browser's Back/Forward on Windows and Linux: swallow it on
+    // a card even at the grid's edge, where the card stays put.
+    event.preventDefault();
+    const visible = store.visible();
+    const next = keyedIndex(event.key, visible.indexOf(card.id), visible.length, layout.columns);
+    if (next !== null && store.move(card.id, next)) onMoved(card.id);
+  };
+
+  const { cardWidth: width, cardHeight: height } = layout;
   const layoutSpring = { type: 'spring', stiffness: spring.stiffness, damping: spring.damping } as const;
-  const title = Math.round(Math.min(24, Math.max(15, width * 0.092)));
-  const body = Math.round(Math.min(14, Math.max(11.5, width * 0.053)) * 10) / 10;
-  const pad = Math.round(Math.min(20, Math.max(12, width * 0.075)));
+  const title = Math.round(Math.min(26, Math.max(16, width * 0.085)));
+  const body = Math.round(Math.min(16, Math.max(12, width * 0.053)) * 10) / 10;
+  const pad = Math.round(Math.min(34, Math.max(14, width * 0.12)));
+  const copyTop = Math.round(height * (height < 190 ? 0.36 : 0.4));
 
   return (
     <motion.button
@@ -181,16 +224,15 @@ function Card({
       data-card={card.id}
       data-library={card.library}
       aria-label={`${card.title}, ${LIBRARY_LABEL[card.library]}. Open details`}
+      aria-describedby={HELP_ID}
       layout
       layoutId={card.id}
       drag
       dragSnapToOrigin
-      dragConstraints={bounds}
-      dragElastic={0.2}
       dragTransition={{ bounceStiffness: spring.stiffness * 1.5, bounceDamping: spring.damping }}
       whileHover={{ scale: 1.03 }}
       whileTap={{ scale: 0.97 }}
-      whileDrag={{ scale: 1.06, zIndex: 20 }}
+      whileDrag={{ scale: 1.04 }}
       exit={{ opacity: 0, transition: { duration: 0.2 } }}
       transition={{ layout: layoutSpring }}
       onHoverStart={() => {
@@ -202,12 +244,28 @@ function Card({
       onPointerDown={() => {
         dragged.current = false;
       }}
-      onDragStart={() => {
+      onDragStart={(event) => {
+        const box = button.current?.getBoundingClientRect();
+        const point = 'clientX' in event ? event : event.touches[0];
+        if (box && point) {
+          grab.current = {
+            x: point.clientX - (box.left + box.width / 2),
+            y: point.clientY - (box.top + box.height / 2),
+            index: store.visible().indexOf(card.id),
+          };
+        }
         dragged.current = true;
+        holding.current = true;
         onDragChange(card.id, true);
       }}
-      // Neighbours stay muted until the snap-back lands, not just until release.
+      onDrag={onDrag}
+      onDragEnd={() => {
+        holding.current = false;
+        if (store.visible().indexOf(card.id) !== grab.current.index) onMoved(card.id);
+      }}
+      // The card stays on top until it lands in its slot, not just until release.
       onDragTransitionEnd={() => onDragChange(card.id, false)}
+      onKeyDown={onKeyDown}
       onClick={() => {
         // The click that ends a drag does not open the card; the next one does,
         // including a keyboard press, which sends no pointerdown.
@@ -223,22 +281,33 @@ function Card({
         setFlying(false);
         store.settle(card.id);
       }}
-      style={{ x, y, scale, rotate, width, height, borderRadius: 22, zIndex: lifted ? 15 : 1, touchAction: 'none' }}
+      style={{
+        x,
+        y,
+        scale,
+        rotate,
+        width,
+        height,
+        borderRadius: cornerRadius(width, height),
+        zIndex: raised ? 15 : 1,
+        touchAction: 'none',
+      }}
       // The focus ring waits for the card to land: mid-flight, the layout
       // transform would stretch it with the card.
       className={`relative cursor-grab select-none text-left text-white outline-none active:cursor-grabbing ${
-        flying || lifted ? '' : 'focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-4 focus-visible:outline-white/60'
+        flying || raised ? '' : 'focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-4 focus-visible:outline-white/60'
       }`}
     >
       <motion.span
         layout="position"
-        className="flex h-full w-full flex-col justify-between"
-        style={{ padding: pad }}
+        className="absolute inset-0 block"
         initial={entered.current ? false : { opacity: 0, filter: 'blur(8px)' }}
         // Behind an open panel the copy goes out of focus: the glass above
-        // refracts the liquid but cannot bend DOM text.
+        // refracts the liquid but cannot bend DOM text. In flight it all but
+        // sinks, and while another card is dragged it steps back, so it never
+        // reads through the copy of a card that crosses it.
         animate={{
-          opacity: dimmed ? 0.22 : flying || muted ? 0.4 : 1,
+          opacity: dimmed ? 0.22 : flying ? 0.15 : muted ? 0.28 : 1,
           filter: dimmed ? 'blur(3px)' : flying ? 'blur(2px)' : 'blur(0px)',
         }}
         // The copy's own layout correction must ride the card's spring, or it
@@ -248,16 +317,22 @@ function Card({
           entered.current = true;
         }}
       >
-        <span className="flex items-center gap-2 text-[10.5px] font-medium uppercase tracking-[0.16em] text-white/65">
-          <span className={`size-1.5 rounded-full ${LIBRARY_DOT[card.library]}`} />
+        <span
+          className="absolute flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-white/70"
+          style={{ left: pad, top: Math.round(pad * 0.85) }}
+        >
+          <span className={`size-[7px] rounded-full ${LIBRARY_DOT[card.library]}`} />
           {LIBRARY_LABEL[card.library]}
         </span>
-        <span className="flex flex-col gap-1.5 [text-shadow:0_1px_12px_rgba(0,0,0,0.45)]">
+        <span
+          className="absolute flex flex-col gap-2 [text-shadow:0_1px_10px_rgba(4,8,24,0.55)]"
+          style={{ left: pad, right: pad, top: copyTop }}
+        >
           <span className="font-mono font-semibold tracking-tight" style={{ fontSize: title, lineHeight: 1.1 }}>
             {card.title}
           </span>
           {height >= 130 ? (
-            <span className="text-white/75" style={{ fontSize: body, lineHeight: 1.4 }}>
+            <span className="line-clamp-3 text-white/70" style={{ fontSize: body, lineHeight: 1.45 }}>
               {card.line}
             </span>
           ) : null}
@@ -279,7 +354,7 @@ function GridSlot({ placeholder, ref, ...props }: SlotProps) {
       <div
         ref={(node) => assignRef(ref, node)}
         aria-hidden="true"
-        style={{ width: props.width, height: props.height }}
+        style={{ width: props.layout.cardWidth, height: props.layout.cardHeight }}
       />
     );
   }
@@ -330,30 +405,30 @@ function Panel({ card, store, bounds, spring, autoFocus, onClose }: PanelProps) 
         layoutId={card.id}
         layout
         transition={{ layout: layoutSpring }}
-        style={{ x, y, scale, rotate, width, height, borderRadius: 30 }}
+        style={{ x, y, scale, rotate, width, height, borderRadius: cornerRadius(width, height) }}
         className="pointer-events-auto relative text-white"
       >
         <motion.div
           layout="position"
           className="flex h-full w-full flex-col"
-          style={{ padding: compact ? 20 : 30, gap: compact ? 10 : 14 }}
+          style={{ padding: compact ? 22 : 34, gap: compact ? 10 : 14 }}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.16, duration: 0.35, layout: layoutSpring }}
         >
-          <span className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-white/65">
-            <span className={`size-1.5 rounded-full ${LIBRARY_DOT[card.library]}`} />
+          <span className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-white/70">
+            <span className={`size-[7px] rounded-full ${LIBRARY_DOT[card.library]}`} />
             {LIBRARY_LABEL[card.library]}
           </span>
           <h2
             id={titleId}
-            className="font-mono font-semibold tracking-tight [text-shadow:0_1px_16px_rgba(0,0,0,0.5)]"
+            className="font-mono font-semibold tracking-tight [text-shadow:0_1px_14px_rgba(4,8,24,0.6)]"
             style={{ fontSize: compact ? 24 : 32, lineHeight: 1.05 }}
           >
             {card.title}
           </h2>
           <p
-            className="max-w-[46ch] text-white/80 [text-shadow:0_1px_12px_rgba(0,0,0,0.5)]"
+            className="max-w-[46ch] text-white/75 [text-shadow:0_1px_12px_rgba(4,8,24,0.6)]"
             style={{ fontSize: compact ? 13.5 : 15, lineHeight: 1.55 }}
           >
             {card.detail}
@@ -387,19 +462,15 @@ function Panel({ card, store, bounds, spring, autoFocus, onClose }: PanelProps) 
 export function LiquidCards({ store }: { store: LayoutStore }) {
   const state = useSyncExternalStore(store.subscribe, store.getState, store.getState);
   const bounds = useRef<HTMLDivElement | null>(null);
+  const grid = useRef<HTMLDivElement | null>(null);
   const size = useElementSize(bounds);
   const returnFocus = useRef<string | null>(null);
+  const focused = useRef<string | null>(null);
+  const [announcement, setAnnouncement] = useState('');
 
   const visible = store.visible(state);
   const spring = { stiffness: state.stiffness, damping: state.damping };
-  const narrow = size.width < 560;
-  const padX = narrow ? 16 : 44;
-  // On a phone the title drops below the closed GUI bar.
-  const top = narrow ? 80 : 76;
-  const bottom = narrow ? 52 : 60;
-  const areaWidth = Math.max(0, size.width - padX * 2);
-  const areaHeight = Math.max(0, size.height - top - bottom);
-  const layout = gridLayout(areaWidth, areaHeight, Math.max(1, visible.length));
+  const frame = gridFrame(size.width, size.height, Math.max(1, visible.length));
 
   // Cards joining the grid fade their text in as their droplet lands, in reading
   // order. The previous list lives in state, so every render agrees on who is new.
@@ -419,6 +490,14 @@ export function LiquidCards({ store }: { store: LayoutStore }) {
   const onDragChange = useCallback((id: string, active: boolean) => {
     setDragging((current) => (active ? id : current === id ? null : current));
   }, []);
+  const onMoved = useCallback(
+    (id: string) => {
+      const shown = store.visible();
+      const title = CARD_BY_ID.get(id)?.title ?? id;
+      setAnnouncement(`${title} moved to position ${shown.indexOf(id) + 1} of ${shown.length}`);
+    },
+    [store],
+  );
   const onClose = useCallback(() => {
     const { expanded: id, openedBy } = store.getState();
     // Focus goes back to the card when the panel had it, whoever opened it.
@@ -427,9 +506,17 @@ export function LiquidCards({ store }: { store: LayoutStore }) {
     store.collapse();
   }, [store]);
 
+  // A reorder moves DOM nodes, and moving the focused card drops focus to the
+  // body. Put it back on the same card, whoever reordered the grid.
+  useLayoutEffect(() => {
+    const id = focused.current;
+    if (!id || (document.activeElement !== document.body && document.activeElement !== null)) return;
+    grid.current?.querySelector<HTMLElement>(`[data-card="${id}"]`)?.focus({ preventScroll: true });
+  }, [visibleKey]);
+
   useEffect(() => {
     if (!state.expanded) return;
-    const onKey = (event: KeyboardEvent) => {
+    const onKey = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
       // Escape in a field (a GUI number box, the docs search) belongs to that field.
       if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable]')) return;
@@ -452,30 +539,46 @@ export function LiquidCards({ store }: { store: LayoutStore }) {
   return (
     <MotionConfig reducedMotion="user">
       <div ref={bounds} className="absolute inset-0 isolate z-[1] overflow-hidden">
-        <header
-          className="pointer-events-none absolute left-0 select-none"
-          style={{ top: narrow ? 20 : 22, left: padX, maxWidth: narrow ? size.width - 32 : 420 }}
-        >
-          <p className="text-[10.5px] font-medium uppercase tracking-[0.2em] text-white/55">Motion × vgpu</p>
-          <p className={`${narrow ? 'mt-3 text-[15px]' : 'mt-1 text-[19px]'} font-medium tracking-tight text-white/90`}>
-            Every card is a drop of liquid glass
-          </p>
-        </header>
+        <p id={HELP_ID} className="sr-only">
+          Press Enter to open a card. Alt and an arrow key move the focused card; dragging a card onto another slot
+          reorders the grid.
+        </p>
+        <p className="sr-only" aria-live="polite">
+          {announcement}
+        </p>
 
         {ready ? (
           <LayoutGroup>
             <div
+              ref={grid}
               inert={userOpen}
               className="absolute"
+              onFocus={(event) => {
+                focused.current = event.target.closest('[data-card]')?.getAttribute('data-card') ?? null;
+              }}
+              onBlur={(event) => {
+                const next = event.relatedTarget;
+                if (next instanceof Node && grid.current?.contains(next)) return;
+                if (next) {
+                  focused.current = null;
+                  return;
+                }
+                // No new target: either the user blurred the card (focus sits on
+                // the body afterwards) or a reorder moved it (restored above).
+                const id = focused.current;
+                queueMicrotask(() => {
+                  if (focused.current === id && document.activeElement === document.body) focused.current = null;
+                });
+              }}
               style={{
-                left: padX + (areaWidth - layout.width) / 2,
-                top: top + (areaHeight - layout.height) / 2,
-                width: layout.width,
-                height: layout.height,
+                left: frame.left,
+                top: frame.top,
+                width: frame.width,
+                height: frame.height,
                 display: 'grid',
-                gridTemplateColumns: `repeat(${layout.columns}, ${layout.cardWidth}px)`,
-                gridAutoRows: `${layout.cardHeight}px`,
-                gap: layout.gap,
+                gridTemplateColumns: `repeat(${frame.columns}, ${frame.cardWidth}px)`,
+                gridAutoRows: `${frame.cardHeight}px`,
+                gap: frame.gap,
               }}
             >
               <AnimatePresence mode="popLayout">
@@ -488,17 +591,17 @@ export function LiquidCards({ store }: { store: LayoutStore }) {
                       placeholder={state.expanded === id}
                       card={card}
                       store={store}
-                      width={layout.cardWidth}
-                      height={layout.cardHeight}
+                      layout={frame}
+                      grid={grid}
                       enterDelay={rank < 0 ? -1 : ENTER_DELAY + rank * ENTER_STAGGER}
                       dimmed={expanded !== undefined}
                       muted={dragging !== null && dragging !== id}
-                      lifted={state.returning === id || dragging === id}
+                      raised={state.returning === id || dragging === id}
                       spring={spring}
-                      bounds={bounds}
                       returnFocus={returnFocus}
                       onOpen={onOpen}
                       onDragChange={onDragChange}
+                      onMoved={onMoved}
                     />
                   );
                 })}
@@ -528,13 +631,6 @@ export function LiquidCards({ store }: { store: LayoutStore }) {
             ) : null}
           </LayoutGroup>
         ) : null}
-
-        <p
-          className="pointer-events-none absolute inset-x-0 select-none text-center text-[11.5px] tracking-wide text-white/45"
-          style={{ bottom: narrow ? 18 : 22 }}
-        >
-          {narrow ? 'Drag a card · tap to open' : 'Drag a card · click to open · shuffle and filter from the controls'}
-        </p>
       </div>
     </MotionConfig>
   );

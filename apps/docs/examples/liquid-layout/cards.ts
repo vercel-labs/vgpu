@@ -1,6 +1,6 @@
 // The eight cards are the demo's own ingredients: four vgpu primitives that draw
 // the liquid and four Motion features that move it. `hue` picks the liquid tint
-// (0 azure, 1 magenta); bridges between the two blend through violet.
+// (0 pale blue, 1 lavender); necks between the two blend through violet.
 
 export type CardLibrary = 'vgpu' | 'motion';
 
@@ -29,9 +29,9 @@ export const CARDS: readonly CardData[] = [
     id: 'effect',
     library: 'vgpu',
     title: 'effect',
-    line: 'Fullscreen fragment passes. This liquid chains nine of them.',
+    line: 'Fullscreen fragment passes. This liquid chains seven of them.',
     detail:
-      'The backdrop, the distance field, the glass shading, the bloom and the tonemap are all effects. Card rects, velocities and drips reach the field as a single uniform array.',
+      'The backdrop, the distance field, the glass shading, the bloom and the tonemap are all effects. Card rects, necks and drips reach the field as a single uniform array.',
     code: "effect(gpu, fieldWgsl, { set: { field } })",
     hue: 0,
   },
@@ -71,7 +71,7 @@ export const CARDS: readonly CardData[] = [
     title: 'layoutId',
     line: 'Shared element transitions. Click a card to open it.',
     detail:
-      'The grid card and this panel share a layoutId. The blob follows the transition onto its own layer, and the change in size kicks its jelly spring.',
+      'The grid card and this panel share a layoutId. The glass follows the transition onto its own layer above the grid, and the change in size kicks its jelly spring.',
     code: '<motion.div layoutId={card.id} />',
     hue: 1,
   },
@@ -79,9 +79,9 @@ export const CARDS: readonly CardData[] = [
     id: 'drag',
     library: 'motion',
     title: 'drag',
-    line: 'Pull a card. A tether stretches back to its slot.',
+    line: 'Drag a card onto another slot. The grid reorders around it.',
     detail:
-      'dragSnapToOrigin springs the card home. Until it lands, a capsule of liquid joins it to its empty slot and thins as it stretches. The drag velocity also tilts the card.',
+      'While you drag, the card takes whichever slot it is over and the others flow with layout. It stays in the same field, so it fuses with the cards it passes, and on release dragSnapToOrigin springs it into its new slot.',
     code: '<motion.button drag dragSnapToOrigin />',
     hue: 1,
   },

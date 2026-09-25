@@ -1,6 +1,5 @@
-// Separable 9-tap Gaussian. Run twice at half resolution and twice at quarter
-// resolution, the two results approximate a mipmap bloom: a tight halo on the
-// glints plus a wide, soft glow that bleeds the glass colour into the room.
+// Separable 9-tap Gaussian, run horizontally then vertically at quarter
+// resolution: a tight halo around the rim highlights, not a hazy glow.
 
 struct Blur {
   texelSize: vec2f,

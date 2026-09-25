@@ -58,6 +58,8 @@ export interface LayoutStore {
   subscribe(listener: () => void): () => void;
   visible(state?: LayoutState): string[];
   shuffle(): void;
+  /** Moves a card to `index` among the visible cards; returns whether the order changed. */
+  move(id: string, index: number): boolean;
   setFilter(filter: Filter): void;
   expand(id: string, openedBy?: Opener): void;
   collapse(): void;
@@ -137,6 +139,20 @@ export function createLayoutStore(seed = 7): LayoutStore {
       const shownSet = new Set(shown);
       update({ order: state.order.map((id) => (shownSet.has(id) ? next[cursor++]! : id)) });
     },
+    move(id, index) {
+      // Reorder within the visible cards; hidden ones keep their positions.
+      const shown = visible();
+      const from = shown.indexOf(id);
+      const to = Math.max(0, Math.min(shown.length - 1, Math.round(index)));
+      if (from < 0 || from === to) return false;
+      const next = [...shown];
+      next.splice(from, 1);
+      next.splice(to, 0, id);
+      let cursor = 0;
+      const shownSet = new Set(shown);
+      update({ order: state.order.map((card) => (shownSet.has(card) ? next[cursor++]! : card)) });
+      return true;
+    },
     setFilter(filter) {
       if (filter === state.filter) return;
       const next = { ...state, filter };
@@ -181,23 +197,24 @@ export interface GridLayout {
 }
 
 /**
- * Sizes the card grid for the space left between the header and the hint.
- * Landscape frames get four columns (two when four cards or fewer are shown),
- * portrait frames two. Cards keep a portrait-ish aspect between 0.72 and 1.15.
+ * Sizes the card grid for the space it is given. Landscape frames get four
+ * columns (two when four cards or fewer are shown), portrait frames two. Cards
+ * prefer a slightly wide aspect (square on a phone) and flatten to at most 1.3.
  */
 export function gridLayout(width: number, height: number, count: number): GridLayout {
   const portrait = width < height * 0.9;
   const columns = Math.max(1, Math.min(count, portrait || count <= 4 ? 2 : 4));
   const rows = Math.max(1, Math.ceil(count / columns));
-  const gap = Math.round(Math.min(22, Math.max(12, Math.min(width, height) * 0.028)));
-  const maxWidth = count <= 4 ? 320 : 250;
+  // Wide enough for a liquid neck to read between row neighbours.
+  const gap = Math.round(Math.min(30, Math.max(12, Math.min(width, height) * 0.042)));
+  const maxWidth = count <= 4 ? 320 : 300;
+  const aspect = portrait ? 1 : 1.2;
   const fitWidth = (width - gap * (columns - 1)) / columns;
   const fitHeight = (height - gap * (rows - 1)) / rows;
   let cardWidth = Math.min(maxWidth, fitWidth);
-  let cardHeight = Math.min(fitHeight, cardWidth / 0.8);
+  let cardHeight = Math.min(fitHeight, cardWidth / aspect);
   // Too wide for the height: narrow the card instead of flattening it further.
-  if (cardWidth / cardHeight > 1.15) cardWidth = cardHeight * 1.15;
-  if (cardWidth / cardHeight < 0.72) cardHeight = cardWidth / 0.72;
+  if (cardWidth / cardHeight > 1.3) cardWidth = cardHeight * 1.3;
   cardWidth = Math.max(40, Math.floor(cardWidth));
   cardHeight = Math.max(40, Math.floor(cardHeight));
   return {
@@ -209,4 +226,71 @@ export function gridLayout(width: number, height: number, count: number): GridLa
     width: columns * cardWidth + (columns - 1) * gap,
     height: rows * cardHeight + (rows - 1) * gap,
   };
+}
+
+export interface GridFrame extends GridLayout {
+  /** The grid's top-left corner inside the frame (CSS px). */
+  readonly left: number;
+  readonly top: number;
+}
+
+/** Room kept clear above the grid for the closed lil-gui bar. */
+const GUI_CLEARANCE = 52;
+/**
+ * On a narrow frame the bar spans the first row, so the clearance also covers
+ * how far the row's top edges bulge and its bubbles rise.
+ */
+const NARROW_GUI_CLEARANCE = 62;
+
+/**
+ * Places the grid in a frame: sized for the space below the closed GUI bar and
+ * centred in the whole frame when it fits. The DOM and the thumbnail share it.
+ */
+export function gridFrame(width: number, height: number, count: number): GridFrame {
+  const narrow = width < 560;
+  const clearance = narrow ? NARROW_GUI_CLEARANCE : GUI_CLEARANCE;
+  const padX = narrow ? 14 : Math.round(Math.min(40, Math.max(20, width * 0.03)));
+  const bottom = narrow ? 16 : 22;
+  const layout = gridLayout(Math.max(0, width - padX * 2), Math.max(0, height - clearance - bottom), count);
+  return {
+    ...layout,
+    left: Math.round((width - layout.width) / 2),
+    top: Math.round(Math.max(clearance, (height - layout.height) / 2)),
+  };
+}
+
+/** Corner radius (CSS px) of a card or the panel; the DOM focus ring and the liquid share it. */
+export function cornerRadius(width: number, height: number): number {
+  return Math.round(Math.min(32, Math.max(18, Math.min(width, height) * 0.13)));
+}
+
+const ARROW_STEPS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] } as const;
+
+export function isArrowKey(key: string): key is keyof typeof ARROW_STEPS {
+  return Object.hasOwn(ARROW_STEPS, key);
+}
+
+/**
+ * Where an arrow key moves the card at `index` among `count` slots laid out in
+ * `columns` columns, or null at the grid's edge. Left and Right wrap across
+ * rows like reading order; Up and Down keep the column.
+ */
+export function keyedIndex(key: string, index: number, count: number, columns: number): number | null {
+  if (!isArrowKey(key) || index < 0 || index >= count) return null;
+  const [dx, dy] = ARROW_STEPS[key];
+  const next = index + dx + dy * columns;
+  return next >= 0 && next < count ? next : null;
+}
+
+/** The visible index of the slot under a grid-space point, or -1 over a gap or outside. */
+export function slotAt(layout: GridLayout, x: number, y: number, count: number): number {
+  const pitchX = layout.cardWidth + layout.gap;
+  const pitchY = layout.cardHeight + layout.gap;
+  const column = Math.floor(x / pitchX);
+  const row = Math.floor(y / pitchY);
+  if (column < 0 || column >= layout.columns || row < 0 || row >= layout.rows) return -1;
+  // The gaps between slots are dead zones, so a card resting on a border does not flicker.
+  if (x - column * pitchX > layout.cardWidth || y - row * pitchY > layout.cardHeight) return -1;
+  const index = row * layout.columns + column;
+  return index < count ? index : -1;
 }
