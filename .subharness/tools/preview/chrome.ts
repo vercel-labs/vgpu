@@ -40,6 +40,7 @@ export async function launchChrome(viewport: { width: number; height: number }):
     "--headless",
     "--enable-unsafe-webgpu",
     ...linuxWebgpu,
+    ...(process.env.VGPU_CHROME_ARGS?.split(/\s+/).filter(Boolean) ?? []),
     "--remote-debugging-port=0",
     `--user-data-dir=${profile}`,
     `--window-size=${viewport.width},${viewport.height}`,

@@ -57,7 +57,11 @@ Paths below are relative to apps/docs unless they start at the repo root.
   frame() mock that runs its callback). Cover: late init after dispose, init failure rejects ready
   and disposes, dispose idempotent and releases listeners/GUI/Motion callbacks, thumbnail waits for
   both drains. lib/example-foundation.test.ts imports every index.tsx graph in Node, so module top
-  levels must not touch window/document.
+  levels must not touch window/document. Run tests from the repo root
+  (\`pnpm exec vitest run apps/docs/examples/<slug>\`); apps/docs has no vitest config of its own. In
+  vitest a .wgsl import is \`{ wgsl, functionExports, version }\` and module-level names are mangled
+  (\`_vgsl_<hash>__NAME\`) — a test that checks WGSL constants against TypeScript must match that
+  prefix. Keep constants shared by TS and WGSL in one place (a uniform, or a test that pins them).
 
 ## Registration
 1. lib/example-slugs.ts — append the slug (order = gallery order).
@@ -81,10 +85,13 @@ Paths below are relative to apps/docs unless they start at the repo root.
   - Viewports that matter: fullscreen 1280×720, the gallery detail page's 16:9 iframe 832×468 (most
     visitors see this), a phone 390×844 with \`touch: true\` and \`pointer: "touch"\` steps.
   - Performance: default dpr is 1; run a \`perf\` step at \`dpr: 2\`. \`frameMs\` is vsync-capped;
-    \`gpuSubmitToDoneMs\` approximates GPU time per submit (an upper bound) and is the number to budget.
+    compare \`gpuP95MedianMs\` (GPU submit→done p95, median of 3 warmed-up windows) — GPU clocks
+    (DVFS) move single windows by ~2×. Screenshots default to CSS size; \`scale: 1\` on a clip gives
+    device pixels.
   - Animation: a \`burst\` (e.g. 12 frames every 50 ms) shows a gesture or transition in one image;
-    \`gui\` sets lil-gui controllers by label to compare variants without editing code; \`rects\` and
-    element anchors (\`{ selector, at }\`) target things that move; \`key\` Enter/Space activate buttons.
+    \`gui\` sets lil-gui controllers by label (option controllers by option label) to compare variants
+    without editing code; \`rects\` and element anchors (\`{ selector, at }\`) target things that move;
+    \`key\` Enter/Space activate buttons.
   - Humans can run the same capture: \`node .subharness/tools/preview/cli.ts <slug> --dpr 2 --steps '<json>'\`.
 - render_thumbnail — card + hero through render-thumbnail.ts on the local GPU in ~2 s, into
   .context/thumbs/<slug>/, with determinism (\`repeat: 2\`) and drift from the committed baselines.
@@ -95,12 +102,16 @@ Paths below are relative to apps/docs unless they start at the repo root.
   ~2 minutes; later runs sync sources and rebuild incrementally. Without --update it runs
   \`thumbs:check\` against your PNGs and saves diffs to .context/thumbs/<slug>/ on failure.
   (\`pnpm thumbs:docker\` is broken: its image runs the test suite, which needs git.)
-- verify_example — the pre-commit checklist in one call (~10 s): focused vitest, import boundaries,
-  vocabulary, filenames, apps/docs typecheck, ingest (commit what it regenerates), budget entry and
-  PNGs present, and tree hygiene.
+- verify_example — the pre-commit checklist in one call (~10 s): a WGSL compatibility-mode lint,
+  focused vitest, import boundaries, vocabulary, filenames, apps/docs typecheck, ingest (commit what
+  it regenerates), budget entry and PNGs present, and tree hygiene.
 - bundle_report — after \`pnpm --filter docs build\`: every route's gzip vs budget in one pass (the repo
   checker stops at the first failure), shared chunks, the delta against the latest green canary CI
-  run, and a proposed budget entry.
+  run, and a proposed budget entry. Manual fallback: run scripts/check-example-bundles.mjs with
+  \`VGPU_EXAMPLE_BUDGETS_FILE\` pointing at a copy with loosened baselines, and read CI's numbers with
+  \`gh api repos/vercel-labs/vgpu/actions/jobs/<docs-app-build job id>/logs\`.
+- Shell: the Bash tool's working directory persists between calls — use absolute paths or
+  \`cd <root> && ...\` in every command.
 
 ## Motion (installed: motion 12.43.0 in apps/docs)
 - React API: \`motion/react\` (motion.div, layout, layoutId, LayoutGroup, AnimatePresence, drag props,
@@ -110,9 +121,11 @@ Paths below are relative to apps/docs unless they start at the repo root.
   (repo root): node_modules/.pnpm/motion-dom@12.43.0/node_modules/motion-dom/dist/index.d.ts
   (primitives) and node_modules/.pnpm/framer-motion@12.43.0*/node_modules/framer-motion/dist/index.d.ts
   (React). WebFetch motion.dev docs when behaviour is unclear.
-- Size: motion/react with layout, drag and presence cost ~45 KB gzip in liquid-layout. Use vanilla
-  \`motion\` when no React-only feature is needed. Drag exists only in motion/react (no vanilla drag
-  gesture in 12.43).
+- Size: motion/react with layout, drag and presence cost ~45 KB gzip in liquid-layout; vanilla
+  \`motion\` core ~25 KB (spring-choreography). Use vanilla \`motion\` when no React-only feature is
+  needed. Drag exists only in motion/react (no vanilla drag gesture in 12.43). Every new route that
+  imports Motion re-splits the shared Motion chunks and moves the other Motion routes' gzip by a few
+  KB (spring-choreography moved liquid-layout +2.9 KB) — check their headroom with bundle_report.
 - Per-frame bridge: never push per-frame values through React state. Read motion values (\`.get()\`,
   \`.getVelocity()\`) or DOM rects inside one frame callback and write vgpu uniforms/storage there.
 - One clock: drive vgpu from Motion's frameloop instead of frameLoop — \`frame.render(tick, true)\`
@@ -149,20 +162,32 @@ Paths below are relative to apps/docs unless they start at the repo root.
   requests more (storage buffers in the vertex stage need
   \`requiredLimits: { maxStorageBuffersInVertexStage: 1 }\` in both init() and meta.thumb, like
   spiral-galaxy).
+- Compatibility mode also rejects \`@interpolate(flat)\` without \`either\` (write
+  \`@interpolate(flat, either)\` or use default interpolation), \`linear\`/\`sample\` interpolation,
+  \`sample_index\`/\`sample_mask\`, and cube-array textures. Metal accepts all of these, so neither
+  capture_preview nor render_thumbnail catches them — verify_example's lint and the Mesa run do.
 - \`r32float\`, \`rg32float\` and \`rgba32float\` cannot be sampled with linear filtering without the
   float32-filterable feature — use \`rgba16float\` for fields sampled bilinearly (fluid dye/velocity).
+- Instanced sprites/quads: draw a 4-vertex \`triangle-strip\` (\`topology: 'triangle-strip'\`,
+  \`vertices: 4\`, no vertex buffers) instead of a 6-vertex list — it halved the dominant pass in
+  spring-choreography. Particle fill rate, not compute, usually dominates.
+- WGSL reserves many everyday words as identifiers (e.g. \`target\`, \`filter\`, \`sample\`, \`mod\`,
+  \`self\`, \`ref\`, \`common\`, \`final\`, \`module\`, \`handle\`); pick descriptive names.
 - Thumbnails must be deterministic run to run: make particle state a closed-form function of time
   where possible (and keep meta.thumb.warmupFrames low — lavapipe is slow at 1600×900), drive
   simulations with a fixed dt and fixed iteration counts, never read unwritten targets, and splat
   with fixed-point \`atomicAdd\` on i32/u32 (WGSL has no float atomics).
 - Budget: at 1280×720 dpr 2 on this Mac, keep \`gpuSubmitToDoneMs\` p95 ≤ 8 ms (liquid-layout: ~6 ms).
   Expose quality/count in lil-gui and default to what meets the budget.
-- Read the vgpu docs for every API you use: \`pnpm exec vgpu docs cat <page>\` inside apps/docs
-  (concepts-frames.md, concepts-passes.md, concepts-effects.md, concepts-draws.md, compute.md,
-  effect.md, draw.md, target.md, uniforms.md, surface.md, clock.md, external-ticker.md,
-  performance-patterns.md). References: examples/fluid (compute solver, pointer input),
+- Read the vgpu docs for every API you use (inside apps/docs): guides by file name —
+  \`pnpm exec vgpu docs cat concepts-frames.md\` (also concepts-passes, concepts-effects,
+  concepts-draws, external-ticker, performance-patterns) — and API pages by path —
+  \`pnpm exec vgpu docs cat /vgpu/draw.docs.md\` (compute, effect, target, uniforms, surface, clock,
+  texture). \`vgpu docs find <term>\` maps symbols to pages; a bare \`draw\` is "Symbol not found". References: examples/fluid (compute solver, pointer input),
   examples/spiral-galaxy (compute particles, instanced quads, HDR bloom chain, lil-gui, thorough tests),
-  examples/liquid-layout (Motion + DOM + frame.postRender clock, store pattern, idle choreography).
+  examples/liquid-layout (Motion + DOM + frame.postRender clock, store pattern, idle choreography),
+  examples/spring-choreography (Motion spring/stagger LUTs, animate() timeline controls, 262k–1M
+  compute particles, triangle-strip sparks, deterministic superposition).
 
 ## Thumbnails
 - Pick the moment with render_thumbnail (fast, local GPU). Then run the Mesa tool once: without

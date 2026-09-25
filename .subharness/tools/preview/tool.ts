@@ -2,6 +2,7 @@
 import { tool, toolResult } from "subharness";
 import { z } from "zod";
 import { capturePreview } from "./capture.ts";
+import { fitImages } from "./fit-images.ts";
 import { imageSteps } from "./steps.ts";
 
 const point = z.object({ x: z.number(), y: z.number() });
@@ -17,7 +18,7 @@ const clip = z.union([
 
 const step = z.discriminatedUnion("type", [
   z.object({ type: z.literal("wait"), ms: z.number().int().min(0).max(30_000) }),
-  z.object({ type: z.literal("screenshot"), label: z.string().max(60).optional(), clip: clip.optional(), scale: z.number().min(0.25).max(4).optional().describe("Output scale; 2 zooms a clip for detail.") }),
+  z.object({ type: z.literal("screenshot"), label: z.string().max(60).optional(), clip: clip.optional(), scale: z.number().min(0.1).max(4).optional().describe("Output scale in device pixels: default 1/dpr (CSS-sized, fits the result); 1 = device pixels; 2+ zooms a clip.") }),
   z.object({
     type: z.literal("burst"),
     count: z.number().int().min(2).max(24),
@@ -44,12 +45,12 @@ const step = z.discriminatedUnion("type", [
   z.object({ type: z.literal("key"), key: z.string(), modifiers: z.array(z.enum(["Alt", "Control", "Meta", "Shift"])).optional() }),
   z.object({ type: z.literal("eval"), expression: z.string().max(20_000), label: z.string().max(60).optional() }),
   z.object({ type: z.literal("rects"), selectors: z.array(z.string()).min(1).max(16), props: z.array(z.string()).max(16).optional(), label: z.string().max(60).optional() }),
-  z.object({ type: z.literal("perf"), ms: z.number().int().min(250).max(10_000), label: z.string().max(60).optional() }),
+  z.object({ type: z.literal("perf"), ms: z.number().int().min(250).max(10_000), runs: z.number().int().min(1).max(5).optional().describe("Windows to measure after a warm-up (default 3); gpuP95MedianMs is the number to compare."), label: z.string().max(60).optional() }),
   z.object({ type: z.literal("hide"), selector: z.string() }),
   z.object({ type: z.literal("show"), selector: z.string() }),
   z.object({ type: z.literal("media"), reducedMotion: z.boolean() }),
   z.object({ type: z.literal("resize"), width: z.number().int().min(320).max(2560), height: z.number().int().min(240).max(1600) }),
-  z.object({ type: z.literal("gui"), set: z.record(z.string(), z.union([z.number(), z.boolean(), z.string(), z.null()])).describe("lil-gui controllers by label; null clicks a button.") }),
+  z.object({ type: z.literal("gui"), set: z.record(z.string(), z.union([z.number(), z.boolean(), z.string(), z.null()])).describe("lil-gui controllers by visible label; option controllers take the option label; null clicks a button. Fires the controller's onChange like a user edit.") }),
 ]);
 
 const maxImages = 8;
@@ -66,7 +67,7 @@ export const capturePreviewTool = tool({
     "After the page is ready (`waitFor`, default canvas) and `settleMs`, runs `steps` in order.",
     "Pointer targets are viewport CSS px or { selector, at } element anchors resolved when the step runs; moves and drags are interpolated in real time (short durationMs = flick). `pointer: \"touch\"` (with `touch: true`) sends real touch events.",
     "Steps: wait, screenshot{label,clip,scale}, burst{count,everyMs,columns,clip} (one contact-sheet image of an animation), move{to}, down{at}, up{at}, click{at|selector}, drag{points | from+to | from+by, durationMs, release}, wheel, key{key,modifiers} (Enter/Space activate buttons), eval{expression}, rects{selectors,props}, perf{ms}, hide/show{selector}, media{reducedMotion}, resize{width,height}, gui{set: {label: value}}.",
-    "perf reports rAF frame ms, JS ms per frame in page rAF callbacks, GPU submit→done latency (≈ GPU time, an upper bound) and long frames — measure at dpr 2, which is what most visitors have.",
+    "perf warms up, measures `runs` windows, and reports gpuP95MedianMs (GPU submit→done p95, ≈ GPU time, an upper bound; clocks vary ~2× between runs) plus rAF frame ms, JS ms per frame, and long frames — measure at dpr 2, which is what most visitors have.",
     `Up to ${maxImages} screenshots/bursts per call; a final screenshot is taken if none is requested.`,
     "The report flags `uniform: true` frames (black/failed render), console problems, the vgpu preview error overlay, Next dev errors, and the focused element per screenshot. PNGs are saved under .context/shots/<slug>/.",
   ].join(" "),
@@ -99,12 +100,13 @@ export const capturePreviewTool = tool({
       steps,
     });
     const report = { ...result, shots: result.shots.map(({ png: _png, ...shot }) => shot) };
+    const images = fitImages(result.shots.map((shot) => shot.png));
     return toolResult({
       content: [
         { type: "text", text: JSON.stringify(report, null, 2) },
-        ...result.shots.flatMap((shot) => [
-          { type: "text" as const, text: `Image: ${shot.label} (${shot.file})` },
-          { type: "image" as const, mimeType: "image/png" as const, data: shot.png.toString("base64") },
+        ...result.shots.flatMap((shot, index) => [
+          { type: "text" as const, text: `Image: ${shot.label} (${shot.file}${images[index].length < shot.png.length ? "; downscaled to fit the result, the file is full size" : ""})` },
+          { type: "image" as const, mimeType: "image/png" as const, data: images[index].toString("base64") },
         ]),
       ],
     });

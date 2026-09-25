@@ -62,7 +62,8 @@ export const bundleReportTool = tool({
     const owners = new Map<string, string[]>();
     for (const route of measured) for (const chunk of route.chunks) owners.set(chunk, [...(owners.get(chunk) ?? []), route.slug]);
     const target = slug ? measured.find((route) => route.slug === slug) : undefined;
-    return {
+    // The tool boundary rejects `undefined` anywhere in the result; a JSON round trip drops those keys.
+    return jsonSafe({
       ok: routes.every((route) => route.status === "ok"),
       over: routes.filter((route) => route.status !== "ok"),
       // Routes whose size differs from the current canary CI build: candidates for a chunk-factoring shift caused by this branch.
@@ -78,9 +79,13 @@ export const bundleReportTool = tool({
       ci: ciMeasured && ("routes" in ciMeasured ? { run: ciMeasured.run, sha: ciMeasured.sha } : ciMeasured),
       routes,
       rule: "Only change another route's baseline when it is over its limit in CI terms (ciGzip + your shift > limit). localMinusCi mixes environment noise (tens of bytes; atmosphere reads ~188 B high on macOS) with real chunk-factoring shifts from this branch; a shift within its limit needs no budget change.",
-    };
+    });
   },
 });
+
+function jsonSafe<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
 
 function parse(output: string): Measurement[] {
   return output.split("\n").flatMap((line) => {

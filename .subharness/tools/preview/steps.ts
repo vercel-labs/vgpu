@@ -36,7 +36,7 @@ export type CaptureStep =
   | { readonly type: "key"; readonly key: string; readonly modifiers?: readonly Modifier[] }
   | { readonly type: "eval"; readonly expression: string; readonly label?: string }
   | { readonly type: "rects"; readonly selectors: readonly string[]; readonly props?: readonly string[]; readonly label?: string }
-  | { readonly type: "perf"; readonly ms: number; readonly label?: string }
+  | { readonly type: "perf"; readonly ms: number; readonly runs?: number; readonly label?: string }
   | { readonly type: "hide"; readonly selector: string }
   | { readonly type: "show"; readonly selector: string }
   | { readonly type: "media"; readonly reducedMotion: boolean }
@@ -82,7 +82,8 @@ export async function runSteps(context: StepContext, steps: readonly CaptureStep
     if (step.type === "wait") await sleep(step.ms);
     else if (step.type === "screenshot") {
       const label = step.label ?? `frame ${results.shots.length + 1}`;
-      results.shots.push(await screenshot(context, name(label), label, step.clip, step.scale ?? 1));
+      // Default to CSS-pixel output: at dpr 2 a full-frame PNG would overflow the tool result.
+      results.shots.push(await screenshot(context, name(label), label, step.clip, step.scale ?? 1 / context.viewport.dpr));
     } else if (step.type === "burst") {
       const label = step.label ?? `burst ${results.shots.length + 1}`;
       results.shots.push(await burst(context, name(label), label, step));
@@ -115,7 +116,7 @@ export async function runSteps(context: StepContext, steps: readonly CaptureStep
     else if (step.type === "gui") await record(results, "gui", () => evaluate(page, guiExpression(step.set)));
     else if (step.type === "perf") {
       try {
-        results.perf.push({ label: step.label ?? `perf ${results.perf.length + 1}`, dpr: context.viewport.dpr, ...(await evaluate(page, perfExpression(step.ms)) as object) });
+        results.perf.push({ label: step.label ?? `perf ${results.perf.length + 1}`, dpr: context.viewport.dpr, ...(await measure(page, step.ms, step.runs ?? 3)) });
       } catch (error) {
         results.perf.push({ label: step.label, error: messageOf(error) });
       }
@@ -129,6 +130,25 @@ export async function runSteps(context: StepContext, steps: readonly CaptureStep
     }
   }
   return results;
+}
+
+type PerfRun = { gpuSubmitToDoneMs?: { p95: number } | null; frameMs?: { avg: number } | null; jsMsPerFrame?: number | null };
+
+/**
+ * GPU clocks ramp (DVFS), so one window is noisy: warm up for 400 ms, measure `runs` windows, and
+ * report the median of the per-run GPU p95 next to the last run's full breakdown.
+ */
+async function measure(page: ChromePage, ms: number, runs: number) {
+  await evaluate(page, perfExpression(400));
+  const windows: PerfRun[] = [];
+  for (let index = 0; index < runs; index++) windows.push(await evaluate(page, perfExpression(ms)) as PerfRun);
+  const p95s = windows.map((window) => window.gpuSubmitToDoneMs?.p95).filter((value): value is number => typeof value === "number").sort((a, b) => a - b);
+  return {
+    runs,
+    gpuP95MedianMs: p95s.length ? p95s[Math.floor(p95s.length / 2)] : null,
+    gpuP95PerRunMs: p95s,
+    ...windows[windows.length - 1],
+  };
 }
 
 async function dragRoute(page: ChromePage, step: Extract<CaptureStep, { type: "drag" }>): Promise<Point[]> {
