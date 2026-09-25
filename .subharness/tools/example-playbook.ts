@@ -116,7 +116,11 @@ Paths below are relative to apps/docs unless they start at the repo root.
   a long-lived container that keeps its install and build. It takes a few minutes the first time
   (image build + amd64 install), ~15–30 s after. Without --update it runs
   \`thumbs:check\` against your PNGs and saves diffs to .context/thumbs/<slug>/ on failure.
-  (\`pnpm thumbs:docker\` is broken: its image runs the test suite, which needs git.)
+  (\`pnpm thumbs:docker\` is broken: its image runs the test suite, which needs git.) If it reports
+  "Cannot connect to the Docker daemon", start Docker Desktop with \`open -a Docker\` and poll
+  \`docker info\` for up to a few minutes; if it still will not start, commit your Metal-rendered PNGs,
+  and say in the report that the Mesa check is pending so the lead runs it (Metal renders often pass
+  the 2% check, but not always).
 - verify_example — the pre-commit checklist in one call (10–20 s): a WGSL compatibility-mode lint,
   focused vitest, import boundaries, vocabulary, filenames, apps/docs typecheck, ingest (commit what
   it regenerates), budget entry and PNGs present, and tree hygiene.
@@ -197,6 +201,12 @@ Paths below are relative to apps/docs unless they start at the repo root.
 - Instanced sprites/quads: draw a 4-vertex \`triangle-strip\` (\`topology: 'triangle-strip'\`,
   \`vertices: 4\`, no vertex buffers) instead of a 6-vertex list — it halved the dominant pass in
   spring-choreography. Particle fill rate, not compute, usually dominates.
+- SDF necks between two parallel walls (liquid bridges, merged cards): a polynomial smooth-min only
+  blends about k/4 into a corner, so a bar smin'd between two walls reads as an "H". Use a
+  circular-arc fillet union (tangent to both walls, radius tied to the gap) for resting necks; keep
+  smooth-min for bodies that overlap.
+- Quarter-resolution bloom: sample the bright pass with four thresholded taps at ±1 scene texel per
+  quarter texel; a single bilinear tap aliases one-pixel rims into shimmer.
 - WGSL reserves many everyday words as identifiers (e.g. \`target\`, \`filter\`, \`sample\`, \`mod\`,
   \`self\`, \`ref\`, \`common\`, \`final\`, \`module\`, \`handle\`); pick descriptive names.
 - Grid fluid solvers: free-slip velocity walls also need a zero-gradient dye boundary, or clamped
@@ -234,6 +244,8 @@ Paths below are relative to apps/docs unless they start at the repo root.
 - Then bundle_report. Adding an example can shift other routes through chunk factoring (identical
   raw bytes, different gzip); change another route's baseline only if it would exceed its limit in
   CI (check \`ciGzip\` + the shift), and explain it in \`$comment:<slug>-shared-chunks\`. Local gzip
-  differs from CI by tens of bytes for some routes (atmosphere reads ~188 B high here and has 30 B of
-  CI headroom); that is environmental.
+  differs from CI by tens of bytes for some routes (atmosphere reads ~188 B high here); that is
+  environmental. When the branch is behind canary, \`localMinusCi\` also includes canary's own changes
+  (every route can move by KBs) — compare against your previous same-branch measurement instead:
+  byte-identical shared chunks mean the delta is your route's own code.
 `.trim();
