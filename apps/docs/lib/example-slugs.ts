@@ -34,6 +34,7 @@ export const exampleSlugs = [
   'spiral-galaxy',
   'liquid-layout',
   'spring-choreography',
+  'throwable-fluid',
 ] as const;
 
 export type ExampleSlug = (typeof exampleSlugs)[number];
