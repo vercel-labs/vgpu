@@ -82,6 +82,10 @@ export const exampleThumbs: Record<string, ExampleThumbPresence> = {
     "card": "/examples/instanced-rendering.card.png",
     "hero": "/examples/instanced-rendering.hero.png"
   },
+  "liquid-layout": {
+    "card": "/examples/liquid-layout.card.png",
+    "hero": "/examples/liquid-layout.hero.png"
+  },
   "matcap": {
     "card": "/examples/matcap.card.png",
     "hero": "/examples/matcap.hero.png"
@@ -114,9 +118,17 @@ export const exampleThumbs: Record<string, ExampleThumbPresence> = {
     "card": "/examples/spiral-galaxy.card.png",
     "hero": "/examples/spiral-galaxy.hero.png"
   },
+  "spring-choreography": {
+    "card": "/examples/spring-choreography.card.png",
+    "hero": "/examples/spring-choreography.hero.png"
+  },
   "three-tsl": {
     "card": "/examples/three-tsl.card.png",
     "hero": "/examples/three-tsl.hero.png"
+  },
+  "throwable-fluid": {
+    "card": "/examples/throwable-fluid.card.png",
+    "hero": "/examples/throwable-fluid.hero.png"
   },
   "transmission": {
     "card": "/examples/transmission.card.png",

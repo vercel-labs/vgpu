@@ -41,6 +41,9 @@ export const exampleComponentLoaders = {
   'adaptive-quality': () => import('../examples/adaptive-quality/index'),
   'glass-sculpture': () => import('../examples/glass-sculpture/index'),
   'spiral-galaxy': () => import('../examples/spiral-galaxy/index'),
+  'liquid-layout': () => import('../examples/liquid-layout/index'),
+  'spring-choreography': () => import('../examples/spring-choreography/index'),
+  'throwable-fluid': () => import('../examples/throwable-fluid/index'),
 } satisfies Record<ExampleSlug, ExampleComponentLoader>;
 
 export function getExampleComponentLoader(slug: ExampleSlug): ExampleComponentLoader {
