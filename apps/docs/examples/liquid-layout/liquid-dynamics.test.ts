@@ -6,7 +6,6 @@ import {
   createDynamics,
   K_DRAG,
   K_REST,
-  MAX_NECKS,
   MAX_PRIMS,
   PRIM_FLOATS,
   type CardSample,
@@ -58,13 +57,6 @@ function prims(frame: LiquidFrame) {
     };
   });
 }
-
-/**
- * Necks (bars: centre in cx/cy, half length in hw, fillet radius in hh, waist
- * in corner) and their droplets (point segments whose radius rides in erode,
- * negative = above the surface).
- */
-const necksOf = (frame: LiquidFrame) => prims(frame).filter((prim) => prim.type === 8 || prim.type === 5);
 
 /** field.wgsl packs the wobble as phase * 16 + amplitude. */
 const wobbleAmplitude = (code: number) => code - Math.floor(code / 16) * 16;
@@ -249,71 +241,6 @@ describe('dragging', () => {
     // The field blends each pair with the larger radius, so the neighbour meets the drag radius.
     expect(Math.max(dragged!.k, resting!.k)).toBeGreaterThanOrEqual(K_DRAG);
     expect(resting!.k).toBe(K_REST);
-  });
-});
-
-describe('necks', () => {
-  // Two row neighbours 25 px apart.
-  const pair = (bx = 625, by = 300) => [sample({ id: 'a' }), sample({ id: 'b', cx: bx, cy: by, hue: 1 })];
-
-  test('grow at mid-height between resting row neighbours, rising from the edges', () => {
-    const liquid = dynamics();
-    // Rested apart, then brought within reach (a resize): the neck starts that frame.
-    run(liquid, 2, () => pair(725));
-    expect(necksOf(run(liquid, DT, () => pair(725)))).toHaveLength(0);
-    const [forming] = necksOf(liquid.update(pair(), DT, VIEWPORT, true));
-    // A fresh neck is parted: a waist of about -fillet leaves the surface as it was.
-    expect(forming!.type).toBe(8);
-    expect(forming!.corner).toBeLessThan(-0.9 * forming!.hh);
-
-    const necks = necksOf(run(liquid, 1.5, () => pair()));
-    const [neck] = necks.filter((prim) => prim.type === 8);
-    expect(neck).toBeDefined();
-    // It is centred in the gap and reaches a little inside each card.
-    expect(neck!.cx).toBeCloseTo(512.5, 6);
-    expect(neck!.hw).toBeGreaterThan(12.5 + 4);
-    expect(neck!.cy).toBeGreaterThan(180 + 240 * 0.3);
-    expect(neck!.cy).toBeLessThan(180 + 240 * 0.6);
-    // Full grown it is a waist a few px thick whose fillets leave a short
-    // straight stretch in the gap, tinted between the two cards.
-    expect(neck!.corner).toBeGreaterThan(2);
-    expect(neck!.corner).toBeLessThan(5);
-    expect(neck!.hh).toBeGreaterThan(neck!.corner);
-    expect(neck!.hh).toBeLessThan(12.5);
-    expect(neck!.hue).toBeCloseTo(0.5, 6);
-    // A droplet on it, if any, blends with its own radius.
-    for (const bead of necks.filter((prim) => prim.type === 5)) {
-      expect(bead.cx).toBeGreaterThan(500);
-      expect(bead.cx).toBeLessThan(525);
-    }
-  });
-
-  test('pinch apart as soon as either card moves', () => {
-    const liquid = dynamics();
-    run(liquid, 2, () => pair());
-    expect(necksOf(run(liquid, DT, () => pair())).length).toBeGreaterThan(0);
-    // Sliding slowly down keeps the pair in range but no longer resting.
-    const frame = run(liquid, 0.3, (i) => pair(625, 300 + 1.5 * (i + 1)));
-    expect(necksOf(frame)).toHaveLength(0);
-  });
-
-  test('never form across a wide gap or between rows', () => {
-    const wide = dynamics();
-    expect(necksOf(run(wide, 2, () => pair(700)))).toHaveLength(0);
-    const rows = dynamics();
-    expect(necksOf(run(rows, 2, () => pair(625, 560)))).toHaveLength(0);
-  });
-
-  test('a row of cards grows at most MAX_NECKS necks and no card joins two', () => {
-    const liquid = dynamics();
-    const row = Array.from({ length: 5 }, (_, i) => sample({ id: `card-${i}`, cx: 150 + 225 * i }));
-    const frame = run(liquid, 2, () => row);
-    const necks = necksOf(frame).filter((prim) => prim.type === 8);
-    expect(necks.length).toBeGreaterThan(0);
-    expect(necks.length).toBeLessThanOrEqual(MAX_NECKS);
-    const gaps = necks.map((neck) => Math.round((neck.cx - 262.5) / 225));
-    expect(new Set(gaps).size).toBe(gaps.length);
-    gaps.forEach((gap, i) => gaps.slice(i + 1).forEach((other) => expect(Math.abs(gap - other)).toBeGreaterThan(1)));
   });
 });
 

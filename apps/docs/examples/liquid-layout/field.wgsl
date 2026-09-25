@@ -1,8 +1,8 @@
 // Distance field of the liquid, rendered at CSS-pixel resolution. Every
-// primitive (card bodies, necks, droplets, drips) is blended into its layer
-// with a polynomial smooth-min whose radius comes from the primitive, so a fast
-// or dragged card melts into whatever it passes while resting cards keep crisp
-// gaps. Card edges bulge and wobble slowly, like surface tension.
+// primitive (card bodies, droplets, drips) is blended into its layer with a
+// polynomial smooth-min whose radius comes from the primitive, so a fast or
+// dragged card melts into whatever it passes while resting cards keep crisp
+// gaps. A rect's edges can bulge by its wobble amplitude (resting cards use 0).
 //
 // Output: r = grid distance, g = panel distance (CSS px, negative inside),
 //         b = blended hue (0 pale blue → 1 lavender), a = blended energy.
@@ -12,10 +12,7 @@
 //            p2 = world→local 2×2      p3 = erode, energy, distScale, wobble
 //   capsule: p0 = a.xy, b.xy           p1 = radiusA, k, kind, hue
 //            p2 = radiusB, -, -, -     p3 = erode, energy, 1, -
-//   bridge:  p0 = centre.xy, half length, fillet   p1 = waist, k, kind, hue
-//            p3 = -, energy, -, -
-// kind: 0 rect, 1 capsule, 8 bridge (grid layer only); +2 for the panel layer;
-// +4 blends with its own radius only (a droplet on a neck stays a droplet).
+// kind: 0 rect, 1 capsule; +2 for the panel layer.
 // wobble = phase * 16 + amplitude (CSS px, < 16).
 
 const MAX_PRIMS = 32u;
@@ -57,13 +54,6 @@ fn sdTaperedCapsule(p: vec2f, a: vec2f, b: vec2f, ra: f32, rb: f32) -> f32 {
   return dot(local, vec2f(c, s)) - ra;
 }
 
-// A horizontal bar `waist` thick on each side of its axis; below zero it is a
-// line that only its fillets can reach.
-fn sdBar(p: vec2f, centre: vec2f, halfLength: f32, waist: f32) -> f32 {
-  let q = abs(p - centre);
-  return length(vec2f(max(q.x - halfLength, 0.0), q.y)) - waist;
-}
-
 // How far each edge bulges out at this point: most at mid-edge, none at the
 // corners, each edge breathing on its own two slow harmonics.
 fn bulge(v: vec2f, t: f32, phase: f32, amp: f32) -> vec2f {
@@ -99,16 +89,6 @@ fn blend(acc: Accum, d: f32, radius: f32, k: f32, hue: f32, energy: f32) -> Accu
   return out;
 }
 
-// A union whose fillet is a circular arc of `radius` tangent to both surfaces,
-// wherever the wobbling edges happen to be. The polynomial blend above cannot
-// do this: its fillet reaches only radius / 4 into the corner, so a bar between
-// two cards joins them as a stiff H instead of flaring into each edge.
-fn fillet(acc: Accum, d: f32, radius: f32, k: f32, hue: f32, energy: f32) -> Accum {
-  var out = blend(acc, d, radius, k, hue, energy);
-  out.d = max(radius, min(acc.d, d)) - length(max(vec2f(radius) - vec2f(acc.d, d), vec2f(0.0)));
-  return out;
-}
-
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
   let p = uv * field.viewport;
   var grid = Accum(FAR, 1.0, 0.0, 0.0);
@@ -122,13 +102,8 @@ fn fillet(acc: Accum, d: f32, radius: f32, k: f32, hue: f32, energy: f32) -> Acc
     let kind = u32(p1.z + 0.5);
     let onPanel = (kind & 2u) != 0u;
     let accD = select(grid.d, panel.d, onPanel);
-    let radius = select(max(max(p1.y, select(grid.k, panel.k, onPanel)), 1.0), max(p1.y, 1.0), (kind & 4u) != 0u);
+    let radius = max(max(p1.y, select(grid.k, panel.k, onPanel)), 1.0);
     var d: f32;
-    if ((kind & 8u) != 0u) {
-      // Bridges live in the grid layer and flare into it with their own fillet.
-      grid = fillet(grid, sdBar(p, p0.xy, p0.z, p1.x), max(p0.w, 1.0), p1.y, p1.w, p3.y);
-      continue;
-    }
     if ((kind & 1u) == 0u) {
       let offset = p - p0.xy;
       let local = vec2f(dot(p2.xy, offset), dot(p2.zw, offset));

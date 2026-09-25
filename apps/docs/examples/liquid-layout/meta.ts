@@ -2,7 +2,7 @@ export const meta = {
   slug: 'liquid-layout',
   title: 'Liquid Layout',
   description:
-    'Drag to reorder, shuffle and filter eight DOM cards with Motion while vgpu renders them as one refracting water-glass field that necks between neighbours.',
+    'Drag to reorder, shuffle and filter eight DOM cards with Motion while vgpu renders them as refracting glass that merges wherever cards meet.',
   tags: [
     'motion',
     'liquid',

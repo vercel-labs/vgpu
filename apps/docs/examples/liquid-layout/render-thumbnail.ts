@@ -1,7 +1,6 @@
 // The gallery thumbnail: the live dynamics and pipeline fed by the resting grid
-// instead of the DOM. The eight cards pour in, settle, and rest until necks
-// have grown between row neighbours; the frame is caught with the edges still
-// wobbling. The owning script disposes the Gpu, which releases every resource.
+// instead of the DOM. The eight cards pour in and settle into separate slabs.
+// The owning script disposes the Gpu, which releases every resource.
 
 import { frame, type Gpu, type Target } from 'vgpu';
 

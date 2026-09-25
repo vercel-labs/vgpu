@@ -1,9 +1,8 @@
 // Pure per-frame liquid dynamics. The renderer measures the laid-out cards and
 // hands over one sample per card; this module turns them into the primitives
-// the field shader blends (rounded rects for card bodies, filleted bars for
-// necks, capsules for droplets and drips). It owns everything the DOM does not have: speed-driven softness,
-// a jelly strain spring, necks that grow between resting row neighbours and
-// pinch apart when either card moves, drips for cards that leave and splashes
+// the field shader blends (rounded rects for card bodies, capsules for droplets
+// and drips). It owns everything the DOM does not have: speed-driven softness,
+// a jelly strain spring, drips for cards that leave and splashes
 // for cards that arrive. Every card, a dragged one included, merges in the grid layer; only
 // the open panel and the card flying back from it float in the layer above.
 // No DOM, no GPU.
@@ -90,21 +89,7 @@ interface Blob {
   offsetX: number;
   offsetY: number;
   scale: number;
-  /** Seconds the card has rested in its slot; necks only grow between resting cards. */
-  rest: number;
   seen: boolean;
-}
-
-interface Neck {
-  readonly left: string;
-  readonly right: string;
-  /** Where the neck sits on the pair's shared height, 0 (top) to 1. */
-  readonly height: number;
-  /** Where its droplet sits along the neck, or -1 for none. */
-  readonly bead: number;
-  readonly seed: number;
-  /** 0 (not formed) to 1 (full); falls quickly while the neck pinches apart. */
-  grow: number;
 }
 
 interface Drip {
@@ -148,11 +133,9 @@ export const K_REST = 6;
 export const K_MOVING = 28;
 /** A dragged card fuses with every card it passes. */
 export const K_DRAG = 30;
-export const MAX_NECKS = 2;
 // Half-size (CSS px) below which a card's moving radius and wobble scale down with it.
 const REACH_SIZE = 120;
 const K_DRIP = 30;
-const K_BEAD = 5;
 
 const STRETCH_MAX = 0.3;
 const JELLY_OMEGA = 2 * Math.PI * 3;
@@ -185,24 +168,9 @@ const MELT_SHRINK = 0.08;
 const MELT_OMEGA = 2 * Math.PI * 5;
 const MELT_DAMPING = 0.55;
 
-// Necks: a thin bar at mid-height between resting row neighbours that flares
-// into both edges. It grows in once both cards have rested for NECK_REST
-// seconds and pinches apart as soon as either moves. Its ends reach NECK_INSET
-// px inside each card, past its wobble; NECK_BULGE is how far a resting edge
-// typically bows into the gap. NECK_K is the radius later primitives blend
-// with near it.
-const NECK_GAP_MIN = 4;
-const NECK_GAP_MAX = 64;
-const NECK_OVERLAP = 0.6;
-const NECK_REST = 0.35;
-const NECK_GROW = 0.9;
-const NECK_BREAK = 0.22;
-const NECK_INSET = 8;
-const NECK_BULGE = 0;
-const NECK_K = 7;
 
 // Resting edges stay exact rounded rects, like system glass; only motion
-// (strain, melt, necks) deforms them.
+// (strain, melt) deforms them.
 const WOBBLE = 0;
 const PANEL_WOBBLE = 0;
 // Under reduced motion the surface still breathes, five times slower.
@@ -211,7 +179,6 @@ const CALM_FLOW = 0.2;
 export function createDynamics(options: DynamicsOptions) {
   const settings: DynamicsOptions = { ...options };
   const blobs = new Map<string, Blob>();
-  const necks = new Map<string, Neck>();
   const drips: Drip[] = [];
   const data = new Float32Array(MAX_PRIMS * PRIM_FLOATS);
   let count = 0;
@@ -280,34 +247,6 @@ export function createDynamics(options: DynamicsOptions) {
     segment(ax, ay, bx, by, ra, rb, k, layer === 'panel' ? 3 : 1, hue, energy, 0);
   }
 
-  /**
-   * A grid-layer droplet of `radius` that blends with its own radius only. A
-   * negative radius keeps it below the surface.
-   */
-  function bead(x: number, y: number, radius: number, k: number, hue: number) {
-    segment(x, y, x, y, 0, 0, k, 5, hue, 0, -radius);
-  }
-
-  /**
-   * A grid-layer bar across a gap, `waist` thick on each side of its axis,
-   * that flares into the edges it meets with circular fillets of `fillet` px.
-   * At a waist of -fillet it leaves the surface untouched.
-   */
-  function bridge(cx: number, cy: number, halfLength: number, fillet: number, waist: number, hue: number) {
-    const i = push();
-    if (i < 0) return;
-    const o = i * PRIM_FLOATS;
-    data.fill(0, o, o + PRIM_FLOATS);
-    data[o] = cx;
-    data[o + 1] = cy;
-    data[o + 2] = halfLength;
-    data[o + 3] = fillet;
-    data[o + 4] = Math.max(waist, -fillet);
-    data[o + 5] = Math.max(1, NECK_K * settings.smoothness);
-    data[o + 6] = 8;
-    data[o + 7] = hue;
-  }
-
   function segment(
     ax: number,
     ay: number,
@@ -371,7 +310,6 @@ export function createDynamics(options: DynamicsOptions) {
       offsetX: sample.offsetX,
       offsetY: sample.offsetY,
       scale: sample.scale,
-      rest: 0,
       seen: true,
     };
   }
@@ -436,15 +374,6 @@ export function createDynamics(options: DynamicsOptions) {
     blob.hover += ((sample.hovered ? 1 : 0) - blob.hover) * (1 - Math.exp(-dt / 0.12));
 
     const held = isHeld(blob);
-    // Hover and press only scale a card, so they do not count as moving.
-    const resting =
-      blob.layer === 'grid' &&
-      blob.lift === 0 &&
-      blob.enter === Infinity &&
-      !held &&
-      Math.hypot(blob.vx, blob.vy) < 24 &&
-      Math.abs(blob.melt) < 0.06;
-    blob.rest = resting ? blob.rest + dt : 0;
 
     if (settings.reducedMotion) {
       blob.strain = [0, 0, 0];
@@ -676,100 +605,6 @@ export function createDynamics(options: DynamicsOptions) {
     return drip.dropY - tail - drip.dropRadius < viewportHeight + 40 || drip.age < DRAIN;
   }
 
-  /** The gap between a left and a right card, or NaN when they do not share a row. */
-  function rowGap(left: Blob, right: Blob): number {
-    const top = Math.max(left.cy - left.hh, right.cy - right.hh);
-    const bottom = Math.min(left.cy + left.hh, right.cy + right.hh);
-    if (bottom - top < NECK_OVERLAP * 2 * Math.min(left.hh, right.hh)) return Number.NaN;
-    return right.cx - right.hw - (left.cx + left.hw);
-  }
-
-  const fits = (gap: number) => gap >= NECK_GAP_MIN && gap <= NECK_GAP_MAX;
-  const resting = (blob: Blob | undefined, seconds: number): blob is Blob => !!blob && blob.rest > seconds;
-
-  function updateNecks(dt: number) {
-    const used = new Set<string>();
-    for (const [key, neck] of necks) {
-      const left = blobs.get(neck.left);
-      const right = blobs.get(neck.right);
-      const wanted = resting(left, 0) && resting(right, 0) && fits(rowGap(left, right));
-      // A neck stretched past its range snaps at once instead of spanning the grid.
-      const snapped = !left || !right || !(rowGap(left, right) <= NECK_GAP_MAX * 1.5);
-      neck.grow = Math.min(1, neck.grow + (wanted ? dt / NECK_GROW : -dt / (snapped ? 0.08 : NECK_BREAK)));
-      if (!left || !right || (!wanted && neck.grow <= 0)) {
-        necks.delete(key);
-        continue;
-      }
-      used.add(neck.left);
-      used.add(neck.right);
-    }
-    if (necks.size >= MAX_NECKS) return;
-
-    // Each resting card may neck with its nearest resting right-hand neighbour;
-    // a hash of the pair decides which of those pairs get one, stable per pair.
-    const candidates: { left: Blob; right: Blob; key: string; seed: number }[] = [];
-    for (const left of blobs.values()) {
-      if (!resting(left, NECK_REST) || used.has(left.id)) continue;
-      let nearest: Blob | undefined;
-      let nearestGap = Number.POSITIVE_INFINITY;
-      for (const right of blobs.values()) {
-        if (right === left || !resting(right, NECK_REST)) continue;
-        const gap = rowGap(left, right);
-        if (fits(gap) && gap < nearestGap) {
-          nearest = right;
-          nearestGap = gap;
-        }
-      }
-      if (!nearest || used.has(nearest.id)) continue;
-      const key = `${left.id}|${nearest.id}`;
-      candidates.push({ left, right: nearest, key, seed: hashString(key) });
-    }
-    candidates.sort((a, b) => a.seed - b.seed);
-    for (const { left, right, key, seed } of candidates) {
-      if (necks.size >= MAX_NECKS) break;
-      if (used.has(left.id) || used.has(right.id)) continue;
-      used.add(left.id);
-      used.add(right.id);
-      necks.set(key, {
-        left: left.id,
-        right: right.id,
-        height: 0.36 + 0.2 * unit(seed, 1),
-        bead: unit(seed, 2) < 0.5 ? 0.3 + 0.4 * unit(seed, 3) : -1,
-        seed,
-        grow: 0,
-      });
-    }
-  }
-
-  function emitNeck(neck: Neck) {
-    const left = blobs.get(neck.left)!;
-    const right = blobs.get(neck.right)!;
-    const top = Math.max(left.cy - left.hh, right.cy - right.hh);
-    const bottom = Math.min(left.cy + left.hh, right.cy + right.hh);
-    const y = top + (bottom - top) * neck.height;
-    const edgeA = left.cx + left.hw;
-    const edgeB = right.cx - right.hw;
-    const gap = Math.max(1, edgeB - edgeA);
-    // The flares scale with the gap, so a phone grid necks as finely as a desktop
-    // one, and stop short of meeting over the bulging edges: a short straight
-    // waist stays between them.
-    const fillet = clamp(0.5 * gap - NECK_BULGE, 4, 12);
-    const thickness = clamp(Math.min(left.hh, right.hh) * 0.034, 2.2, 4.5);
-    const grow = easeInOut(clamp(neck.grow, 0, 1));
-    const breathe = settings.reducedMotion ? 0 : 0.5 * Math.sin(flow * 1.7 + (neck.seed % 97));
-    // Below zero the waist parts: two horns rise from the facing edges, meet in
-    // the middle at zero and thicken into the neck; pinching runs it backwards.
-    const waist = -fillet + (fillet + thickness + breathe) * grow;
-    const hue = (left.hue + right.hue) / 2;
-    bridge(edgeA + gap / 2, y, gap / 2 + NECK_INSET, fillet, waist, hue);
-    if (neck.bead >= 0) {
-      // The droplet blends with its own small radius, so it stays a bead on the neck.
-      const grown = easeInOut(clamp((neck.grow - 0.55) / 0.45, 0, 1));
-      const x = edgeA + gap * neck.bead;
-      bead(x, y, -K_BEAD + (thickness + 2.2 + K_BEAD) * grown, K_BEAD, hue);
-    }
-  }
-
   return {
     setOptions(next: Partial<DynamicsOptions>) {
       Object.assign(settings, next);
@@ -812,7 +647,6 @@ export function createDynamics(options: DynamicsOptions) {
         blobs.delete(id);
         startDrip(blob);
       }
-      updateNecks(step);
 
       count = 0;
       let panelHue = 0;
@@ -826,7 +660,6 @@ export function createDynamics(options: DynamicsOptions) {
           panelEnergy = Math.max(blob.energy, blob.hover * 0.55);
         }
       }
-      for (const neck of necks.values()) emitNeck(neck);
       for (let i = drips.length - 1; i >= 0; i--) {
         if (!emitDrip(drips[i]!, step)) drips.splice(i, 1);
       }
@@ -850,21 +683,13 @@ function easeInOut(t: number): number {
   return t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
 }
 
-/** FNV-1a: a stable seed per card id and per neck pair. */
+/** FNV-1a: a stable seed per card id. */
 function hashString(text: string): number {
   let hash = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193);
   return hash >>> 0;
 }
 
-/** A uniform number in [0, 1) from a seed and a salt (a murmur3 finaliser). */
-function unit(seed: number, salt: number): number {
-  let hash = Math.imul(seed ^ Math.imul(salt + 1, 0x9e3779b1), 0x85ebca6b);
-  hash ^= hash >>> 13;
-  hash = Math.imul(hash, 0xc2b2ae35);
-  hash ^= hash >>> 16;
-  return (hash >>> 0) / 4294967296;
-}
 
 /** field.wgsl reads the wobble phase and amplitude from one float: phase * 16 + amplitude. */
 function wobbleCode(seed: number, amplitude: number): number {

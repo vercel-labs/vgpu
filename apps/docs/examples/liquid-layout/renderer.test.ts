@@ -332,7 +332,7 @@ test('autoplay starts after its first pause and waits while the user interacts',
   await renderer.ready;
   const initial = env.store.getState().order;
 
-  // The first step waits for the cards to land and a neck to grow, then carries a card across.
+  // The first step waits for the cards to land, then carries a card across.
   env.play(4);
   expect(env.store.getState().order).toBe(initial);
   env.play(0.4);

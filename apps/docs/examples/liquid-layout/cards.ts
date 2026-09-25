@@ -1,6 +1,6 @@
 // The eight cards are the demo's own ingredients: four vgpu primitives that draw
 // the liquid and four Motion features that move it. `hue` picks the liquid tint
-// (0 pale blue, 1 lavender); necks between the two blend through violet.
+// (0 pale blue, 1 lavender); where cards merge the two blend through violet.
 
 export type CardLibrary = 'vgpu' | 'motion';
 
@@ -31,7 +31,7 @@ export const CARDS: readonly CardData[] = [
     title: 'effect',
     line: 'Fullscreen fragment passes. This liquid chains seven of them.',
     detail:
-      'The backdrop, the distance field, the glass shading, the bloom and the tonemap are all effects. Card rects, necks and drips reach the field as a single uniform array.',
+      'The backdrop, the distance field, the glass shading, the bloom and the tonemap are all effects. Card rects and drips reach the field as a single uniform array.',
     code: "effect(gpu, fieldWgsl, { set: { field } })",
     hue: 0,
   },
