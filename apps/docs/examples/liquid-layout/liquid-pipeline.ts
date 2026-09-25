@@ -42,9 +42,9 @@ export interface Look {
 }
 
 export const DEFAULT_LOOK: Look = {
-  refraction: 30,
-  dispersion: 0.14,
-  lens: 34,
+  refraction: 120,
+  dispersion: 0.015,
+  lens: 40,
   bloom: 0.12,
   exposure: 1.0,
 };

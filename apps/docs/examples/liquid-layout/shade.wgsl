@@ -1,14 +1,14 @@
 // Lights the liquid as clear glass, after the optics of Liquid Glass Studio
 // (github.com/iyinchao/liquid-glass-studio, MIT) and kube.io's "Liquid Glass
 // in the Browser":
-// - the bezel bends the floor by Snell's law: a ray entering the rim at
-//   incidence asin(x^1.4) (x = 1 at the edge, 0 where the bezel ends) lands
-//   tan(θi − θt) further inward, so the floor is compressed hardest right at
-//   the rim, with a little dispersion between the colour channels;
+// - the bezel bends the floor like a thick convex lens edge: it shows the band
+//   just inside it mirrored and squeezed toward the rim, so lines crossing the
+//   glass bend at the bezel's inner edge, with a little dispersion between
+//   the colour channels;
 // - a Fresnel band lightens the rim;
-// - a glare highlight runs along the rim, strongest on the corners facing the
-//   key light (upper left) and, a little weaker, on the opposite ones, and
-//   carries a hint of the colour behind it;
+// - two lights, as in Apple's glass: a big soft glow inside the rim on the side
+//   facing the key light (upper left), and a thin strong line right on the
+//   rim, brightest facing the key and fainter on the opposite side;
 // - a soft shadow falls on the floor below and to the right, and the glass
 //   refracts it like the rest of the floor.
 // Past the bezel the glass is flat and clear. The top layer (the open panel,
@@ -38,18 +38,20 @@ struct Shade {
 @group(0) @binding(2) var samp: sampler;
 @group(0) @binding(3) var<uniform> shade: Shade;
 
-const IOR = 1.4;
 // Widths (CSS px) over which the Fresnel and glare bands fade from the rim.
 const FRESNEL_WIDTH = 5.4;
-// The glare is wider on the lit lobe than on the opposite one.
-const GLARE_WIDTH = 7.0;
-const COUNTER_GLARE_WIDTH = 3.6;
+// The big soft light: how far (CSS px) it reaches inside the rim, and its
+// HDR colour at the rim.
+const SOFT_WIDTH = 36.0;
+const SOFT_LIGHT = vec3f(0.62, 0.63, 0.66);
+// How tightly the soft light gathers into the corner facing the key.
+const SOFT_FOCUS = 3.0;
+// The thin strong line's HDR colour, bright enough to read on the pale floor.
+const LINE = vec3f(2.6, 2.62, 2.66);
 // Direction to the key light in the screen plane (upper left).
 const KEY = vec2f(-0.7071, -0.7071);
 // Colour of the room the steep rim reflects on the side away from the light.
 const ROOM = vec3f(0.16, 0.165, 0.18);
-// The glare's peak colour: HDR white, so it reads on the pale floor.
-const GLARE = vec3f(1.9, 1.92, 1.96);
 const VGPU_TINT = vec3f(0.35, 0.66, 1.0);
 const MOTION_TINT = vec3f(0.66, 0.46, 1.0);
 // Drop shadow: offset (CSS px), falloff and strength.
@@ -89,6 +91,22 @@ fn gradientAt(uv: vec2f) -> vec4f {
   return vec4f(gx.x, gy.x, gx.y, gy.y);
 }
 
+// A normal that turns smoothly around corners, from the field's gradient over
+// a wide span: inside a rounded rect the plain gradient jumps along the
+// diagonal, so lights shaped by it would end in a straight seam there.
+const SMOOTH_SPAN = 18.0;
+
+fn smoothNormal(uv: vec2f, panel: bool) -> vec2f {
+  let span = SMOOTH_SPAN / shade.viewport;
+  let r = fieldAt(uv + vec2f(span.x, 0.0));
+  let l = fieldAt(uv - vec2f(span.x, 0.0));
+  let d = fieldAt(uv + vec2f(0.0, span.y));
+  let u = fieldAt(uv - vec2f(0.0, span.y));
+  let g = select(vec2f(r.r - l.r, d.r - u.r), vec2f(r.g - l.g, d.g - u.g), panel);
+  let len = length(g);
+  return select(vec2f(0.0, -1.0), g / len, len > 1e-4);
+}
+
 struct Rim {
   // Depth inside the edge, CSS px (negative outside).
   depth: f32,
@@ -105,32 +123,24 @@ fn rimAt(d: f32, grad: vec2f) -> Rim {
   return Rim(-d, n, smoothstep(0.0, 0.7, len));
 }
 
-// Past the bezel the glass is flat: nothing bends and no rim light remains.
+// Past the bezel and the soft light the glass is flat and unlit.
 fn deep(d: f32) -> bool {
-  return -d > max(shade.lens, FRESNEL_WIDTH * 1.3) + 2.0;
+  return -d > max(shade.lens, SOFT_WIDTH * 3.0) + 2.0;
 }
 
-// Snell's law across the bezel: the inward reach at depth s, as a fraction of
-// `refraction`. 0.98 at the edge for IOR 1.4, easing to 0 where the bezel ends.
+// How far inward the bezel reaches for what it shows, in CSS px: the full
+// `refraction` at the rim, falling linearly to 0 where the bezel ends. With
+// `refraction` well above the bezel width the bezel shows the band just
+// beyond it mirrored and squeezed toward the rim, as a thick convex lens edge
+// does: a line crossing the glass bends at the bezel's inner edge and runs
+// out toward the rim, and the floor right under the bezel is swallowed.
 fn edgeReach(s: f32) -> f32 {
-  let x = clamp(1.0 - s / max(shade.lens, 1.0), 0.0, 1.0);
-  let thetaI = asin(pow(x, 1.4));
-  let thetaT = asin(sin(thetaI) / IOR);
-  return tan(thetaI - thetaT);
+  return shade.refraction * clamp(1.0 - s / max(shade.lens, 1.0), 0.0, 1.0);
 }
 
 // A band that is 1 at the rim and fades to 0 about `width` px inside it.
 fn rimBand(s: f32, width: f32) -> f32 {
   return clamp(pow(max(1.2 - s / width, 0.0), 5.0), 0.0, 1.0);
-}
-
-// Two lobes along the rim: full on the corners facing the key light (upper
-// left, normal (−1, −1)) and on the opposite ones, a little weaker there;
-// none on the other two corners.
-fn glareLobes(n: vec2f) -> f32 {
-  let lobe = 0.5 + n.x * n.y;
-  let side = select(1.2, 0.96, dot(n, vec2f(-1.0, -1.0)) < 0.0);
-  return clamp(pow(lobe * side * 0.9, 1.1), 0.0, 1.0);
 }
 
 fn shadowAt(uv: vec2f) -> f32 {
@@ -157,30 +167,43 @@ fn clearGlass(floorColour: vec3f, hue: f32, energy: f32) -> vec3f {
 
 // Glass on the bezel at uv: refraction with dispersion, the Fresnel band and
 // the glare.
-fn bezel(uv: vec2f, rim: Rim, hue: f32, energy: f32, gain: f32) -> vec3f {
+fn bezel(uv: vec2f, rim: Rim, hue: f32, energy: f32, gain: f32, panel: bool) -> vec3f {
   let s = rim.depth;
-  let reach = -rim.normal * edgeReach(s) * rim.strength * shade.refraction * (1.0 + 0.4 * energy);
+  // Everything on the bezel follows the smoothly turning normal, so nothing
+  // seams along the diagonals inside the corners.
+  let n = smoothNormal(uv, panel);
+  let reach = -n * edgeReach(s) * rim.strength * (1.0 + 0.3 * energy);
   let spread = shade.dispersion;
   let r = backdropAt(uv + reach * (1.0 - spread) / shade.viewport).r;
   let g = backdropAt(uv + reach / shade.viewport).g;
   let b = backdropAt(uv + reach * (1.0 + spread) / shade.viewport).b;
   // The shadow on the floor shows through the glass where it falls.
   var colour = clearGlass(vec3f(r, g, b) * (1.0 - shadowAt(uv + reach / shade.viewport)), hue, energy);
-  let facing = dot(rim.normal, KEY);
-  // Thick glass gathers light on the bevel facing the key and dims on the far
-  // one, fading smoothly toward the flat top.
+  let toward = dot(n, KEY);
+  let lit = max(toward, 0.0);
+  let away = max(-toward, 0.0);
+  // Thick glass dims a little on the bevel facing away from the light.
   let lens = pow(clamp(1.0 - s / max(shade.lens, 1.0), 0.0, 1.0), 2.0) * rim.strength;
-  colour *= 1.0 + 0.2 * facing * lens;
+  colour *= 1.0 - 0.12 * away * lens;
+  // The big soft light: a broad glow inside the rim that curves around the
+  // corner facing the key light, fading along both edges away from it and
+  // inward; a fainter one sits in the opposite corner.
+  let corner = pow(lit, SOFT_FOCUS) + 0.3 * pow(away, SOFT_FOCUS + 1.0);
+  let soft = corner * exp(-s / SOFT_WIDTH) * rim.strength;
+  colour += SOFT_LIGHT * soft * gain;
   let fresnel = rimBand(s, FRESNEL_WIDTH) * rim.strength;
-  colour = mix(colour, colour * 1.18 + vec3f(0.04), fresnel * 0.55);
+  colour = mix(colour, colour * 1.12 + vec3f(0.03), fresnel * 0.5);
   // At a grazing angle the steep rim on the far side reflects the dim room:
   // a fine dark edge that fades out toward the light.
-  let grazing = rimBand(s, 2.4) * rim.strength * smoothstep(0.35, -0.6, facing);
-  colour = mix(colour, ROOM, grazing * 0.55);
-  let lit = facing > 0.0;
-  let width = select(COUNTER_GLARE_WIDTH, GLARE_WIDTH, lit);
-  let glare = glareLobes(rim.normal) * rimBand(s, width) * rim.strength * gain;
-  colour = mix(colour, GLARE + colour * 0.25, clamp(glare, 0.0, 1.0));
+  let grazing = rimBand(s, 2.4) * rim.strength * smoothstep(0.35, -0.6, toward);
+  colour = mix(colour, ROOM, grazing * 0.5);
+  // The thin strong line: a crisp highlight right on the rim, brightest in
+  // the corner facing the key light, fainter on the opposite side.
+  let w = max(0.8, 1.1 / shade.dpr);
+  let u = max(s - 0.7, 0.0) / w;
+  let line = exp(-u * u) * rim.strength;
+  let along = 0.16 + 0.84 * pow(lit, 2.0) + 0.45 * pow(away, 3.0);
+  colour = mix(colour, LINE, clamp(line * along * gain, 0.0, 1.0));
   return colour;
 }
 
@@ -208,7 +231,7 @@ fn gridShade(uv: vec2f, centre: vec4f) -> vec3f {
   let cov = coverage(d);
   var color = outside;
   if (cov > 0.0) {
-    color = mix(color, bezel(uv, rim, centre.b, centre.a, gain), cov);
+    color = mix(color, bezel(uv, rim, centre.b, centre.a, gain, false), cov);
   }
   return color * fade;
 }
@@ -237,7 +260,7 @@ fn gridShade(uv: vec2f, centre: vec4f) -> vec3f {
     let cov = coverage(dp) * lift;
     if (cov > 0.0) {
       let gain = pointerGain(rim.normal, p, shade.panelEnergy);
-      let lit = bezel(uv, rim, shade.panelHue, shade.panelEnergy, gain);
+      let lit = bezel(uv, rim, shade.panelHue, shade.panelEnergy, gain, true);
       let through = GRID_THROUGH + (1.0 - GRID_THROUGH) * rimBand(rim.depth, shade.lens * 0.5);
       color = mix(color, mix(lit * gridFade(), lit * 0.5 + grid * 0.5, through * 0.5), cov);
     }

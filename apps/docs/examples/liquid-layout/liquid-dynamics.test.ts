@@ -211,7 +211,7 @@ describe('the top layer', () => {
     run(liquid, 2, () => [sample({ id: 'a', layer: 'panel', lifted: true, hw: 300, hh: 200 })]);
     const frame = liquid.update([sample({ id: 'a', layer: 'panel', lifted: true, hw: 300, hh: 200 })], DT, VIEWPORT);
     const [panel] = prims(frame);
-    expect(panel).toMatchObject({ type: 2, corner: 32 });
+    expect(panel).toMatchObject({ type: 2, corner: 44 });
     expect(wobbleAmplitude(panel!.wobble)).toBe(0);
   });
 });

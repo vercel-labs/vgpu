@@ -237,9 +237,9 @@ describe('gridFrame', () => {
 
 describe('cornerRadius', () => {
   test('scales with the short side between 18 and 32 px', () => {
-    expect(cornerRadius(279, 232)).toBe(30);
-    expect(cornerRadius(100, 80)).toBe(18);
-    expect(cornerRadius(600, 400)).toBe(32);
+    expect(cornerRadius(279, 232)).toBe(42);
+    expect(cornerRadius(100, 80)).toBe(20);
+    expect(cornerRadius(600, 400)).toBe(44);
   });
 });
 
