@@ -238,7 +238,7 @@ export interface GridFrame extends GridLayout {
 const GUI_CLEARANCE = 52;
 /**
  * On a narrow frame the bar spans the first row, so the clearance also covers
- * how far the row's top edges bulge and its bubbles rise.
+ * how far the row's top edges bulge.
  */
 const NARROW_GUI_CLEARANCE = 62;
 

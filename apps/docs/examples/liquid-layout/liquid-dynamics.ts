@@ -1,8 +1,7 @@
 // Pure per-frame liquid dynamics. The renderer measures the laid-out cards and
 // hands over one sample per card; this module turns them into the primitives
 // the field shader blends (rounded rects for card bodies, filleted bars for
-// necks, capsules for droplets and drips) and the tiny air bubbles the shade
-// pass draws. It owns everything the DOM does not have: speed-driven softness,
+// necks, capsules for droplets and drips). It owns everything the DOM does not have: speed-driven softness,
 // a jelly strain spring, necks that grow between resting row neighbours and
 // pinch apart when either card moves, drips for cards that leave and splashes
 // for cards that arrive. Every card, a dragged one included, merges in the grid layer; only
@@ -14,9 +13,6 @@ import { cornerRadius, type Layer } from './layout-store';
 export const MAX_PRIMS = 32;
 /** Four vec4f per primitive; see field.wgsl for the layout. */
 export const PRIM_FLOATS = 16;
-export const MAX_BUBBLES = 28;
-/** One vec4f per bubble: centre.xy, radius, alpha (negative on the panel layer). */
-export const BUBBLE_FLOATS = 4;
 
 export interface CardSample {
   readonly id: string;
@@ -49,9 +45,7 @@ export interface DynamicsOptions {
 export interface LiquidFrame {
   readonly data: Float32Array;
   readonly count: number;
-  readonly bubbles: Float32Array;
-  readonly bubbleCount: number;
-  /** Seconds of surface flow: the wobble and bubble clock, slower under reduced motion. */
+  /** Seconds of surface flow: the wobble clock, slower under reduced motion. */
   readonly flow: number;
   /** Tint, energy and opacity of the top layer, taken from its most lifted blob. */
   readonly panelHue: number;
@@ -63,7 +57,7 @@ type Strain = [number, number, number];
 
 interface Blob {
   readonly id: string;
-  /** Stable per card: phases the wobble and places the bubbles. */
+  /** Stable per card: phases the wobble. */
   readonly seed: number;
   layer: Layer;
   hue: number;
@@ -219,9 +213,7 @@ export function createDynamics(options: DynamicsOptions) {
   const necks = new Map<string, Neck>();
   const drips: Drip[] = [];
   const data = new Float32Array(MAX_PRIMS * PRIM_FLOATS);
-  const bubbles = new Float32Array(MAX_BUBBLES * BUBBLE_FLOATS);
   let count = 0;
-  let bubbleCount = 0;
   let viewportHeight = 1;
   let flow = 0;
 
@@ -347,15 +339,6 @@ export function createDynamics(options: DynamicsOptions) {
     data[o + 13] = energy;
     data[o + 14] = 1;
     data[o + 15] = 0;
-  }
-
-  function bubble(x: number, y: number, radius: number, alpha: number) {
-    if (bubbleCount >= MAX_BUBBLES || Math.abs(alpha) < 0.01) return;
-    const o = bubbleCount++ * BUBBLE_FLOATS;
-    bubbles[o] = x;
-    bubbles[o + 1] = y;
-    bubbles[o + 2] = radius;
-    bubbles[o + 3] = alpha;
   }
 
   function createBlob(sample: CardSample): Blob {
@@ -786,38 +769,6 @@ export function createDynamics(options: DynamicsOptions) {
     }
   }
 
-  function emitBubbles(blob: Blob) {
-    const grown = blob.enter === Infinity ? 1 : blob.enter < ENTER_FALL ? 0 : clamp(blob.grow, 0, 1);
-    const alpha = grown * (1 - 0.85 * smoothstep(0.05, 0.45, blob.energy)) * (blob.lift > 0.5 ? -1 : 1);
-    if (Math.abs(alpha) < 0.01) return;
-    const corner = cornerRadius(2 * blob.hw, 2 * blob.hh);
-    const c = Math.cos(blob.rotation);
-    const s = Math.sin(blob.rotation);
-    const first = Math.floor(unit(blob.seed, 0) * 4);
-    for (let cluster = 0; cluster < 2; cluster++) {
-      const salt = 8 + cluster * 16;
-      // Clusters sit in opposite corners; the second is a lone bubble on a card.
-      const cornerIndex = (first + cluster * 2) % 4;
-      const sx = cornerIndex & 1 ? 1 : -1;
-      const sy = cornerIndex & 2 ? 1 : -1;
-      // The chip sits at the top left: bubbles there run down the side edge.
-      const alongSide = (sx < 0 && sy < 0) || unit(blob.seed, salt) < 0.5;
-      const bubblesHere = cluster === 0 || blob.layer === 'panel' ? 2 : 1;
-      let along = corner + 4 + unit(blob.seed, salt + 1) * (alongSide ? blob.hh : blob.hw) * 0.3;
-      for (let i = 0; i < bubblesHere; i++) {
-        const radius = i === 0 ? 2.6 + 1.9 * unit(blob.seed, salt + 2 + i) : 1.4 + 1 * unit(blob.seed, salt + 2 + i);
-        const inset = radius + 6 + 3 * unit(blob.seed, salt + 5 + i);
-        along += i === 0 ? radius : radius + 2.5 + 3 * unit(blob.seed, salt + 7 + i);
-        const phase = unit(blob.seed, salt + 9 + i) * 6.283;
-        const drift = settings.reducedMotion ? 0.5 : 2;
-        const lx = (alongSide ? sx * (blob.hw - inset) : sx * (blob.hw - along)) + drift * Math.sin(flow * 0.53 + phase);
-        const ly = (alongSide ? sy * (blob.hh - along) : sy * (blob.hh - inset)) + drift * Math.cos(flow * 0.41 + phase * 1.3);
-        along += radius;
-        bubble(blob.cx + c * lx - s * ly, blob.cy + s * lx + c * ly, radius, alpha);
-      }
-    }
-  }
-
   return {
     setOptions(next: Partial<DynamicsOptions>) {
       Object.assign(settings, next);
@@ -863,13 +814,11 @@ export function createDynamics(options: DynamicsOptions) {
       updateNecks(step);
 
       count = 0;
-      bubbleCount = 0;
       let panelHue = 0;
       let panelEnergy = 0;
       let panelLift = 0;
       for (const blob of blobs.values()) {
         emitBlob(blob, step);
-        emitBubbles(blob);
         if (blob.lift > panelLift) {
           panelLift = blob.lift;
           panelHue = blob.hue;
@@ -880,7 +829,7 @@ export function createDynamics(options: DynamicsOptions) {
       for (let i = drips.length - 1; i >= 0; i--) {
         if (!emitDrip(drips[i]!, step)) drips.splice(i, 1);
       }
-      return { data, count, bubbles, bubbleCount, flow, panelHue, panelEnergy, panelLift };
+      return { data, count, flow, panelHue, panelEnergy, panelLift };
     },
   };
 }

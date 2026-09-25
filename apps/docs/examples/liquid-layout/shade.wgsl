@@ -8,7 +8,7 @@
 // the pointer. Deep inside the glass, past the lens band, none of that
 // remains, so those pixels skip it. The top layer (the open panel, a card
 // flying back from it) is the same material over the grid, which shows through
-// it faintly. The air bubbles are drawn over this pass by bubbles.wgsl.
+// it faintly.
 
 struct Shade {
   viewport: vec2f,

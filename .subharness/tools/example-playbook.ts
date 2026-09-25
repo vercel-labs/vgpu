@@ -226,9 +226,7 @@ Paths below are relative to apps/docs unless they start at the repo root.
   examples/spiral-galaxy (compute particles, instanced quads, HDR bloom chain, lil-gui, thorough tests),
   examples/liquid-layout (Motion + DOM + frame.postRender clock, store pattern, idle choreography),
   examples/spring-choreography (Motion spring/stagger LUTs, animate() timeline controls, 262k–1M
-  compute particles, triangle-strip sparks, deterministic superposition),
-  examples/throwable-fluid (motion/react drag + inertia orb driving a half-float fragment fluid,
-  object drag constraints, lens composite, panel fade).
+  compute particles, triangle-strip sparks, deterministic superposition).
 
 ## Thumbnails
 - Pick the moment with render_thumbnail (fast, local GPU). Then run the Mesa tool once: without

@@ -1,14 +1,11 @@
 import { describe, expect, test } from 'vitest';
 
-import bubblesSource from './bubbles.wgsl';
 import fieldSource from './field.wgsl';
 import { cornerRadius } from './layout-store';
 import {
-  BUBBLE_FLOATS,
   createDynamics,
   K_DRAG,
   K_REST,
-  MAX_BUBBLES,
   MAX_NECKS,
   MAX_PRIMS,
   PRIM_FLOATS,
@@ -68,13 +65,6 @@ function prims(frame: LiquidFrame) {
  * negative = above the surface).
  */
 const necksOf = (frame: LiquidFrame) => prims(frame).filter((prim) => prim.type === 8 || prim.type === 5);
-
-function bubblesOf(frame: LiquidFrame) {
-  return Array.from({ length: frame.bubbleCount }, (_, i) => {
-    const b = frame.bubbles.subarray(i * BUBBLE_FLOATS, (i + 1) * BUBBLE_FLOATS);
-    return { x: b[0]!, y: b[1]!, radius: b[2]!, alpha: b[3]! };
-  });
-}
 
 /** field.wgsl packs the wobble as phase * 16 + amplitude. */
 const wobbleAmplitude = (code: number) => code - Math.floor(code / 16) * 16;
@@ -229,9 +219,6 @@ describe('the top layer', () => {
     const [panel] = prims(frame);
     expect(panel).toMatchObject({ type: 2, corner: 32 });
     expect(wobbleAmplitude(panel!.wobble)).toBeCloseTo(7, 3);
-    // The panel's bubbles ride on the top layer.
-    expect(bubblesOf(frame).length).toBeGreaterThan(0);
-    expect(bubblesOf(frame).every((bubble) => bubble.alpha < 0)).toBe(true);
   });
 });
 
@@ -336,54 +323,10 @@ describe('necks', () => {
   });
 });
 
-describe('bubbles', () => {
-  test('a resting card carries a few small bubbles inside its rim', () => {
-    const liquid = dynamics();
-    const bubbles = bubblesOf(run(liquid, 2, () => [sample({ id: 'a' })]));
-    expect(bubbles.length).toBeGreaterThanOrEqual(2);
-    for (const bubble of bubbles) {
-      // 3 to 10 px across.
-      expect(bubble.radius).toBeGreaterThanOrEqual(1.4);
-      expect(bubble.radius).toBeLessThanOrEqual(5);
-      expect(Math.abs(bubble.x - 400)).toBeLessThan(100 - bubble.radius);
-      expect(Math.abs(bubble.y - 300)).toBeLessThan(120 - bubble.radius);
-      expect(bubble.alpha).toBeCloseTo(1, 2);
-    }
-  });
-
-  test('drift slowly, deterministically per card', () => {
-    const first = bubblesOf(run(dynamics(), 2, () => [sample({ id: 'a' })]));
-    const second = bubblesOf(run(dynamics(), 2, () => [sample({ id: 'a' })]));
-    expect(second).toEqual(first);
-    const liquid = dynamics();
-    run(liquid, 2, () => [sample({ id: 'a' })]);
-    const later = bubblesOf(run(liquid, 1, () => [sample({ id: 'a' })]));
-    later.forEach((bubble, i) => expect(Math.hypot(bubble.x - first[i]!.x, bubble.y - first[i]!.y)).toBeLessThan(4.5));
-  });
-
-  test('fade while the card moves fast', () => {
-    const liquid = dynamics();
-    run(liquid, 2, () => [sample({ id: 'a' })]);
-    const moving = bubblesOf(run(liquid, 0.25, (i) => [sample({ id: 'a', cx: 400 + 30 * (i + 1) })]));
-    expect(moving.every((bubble) => bubble.alpha < 0.5)).toBe(true);
-  });
-
-  test('never exceed the uniform array', () => {
-    const liquid = dynamics();
-    const cards = Array.from({ length: 16 }, (_, i) =>
-      sample({ id: `card-${i}`, cx: 40 + (i % 8) * 150, cy: 100 + Math.floor(i / 8) * 300, hw: 60, hh: 100 }),
-    );
-    const frame = run(liquid, 2, () => cards);
-    expect(frame.bubbleCount).toBe(MAX_BUBBLES);
-    expect(frame.bubbles).toHaveLength(MAX_BUBBLES * BUBBLE_FLOATS);
-  });
-});
-
 test('the shaders size their uniform arrays to the dynamics buffers', () => {
   const arrays = (source: { wgsl: string }) => [...source.wgsl.matchAll(/array<vec4f, (\d+)>/g)].map((match) => Number(match[1]));
   expect(arrays(fieldSource)).toEqual([(MAX_PRIMS * PRIM_FLOATS) / 4]);
   expect(Number(fieldSource.wgsl.match(/const (?:\w+__)?MAX_PRIMS = (\d+)u;/)?.[1])).toBe(MAX_PRIMS);
-  expect(arrays(bubblesSource)).toEqual([(MAX_BUBBLES * BUBBLE_FLOATS) / 4]);
 });
 
 describe('reduced motion', () => {

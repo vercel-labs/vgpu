@@ -1,17 +1,15 @@
 // GPU resources and the per-frame chain shared by the browser renderer and the
 // thumbnail: backdrop and liquid distance field at CSS-pixel resolution →
-// glass shading at device resolution, with the air bubbles drawn over it as
-// instanced quads → a faint quarter-resolution bloom → composite (ACES,
-// vignette, dither) into the output. Seven passes, one frame. The module
+// glass shading at device resolution → a faint quarter-resolution bloom →
+// composite (ACES, vignette, dither) into the output. Seven passes, one frame. The module
 // imports nothing DOM-bound.
 
-import { draw, effect, sampler, target, type Frame, type Gpu, type Surface, type Target } from 'vgpu';
+import { effect, sampler, target, type Frame, type Gpu, type Surface, type Target } from 'vgpu';
 
 import type { LiquidFrame } from './liquid-dynamics';
-import { BUBBLE_FLOATS, MAX_BUBBLES, MAX_PRIMS } from './liquid-dynamics';
+import { MAX_PRIMS } from './liquid-dynamics';
 import backdropWgsl from './backdrop.wgsl';
 import blurWgsl from './blur.wgsl';
-import bubblesWgsl from './bubbles.wgsl';
 import brightWgsl from './bright.wgsl';
 import compositeWgsl from './composite.wgsl';
 import fieldWgsl from './field.wgsl';
@@ -117,7 +115,6 @@ export function createPipeline(gpu: Gpu, size: Size, dpr: number, initialLook: L
     };
   };
   const views = vectorViews(PRIM_VECTORS);
-  const bubbleViews = vectorViews(MAX_BUBBLES);
 
   // Initial struct values must be complete; bind() writes the real sizes.
   const effects = {
@@ -171,32 +168,10 @@ export function createPipeline(gpu: Gpu, size: Size, dpr: number, initialLook: L
     }),
   };
 
-  const bubbles = draw(gpu, {
-    shader: bubblesWgsl,
-    label: 'liquid-layout-bubbles',
-    geometry: { topology: 'triangle-strip' },
-    vertices: 4,
-    // dst × (1 − shadow) + light; the scene's alpha stays put.
-    blend: { color: { src: 'one', dst: 'one-minus-src-alpha' }, alpha: { src: 'zero', dst: 'one' } },
-    set: {
-      fieldTex: targets.field,
-      samp,
-      layer: {
-        viewport: css,
-        dpr,
-        gridDim: 0,
-        panelLift: 0,
-        bubbles: bubbleViews(new Float32Array(MAX_BUBBLES * BUBBLE_FLOATS)),
-      },
-    },
-  });
-  let bubbleCount = 0;
-
   const bind = (outputSize: Size) => {
     effects.backdrop.set({ backdrop: { viewport: css } });
     effects.field.set({ field: { viewport: css } });
     effects.shade.set({ shade: { viewport: css, fieldTexel: targets.field.texelSize, dpr: ratio } });
-    bubbles.set({ layer: { viewport: css, dpr: ratio } });
     effects.bright.set({ bright: { texelSize: targets.scene.texelSize } });
     effects.blur.forEach((blur, i) => blur.set({ blur: { texelSize: blurSources[i]!.texelSize } }));
     effects.composite.set({ composite: { aspect: outputSize[0] / Math.max(1, outputSize[1]) } });
@@ -233,16 +208,11 @@ export function createPipeline(gpu: Gpu, size: Size, dpr: number, initialLook: L
           panelLift: liquid.panelLift,
         },
       });
-      bubbleCount = Math.min(liquid.bubbleCount, MAX_BUBBLES);
-      bubbles.set({ layer: { gridDim: input.dim, panelLift: liquid.panelLift, bubbles: bubbleViews(liquid.bubbles) } });
     },
     encode(currentFrame, output) {
       currentFrame.pass({ target: targets.backdrop, clear: CLEAR }, (pass) => pass.draw(effects.backdrop));
       currentFrame.pass({ target: targets.field, clear: CLEAR }, (pass) => pass.draw(effects.field));
-      currentFrame.pass({ target: targets.scene, clear: CLEAR }, (pass) => {
-        pass.draw(effects.shade);
-        if (bubbleCount > 0) pass.draw(bubbles, { instances: bubbleCount });
-      });
+      currentFrame.pass({ target: targets.scene, clear: CLEAR }, (pass) => pass.draw(effects.shade));
       currentFrame.pass({ target: targets.bloom[0], clear: CLEAR }, (pass) => pass.draw(effects.bright));
       currentFrame.pass({ target: targets.bloom[1], clear: CLEAR }, (pass) => pass.draw(effects.blur[0]!));
       currentFrame.pass({ target: targets.bloom[0], clear: CLEAR }, (pass) => pass.draw(effects.blur[1]!));
@@ -253,7 +223,6 @@ export function createPipeline(gpu: Gpu, size: Size, dpr: number, initialLook: L
         effects.backdrop.compile(targets.backdrop),
         effects.field.compile(targets.field),
         effects.shade.compile(targets.scene),
-        bubbles.compile(targets.scene),
         effects.bright.compile(targets.bloom[0]),
         effects.blur[0]!.compile(targets.bloom[1]),
         effects.blur[1]!.compile(targets.bloom[0]),

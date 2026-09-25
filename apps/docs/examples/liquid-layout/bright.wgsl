@@ -1,5 +1,5 @@
 // Bloom bright pass into a quarter-resolution target. Only the brightest rim
-// highlights and bubble glints exceed the threshold. Four linear taps, each
+// highlights exceed the threshold. Four linear taps, each
 // averaging a 2×2 quad, cover the whole 4×4 block of scene pixels behind every
 // output pixel, so a thin rim line never falls between samples and shimmers.
 // Each tap is thresholded on its own so the average does not dilute the line

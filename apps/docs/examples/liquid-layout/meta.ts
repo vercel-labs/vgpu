@@ -50,7 +50,6 @@ export const meta = {
     'backdrop.wgsl',
     'field.wgsl',
     'shade.wgsl',
-    'bubbles.wgsl',
     'bright.wgsl',
     'blur.wgsl',
     'composite.wgsl',

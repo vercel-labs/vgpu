@@ -258,9 +258,9 @@ test('renders from Motion’s postRender with Motion’s delta and the live card
 
   expect(mocks.init).toHaveBeenCalledOnce();
   expect(env.gpu.fns.surface).toHaveBeenCalledWith(env.canvas, { dpr: [1, 2] });
-  // Seven effects and the bubble draw are compiled before the first frame; the output effect
-  // against the surface format.
-  expect(env.compile).toHaveBeenCalledTimes(8);
+  // Seven effects are compiled before the first frame; the output effect against the surface
+  // format.
+  expect(env.compile).toHaveBeenCalledTimes(7);
   expect(env.compile).toHaveBeenCalledWith({ colors: ['rgba8unorm'] });
   expect(motion.postRender).toHaveBeenCalledOnce();
   expect(motion.postRender).toHaveBeenCalledWith(expect.any(Function), true);
@@ -269,39 +269,16 @@ test('renders from Motion’s postRender with Motion’s delta and the live card
   env.tick(20);
   expect(env.gpu.clock.advance).toHaveBeenCalledWith(0.02);
   expect(env.frame).toHaveBeenCalledOnce();
-  // backdrop → field → shade (+ bubbles) → bright → two blurs → composite into the surface.
+  // backdrop → field → shade → bright → two blurs → composite into the surface.
   expect(env.passes).toHaveLength(7);
   expect(env.passes.at(-1)?.target).toBe(env.surface);
   const field = env.effects[1]!.set.mock.calls.at(-1)?.[0].field;
   expect(field.count).toBeGreaterThan(0);
-  // The card is still falling in: no bubbles yet, so the scene pass only shades.
   expect(env.passes[2]!.draws).toEqual([[env.effects[2]]]);
 
   // A long stall (a background tab) advances the clock by at most 50 ms.
   env.tick(500);
   expect(env.gpu.clock.advance).toHaveBeenLastCalledWith(0.05);
-  renderer.dispose();
-});
-
-test('a settled card’s bubbles are one instanced triangle-strip draw over the shading', async () => {
-  const env = setup();
-  env.store.register(handle('surface', { left: 40, top: 60, width: 200, height: 240 }));
-  const renderer = start(env);
-  await renderer.ready;
-  expect(env.gpu.fns.draw).toHaveBeenCalledWith(
-    expect.objectContaining({ geometry: { topology: 'triangle-strip' }, vertices: 4 }),
-  );
-
-  env.play(2);
-  const bubbles = env.draws[0]!;
-  const layer = bubbles.set.mock.calls.at(-1)?.[0].layer;
-  expect(layer.bubbles).toHaveLength(28);
-  const scene = env.passes.at(-5)!;
-  expect(scene.draws[0]).toEqual([env.effects[2]]);
-  expect(scene.draws[1]?.[0]).toBe(bubbles);
-  const { instances } = scene.draws[1]![1] as { instances: number };
-  expect(instances).toBeGreaterThan(0);
-  expect(instances).toBeLessThanOrEqual(28);
   renderer.dispose();
 });
 
