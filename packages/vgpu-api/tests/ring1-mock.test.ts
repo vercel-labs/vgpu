@@ -38,6 +38,12 @@ struct Camera { value: f32 }
 @fragment fn main(@location(0) uv: vec2f) -> @location(0) vec4f { return vec4f(camera.value, uv, 1.0); }
 `;
 
+const SAME_RESOURCE_TWO_GROUPS_SHADER = `
+@group(0) @binding(0) var<uniform> first: vec4f;
+@group(1) @binding(0) var<uniform> second: vec4f;
+@fragment fn main() -> @location(0) vec4f { return first + second; }
+`;
+
 test("set() preserves canonical values while frame draws use separate snapshots", async () => {
   const gpu = await init();
   const wave = effect(gpu, WAVE, { label: "wave" });
@@ -118,6 +124,25 @@ test("R2 cache hits when alternating between two user-owned resource identities"
   frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (p) => p.draw(drawable)));
 
   expect(mock.calls.createBindGroup).toBe(2);
+  gpu.dispose();
+});
+
+test("bind group cache key distinguishes group index when identity tuples match", async () => {
+  const gpu = await init();
+  const drawable = effect(gpu, SAME_RESOURCE_TWO_GROUPS_SHADER, { label: "same-resource" });
+  const colorTarget = target(gpu, { size: [4, 4] });
+  const shared = gpu.device.createBuffer({ size: 16, usage: ["uniform", "copy_dst"] });
+  const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
+  const bindGroupsBeforeDraw = mock.calls.createBindGroup;
+
+  drawable.set({ first: shared, second: shared });
+  frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (pass) => pass.draw(drawable)));
+
+  expect(mock.calls.createBindGroup).toBe(bindGroupsBeforeDraw + 2);
+  expect(mock.createBindGroupDescriptors.slice(bindGroupsBeforeDraw).map(({ label }) => label)).toEqual([
+    "same-resource.group0",
+    "same-resource.group1",
+  ]);
   gpu.dispose();
 });
 
