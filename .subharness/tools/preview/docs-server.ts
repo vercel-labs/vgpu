@@ -1,7 +1,7 @@
 // Finds or starts the apps/docs dev server of one checkout so previews can be captured from it.
 import { spawn } from "node:child_process";
 import { closeSync, existsSync, openSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { connect, createServer } from "node:net";
 import path from "node:path";
 
@@ -34,9 +34,24 @@ export async function ensureDocsServer(root: string): Promise<DocsServer> {
     if (!(await listening(override))) throw new Error(`VGPU_DOCS_URL=${override} is not listening.`);
     return { url: override, started: false, log };
   }
-  const recorded = await readRecordedUrl(root);
-  if (recorded && (await listening(recorded))) return { url: recorded, started: false, log };
+  const recorded = await readRecordedState(root);
+  if (recorded && (recorded.pid === null || processAlive(recorded.pid)) && (await listening(recorded.url))) {
+    return { url: recorded.url, started: false, log };
+  }
   return startServer(root, log);
+}
+
+/** Stops the detached docs server recorded for `root` and forgets its state. */
+export async function stopDocsServer(root: string): Promise<void> {
+  const recorded = await readRecordedState(root);
+  if (typeof recorded?.pid === "number") {
+    try {
+      process.kill(-recorded.pid, "SIGTERM");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+    }
+  }
+  await rm(path.join(root, stateFile), { force: true });
 }
 
 async function startServer(root: string, log: string): Promise<DocsServer> {
@@ -64,14 +79,26 @@ async function startServer(root: string, log: string): Promise<DocsServer> {
   throw new Error(`docs dev server did not listen within ${startTimeoutMs / 1000} s; see ${log}`);
 }
 
-async function readRecordedUrl(root: string): Promise<string | undefined> {
+async function readRecordedState(root: string): Promise<{ url: string; pid: number | null } | undefined> {
   const file = path.join(root, stateFile);
   if (!existsSync(file)) return undefined;
   try {
-    const state = JSON.parse(await readFile(file, "utf8")) as { url?: unknown };
-    return typeof state.url === "string" ? state.url : undefined;
+    const state = JSON.parse(await readFile(file, "utf8")) as { url?: unknown; pid?: unknown };
+    if (typeof state.url !== "string") return undefined;
+    const pid = typeof state.pid === "number" && Number.isInteger(state.pid) && state.pid > 0 ? state.pid : null;
+    return { url: state.url, pid };
   } catch {
     return undefined;
+  }
+}
+
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
+    return true;
   }
 }
 

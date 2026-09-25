@@ -7,11 +7,11 @@
 //   node .subharness/tools/thumbs/mesa.ts <slug> --update   # rewrite them only if they differ > 2%
 //   node .subharness/tools/thumbs/mesa.ts --stop            # remove this checkout's container
 //
-// The first run builds the image and installs dependencies under amd64 emulation (several minutes);
-// run it in the background. Diff images for a failed check land in .context/thumbs/<slug>/.
+// It takes a few minutes the first time (image build + amd64 install), ~15–30 s after; run it in the
+// background. Diff images for a failed check land in .context/thumbs/<slug>/.
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -78,17 +78,49 @@ function ensureContainer(): void {
 }
 
 /** Copies every tracked or untracked-but-not-ignored file into the container's /workspace. */
-function syncSources(): Promise<void> {
+async function syncSources(): Promise<void> {
   const files = execFileSync("git", ["ls-files", "-co", "--exclude-standard", "-z"], { cwd: root, encoding: "utf8" })
     .split("\0")
     .filter((file) => file && existsSync(path.join(root, file)));
+  const manifest = `.context/mesa-source-manifest-${process.pid}.txt`;
+  const manifestPath = path.join(root, manifest);
+  mkdirSync(path.dirname(manifestPath), { recursive: true });
+  writeFileSync(manifestPath, `${files.join("\n")}\n`);
   // COPYFILE_DISABLE and --no-xattrs keep macOS metadata (._ files, xattrs) out of the archive.
   const tar = spawn("tar", ["--no-xattrs", "--null", "-T", "-", "-cf", "-"], { cwd: root, stdio: ["pipe", "pipe", "inherit"], env: { ...process.env, COPYFILE_DISABLE: "1" } });
-  const unpack = spawn("docker", ["exec", "-i", container, "tar", "-xf", "-", "-C", "/workspace"], { stdio: ["pipe", "inherit", "inherit"] });
+  const unpack = spawn("docker", ["exec", "-i", container, "sh", "-c", `
+    set -e
+    cd /workspace
+    tar -xf -
+    expected=/tmp/vgpu-source-expected.$$
+    actual=/tmp/vgpu-source-actual.$$
+    trap 'rm -f "$expected" "$actual"' 0 HUP INT TERM
+    for scope in apps/docs/examples apps/docs/public/examples; do
+      [ -d "$scope" ] || continue
+      LC_ALL=C find "$scope" -type f | LC_ALL=C sort > "$actual"
+      LC_ALL=C grep "^$scope/" ${manifest} | LC_ALL=C sort > "$expected" || :
+      comm -23 "$actual" "$expected" | while IFS= read -r stale; do
+        rm -f "$stale"
+      done
+    done
+    rm -f ${manifest}
+  `], { stdio: ["pipe", "inherit", "inherit"] });
   tar.stdout.pipe(unpack.stdin);
-  tar.stdin.end(files.join("\0"));
+  tar.stdin.end([...files, manifest].join("\0"));
+  try {
+    await Promise.all([
+      processExit(tar, "source archive"),
+      processExit(unpack, `source sync into ${container}`),
+    ]);
+  } finally {
+    rmSync(manifestPath, { force: true });
+  }
+}
+
+function processExit(child: ReturnType<typeof spawn>, label: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    unpack.on("exit", (code) => code === 0 ? resolve() : reject(new Error(`source sync into ${container} failed (${code})`)));
+    child.once("error", reject);
+    child.once("exit", (code) => code === 0 ? resolve() : reject(new Error(`${label} failed (${code})`)));
   });
 }
 

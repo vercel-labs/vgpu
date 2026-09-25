@@ -3,15 +3,27 @@
 //   node .subharness/tools/preview/cli.ts <slug> [--steps '<json array>' | --steps @steps.json]
 //     [--width 1280] [--height 720] [--dpr 1] [--touch] [--settle 2500] [--path /examples/<slug>]
 //     [--wait-for canvas] [--reduced-motion]
+//   node .subharness/tools/preview/cli.ts --stop-server
 //
 // Prints the capture summary as JSON; PNGs land in .context/shots/<slug>/.
 import { readFile } from "node:fs/promises";
 import { capturePreview, type CaptureStep } from "./capture.ts";
+import { stopDocsServer } from "./docs-server.ts";
 
 const booleanFlags = new Set(["reduced-motion", "touch"]);
-const [slug, ...rest] = process.argv.slice(2);
+const args = process.argv.slice(2);
+if (args[0] === "--stop-server") {
+  if (args.length !== 1) {
+    console.error("usage: node .subharness/tools/preview/cli.ts --stop-server");
+    process.exit(2);
+  }
+  await stopDocsServer(process.cwd());
+  console.log(JSON.stringify({ stopped: true }));
+  process.exit(0);
+}
+const [slug, ...rest] = args;
 if (!slug || slug.startsWith("--")) {
-  console.error("usage: node .subharness/tools/preview/cli.ts <slug> [--steps <json|@file>] [--width n] [--height n] [--dpr n] [--touch] [--settle ms] [--path p] [--wait-for sel] [--reduced-motion]");
+  console.error("usage: node .subharness/tools/preview/cli.ts <slug> [--steps <json|@file>] [--width n] [--height n] [--dpr n] [--touch] [--settle ms] [--path p] [--wait-for sel] [--reduced-motion] | --stop-server");
   process.exit(2);
 }
 const flags = new Map<string, string>();

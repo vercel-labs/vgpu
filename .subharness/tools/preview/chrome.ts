@@ -53,12 +53,21 @@ export async function launchChrome(viewport: { width: number; height: number }):
     "--disable-backgrounding-occluded-windows",
     "about:blank",
   ], { stdio: ["ignore", "ignore", "pipe"] });
-  const shutdown = async () => {
-    browser.kill("SIGKILL");
-    await rm(profile, { recursive: true, force: true }).catch(() => undefined);
+  const killOnParentExit = () => {
+    if (browser.exitCode === null && browser.signalCode === null) browser.kill("SIGKILL");
   };
+  process.once("exit", killOnParentExit);
+  let shutdownPromise: Promise<void> | undefined;
+  const shutdown = () => shutdownPromise ??= (async () => {
+    process.removeListener("exit", killOnParentExit);
+    if (browser.exitCode === null && browser.signalCode === null) {
+      browser.kill("SIGKILL");
+      await waitForExit(browser, 3000);
+    }
+    await rm(profile, { recursive: true, force: true }).catch(() => undefined);
+  })();
   try {
-    const endpoint = await devtoolsEndpoint(browser.stderr);
+    const endpoint = await devtoolsEndpoint(browser);
     const targets = await (await fetch(`http://127.0.0.1:${new URL(endpoint).port}/json/list`)).json() as Array<{ type: string; webSocketDebuggerUrl: string }>;
     const target = targets.find((candidate) => candidate.type === "page");
     if (!target) throw new Error("Chrome started without a page target.");
@@ -79,17 +88,46 @@ function chromePath(): string {
   throw new Error("No Chrome executable found; set VGPU_CHROME_PATH.");
 }
 
-function devtoolsEndpoint(stderr: NodeJS.ReadableStream): Promise<string> {
+function devtoolsEndpoint(browser: ReturnType<typeof spawn>): Promise<string> {
   return new Promise((resolve, reject) => {
     let output = "";
-    const timer = setTimeout(() => reject(new Error(`Chrome did not expose DevTools within 20 s:\n${output.slice(-2000)}`)), 20_000);
-    stderr.on("data", (chunk) => {
+    let settled = false;
+    const finish = (endpoint?: string, error?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      browser.stderr?.removeListener("data", onData);
+      browser.removeListener("exit", onExit);
+      if (error) reject(error);
+      else resolve(endpoint!);
+    };
+    const onData = (chunk: Buffer) => {
       output += String(chunk);
+      if (output.length > 20_000) output = output.slice(-10_000);
       const match = output.match(/DevTools listening on (ws:\/\/\S+)/);
       if (!match) return;
+      finish(match[1]);
+    };
+    const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+      finish(undefined, new Error(`Chrome exited before exposing DevTools (code ${code ?? "null"}, signal ${signal ?? "null"}):\n${output.slice(-2000)}`));
+    };
+    const timer = setTimeout(() => finish(undefined, new Error(`Chrome did not expose DevTools within 20 s:\n${output.slice(-2000)}`)), 20_000);
+    browser.stderr?.on("data", onData);
+    browser.once("exit", onExit);
+    if (browser.exitCode !== null || browser.signalCode !== null) onExit(browser.exitCode, browser.signalCode);
+  });
+}
+
+function waitForExit(browser: ReturnType<typeof spawn>, timeoutMs: number): Promise<void> {
+  if (browser.exitCode !== null || browser.signalCode !== null) return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => {
       clearTimeout(timer);
-      resolve(match[1]);
-    });
+      browser.removeListener("exit", done);
+      resolve();
+    };
+    const timer = setTimeout(done, timeoutMs);
+    browser.once("exit", done);
   });
 }
 

@@ -107,11 +107,11 @@ Paths below are relative to apps/docs unless they start at the repo root.
   moment; only the Mesa check decides baselines.
 - \`node .subharness/tools/thumbs/mesa.ts <slug> [--update]\` (Bash; background it) — CI's exact
   thumbnail renderer: the pinned linux/amd64 Mesa lavapipe image from infra/snapshots/Dockerfile, in
-  a long-lived container that keeps its install and build. The first run in a checkout takes
-  ~2 minutes; later runs sync sources and rebuild incrementally. Without --update it runs
+  a long-lived container that keeps its install and build. It takes a few minutes the first time
+  (image build + amd64 install), ~15–30 s after. Without --update it runs
   \`thumbs:check\` against your PNGs and saves diffs to .context/thumbs/<slug>/ on failure.
   (\`pnpm thumbs:docker\` is broken: its image runs the test suite, which needs git.)
-- verify_example — the pre-commit checklist in one call (~10 s): a WGSL compatibility-mode lint,
+- verify_example — the pre-commit checklist in one call (10–20 s): a WGSL compatibility-mode lint,
   focused vitest, import boundaries, vocabulary, filenames, apps/docs typecheck, ingest (commit what
   it regenerates), budget entry and PNGs present, and tree hygiene.
 - bundle_report — after \`pnpm --filter docs build\`: every route's gzip vs budget in one pass (the repo
