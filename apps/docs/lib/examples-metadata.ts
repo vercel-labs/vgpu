@@ -36,6 +36,7 @@ import { meta as adaptiveQualityMeta } from '../examples/adaptive-quality/meta';
 import { meta as glassSculptureMeta } from '../examples/glass-sculpture/meta';
 import { meta as spiralGalaxyMeta } from '../examples/spiral-galaxy/meta';
 import { meta as liquidLayoutMeta } from '../examples/liquid-layout/meta';
+import { meta as springChoreographyMeta } from '../examples/spring-choreography/meta';
 
 const rawMetadata = {
   gradient: gradientMeta,
@@ -72,6 +73,7 @@ const rawMetadata = {
   'glass-sculpture': glassSculptureMeta,
   'spiral-galaxy': spiralGalaxyMeta,
   'liquid-layout': liquidLayoutMeta,
+  'spring-choreography': springChoreographyMeta,
 } satisfies Record<ExampleSlug, ExampleMetaDefinition>;
 
 function withThumbnails(meta: ExampleMetaDefinition): ExampleMeta {
@@ -117,6 +119,7 @@ export const exampleMetadataBySlug = {
   'glass-sculpture': withThumbnails(rawMetadata['glass-sculpture']),
   'spiral-galaxy': withThumbnails(rawMetadata['spiral-galaxy']),
   'liquid-layout': withThumbnails(rawMetadata['liquid-layout']),
+  'spring-choreography': withThumbnails(rawMetadata['spring-choreography']),
 } satisfies Record<ExampleSlug, ExampleMeta>;
 
 export const examplesMetadata = exampleSlugs.map((slug) => exampleMetadataBySlug[slug]);
