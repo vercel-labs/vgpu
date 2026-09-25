@@ -35,8 +35,14 @@ Paths below are relative to apps/docs unless they start at the repo root.
 - Shaders: .wgsl files imported as \`import source from './name.wgsl'\`. Filenames kebab-case.
   Published files may import packages (vgpu, motion, lil-gui, react) and files inside the example
   directory only — never app helpers or another example; no node: imports outside the thumbnail.
+- No extra HTML chrome: the example is its canvas, lil-gui, and only the DOM elements that are the
+  demo's subject (e.g. Motion-animated cards, a draggable orb). No titles, eyebrows, taglines, hint
+  or instruction text, legends or badges over the canvas — the page around the example already has
+  the title and description. Instructions go in aria-labels / sr-only text.
 - meta.ts — \`export const meta = { slug, title, description, tags, capabilities, files, thumb? } as const;\`
-  with plain string/array literals (ingest reads the AST; no concatenation). \`files\` = published
+  with plain string/array literals (ingest reads the AST; no concatenation). \`description\` is ONE
+  sentence of at most ~25 words saying what the viewer sees and which libraries do what (it renders
+  as the lede under the title on the example page); implementation detail belongs in the code. \`files\` = published
   sources in reading order, index.tsx first, must include renderer.ts, must NOT include
   render-thumbnail.ts or tests. tags/capabilities come from
   lib/examples-api/vocabulary/{tags,capabilities}.json; add missing terms (kebab-case, keep the
