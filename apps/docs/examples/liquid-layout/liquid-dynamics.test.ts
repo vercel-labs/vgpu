@@ -109,16 +109,10 @@ describe('card bodies', () => {
     expect(landed.map((prim) => prim.type)).toEqual([0, 0]);
   });
 
-  test('a resting card bulges by a size-scaled wobble with a stable phase', () => {
+  test('a resting card is an exact rounded rect: no wobble', () => {
     const liquid = dynamics();
     const [body] = prims(run(liquid, 2, () => [sample({ id: 'a' })]));
-    // 6.5 px on a 120 px half-size card, scaled by the short half-size.
-    expect(wobbleAmplitude(body!.wobble)).toBeCloseTo(6.5 * (100 / 120), 3);
-    const phase = Math.floor(body!.wobble / 16);
-    expect(phase).toBeGreaterThanOrEqual(0);
-    expect(phase).toBeLessThan(64);
-    const [again] = prims(run(dynamics(), 2, () => [sample({ id: 'a' })]));
-    expect(again!.wobble).toBe(body!.wobble);
+    expect(wobbleAmplitude(body!.wobble)).toBe(0);
   });
 
   test('fast cards melt: their radius reaches for neighbours and their corners round', () => {
@@ -212,13 +206,13 @@ describe('the top layer', () => {
     expect(landed.panelLift).toBe(0);
   });
 
-  test('the open panel is a panel-layer rect with the larger corner and its own wobble', () => {
+  test('the open panel is a panel-layer rect with the larger corner and no wobble', () => {
     const liquid = dynamics();
     run(liquid, 2, () => [sample({ id: 'a', layer: 'panel', lifted: true, hw: 300, hh: 200 })]);
     const frame = liquid.update([sample({ id: 'a', layer: 'panel', lifted: true, hw: 300, hh: 200 })], DT, VIEWPORT);
     const [panel] = prims(frame);
     expect(panel).toMatchObject({ type: 2, corner: 32 });
-    expect(wobbleAmplitude(panel!.wobble)).toBeCloseTo(7, 3);
+    expect(wobbleAmplitude(panel!.wobble)).toBe(0);
   });
 });
 

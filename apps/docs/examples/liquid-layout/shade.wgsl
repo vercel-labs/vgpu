@@ -33,7 +33,6 @@ struct Shade {
 const VGPU_TINT = vec3f(0.35, 0.66, 1.0);
 const MOTION_TINT = vec3f(0.66, 0.46, 1.0);
 const FRINGE_BLUE = vec3f(0.3, 0.56, 1.0);
-const FRINGE_VIOLET = vec3f(0.6, 0.36, 1.0);
 const WHITE = vec3f(0.93, 0.96, 1.0);
 // Width of the rim in CSS px, up to its dark band.
 const TUBE = 6.5;
@@ -115,16 +114,17 @@ fn refractUv(uv: vec2f, surface: Surface, strength: f32, channel: f32) -> vec2f 
   return uv + offset / shade.viewport;
 }
 
-// A meniscus: the rim catches most light along top edges, at corners, and
-// where it faces the pointer, and glints unevenly along its length.
+// System-glass rim light: an even base line, brightest on the edge facing the
+// key light (upper left), a softer counter-highlight on the opposite edge, and
+// a little extra where it faces the pointer.
 fn rimGain(surface: Surface, p: vec2f, energy: f32) -> f32 {
   let n = surface.slope;
-  let top = max(-n.y, 0.0);
-  let corner = pow(abs(2.0 * n.x * n.y), 3.0);
+  let toKey = normalize(vec2f(-0.62, -0.78));
+  let key = pow(max(dot(n, toKey), 0.0), 1.5);
+  let counter = pow(max(dot(n, -toKey), 0.0), 2.0);
   let toLight = shade.light.xy - p;
-  let key = pow(max(dot(n, toLight / max(length(toLight), 1.0)), 0.0), 4.0);
-  let glint = 0.62 + 0.38 * sin(dot(p, vec2f(0.023, 0.017)) + 1.3) * sin(dot(p, vec2f(-0.011, 0.031)) + 0.4);
-  return (0.2 + 0.8 * top + 1.0 * corner + 0.5 * key) * glint * (1.0 + 0.35 * energy);
+  let pointer = pow(max(dot(n, toLight / max(length(toLight), 1.0)), 0.0), 4.0);
+  return (0.35 + 0.75 * key + 0.4 * counter + 0.3 * pointer) * (1.0 + 0.25 * energy);
 }
 
 fn lineWidth() -> f32 {
@@ -133,32 +133,39 @@ fn lineWidth() -> f32 {
 
 // Just outside the edge: a faint blue fringe over a thin dark outline.
 fn outerRim(d: f32, colour: vec3f, gain: f32) -> vec3f {
-  return mix(FRINGE_BLUE, colour, 0.5) * band(d, 0.9, 1.1) * 0.08 * gain;
+  return mix(FRINGE_BLUE, colour, 0.5) * band(d, 0.9, 1.1) * 0.03 * gain;
 }
 
-fn glass(surface: Surface, under: vec3f, veins: f32, hue: f32, gain: f32, energy: f32) -> vec3f {
+// Thin-film colour for the lower rim: a slow rainbow along the edge.
+fn iridescence(n: vec2f, p: vec2f) -> vec3f {
+  let phase = atan2(n.y, n.x) * 1.6 + dot(p, vec2f(0.004, 0.002));
+  return 0.5 + 0.5 * cos(vec3f(0.0, 2.1, 4.2) + phase);
+}
+
+fn glass(surface: Surface, under: vec3f, veins: f32, hue: f32, gain: f32, energy: f32, p: vec2f) -> vec3f {
   let s = surface.depth;
   let colour = tint(hue);
-  // Clear water: vgpu glass passes a cool grey, Motion glass lets more red through.
-  let clear = mix(vec3f(0.5, 0.54, 0.6), vec3f(0.8, 0.58, 0.66), clamp(hue, 0.0, 1.0));
-  let transmit = mix(clear, vec3f(1.0), 0.45 * surface.lens);
-  var result = under * transmit + colour * (0.006 + 0.012 * energy);
-  // The water gathers the filaments behind it: they glow brighter through the
-  // glass than beside it, tinted by the card, most in the lens band.
+  // Clear glass: almost no absorption, a whisper of the card's library colour.
+  let clear = mix(vec3f(0.965, 0.975, 1.0), vec3f(0.985, 0.965, 1.0), clamp(hue, 0.0, 1.0));
+  var result = under * clear + colour * (0.004 + 0.01 * energy);
   result += mix(colour, WHITE, 0.35) * veins * (0.16 + 0.22 * surface.lens);
-  // The rim, TUBE px wide: a crisp white line on its outer edge, a violet
-  // fringe, and a soft bevel glow fading inward to a thin dark band. The glow
-  // follows the rim's gain, so it pools along top edges and in corners.
-  result *= 1.0 - 0.35 * band(s, TUBE + 1.8, 1.3);
+  // Thickness shading: the bevel facing the key light (upper left) gathers
+  // light, the one facing away darkens, fading out across the lens band.
+  let toKey = normalize(vec2f(-0.62, -0.78));
+  result *= 1.0 + 0.3 * dot(surface.slope, toKey) * surface.lens;
+  // A soft inner shadow a few px inside the rim, then the rim lines.
+  result *= 1.0 - 0.08 * band(s, TUBE + 1.8, 2.0);
   let w = lineWidth();
-  var rim = WHITE * band(s, 1.1, w + 0.2) * 0.8;
-  rim += mix(FRINGE_VIOLET, colour, 0.4) * band(s, 2.6, w + 0.4) * 0.22;
-  rim += mix(colour, WHITE, 0.5) * band(s, TUBE, w + 0.25) * 0.04;
+  var rim = WHITE * band(s, 1.1, w + 0.2) * 0.42;
   let bevel = smoothstep(0.8, 2.8, s) * exp(-s / 3.4);
-  rim += mix(colour, WHITE, 0.45) * bevel * 0.24;
-  // Light the lens band gathers: a wide, faint glow inside the rim.
-  rim += mix(colour, WHITE, 0.3) * smoothstep(1.5, 5.0, s) * surface.lens * surface.lens * 0.12;
+  rim += WHITE * bevel * 0.16;
+  // A broad sheen inside the lit bevel, like light caught in thick glass.
+  let sheen = max(dot(surface.slope, toKey), 0.0) * surface.lens * smoothstep(2.0, 10.0, s);
+  rim += WHITE * sheen * 0.14;
   result += rim * gain;
+  // A faint iridescent line along the lower edge, where the bevel faces down.
+  let down = pow(max(surface.slope.y, 0.0), 2.0);
+  result += iridescence(surface.slope, p) * band(s, 1.8, w + 0.5) * down * 0.18;
   return result;
 }
 
@@ -172,12 +179,12 @@ fn gridShade(uv: vec2f, centre: vec4f) -> vec3f {
   let fade = gridFade();
   if (deep(d)) {
     let behind = backdropAt(uv);
-    return glass(flatAt(d), behind.rgb, behind.a, centre.b, 0.0, centre.a) * fade;
+    return glass(flatAt(d), behind.rgb, behind.a, centre.b, 0.0, centre.a, uv * shade.viewport) * fade;
   }
   let p = uv * shade.viewport;
-  let shadowTap = fieldAt(uv - vec2f(0.0, 10.0) / shade.viewport).r;
-  let shadow = (1.0 - smoothstep(-16.0, 34.0, shadowTap)) * 0.28;
-  let outline = 0.55 * exp(-max(d, 0.0) / 2.2);
+  let shadowTap = fieldAt(uv - vec2f(-6.0, 14.0) / shade.viewport).r;
+  let shadow = (1.0 - smoothstep(-20.0, 48.0, shadowTap)) * 0.16;
+  let outline = 0.22 * exp(-max(d, 0.0) / 1.6);
   let outside = backdropAt(uv).rgb * (1.0 - shadow) * (1.0 - outline);
   if (d > 4.0) {
     return outside * fade;
@@ -194,7 +201,7 @@ fn gridShade(uv: vec2f, centre: vec4f) -> vec3f {
     let green = backdropAt(refractUv(uv, surface, strength, 0.0));
     let blue = backdropAt(refractUv(uv, surface, strength, 1.0));
     let under = vec3f(red.r, green.g, blue.b);
-    color = mix(color, glass(surface, under, green.a, centre.b, gain, energy), cov);
+    color = mix(color, glass(surface, under, green.a, centre.b, gain, energy, p), cov);
   }
   return color * fade;
 }
@@ -212,15 +219,15 @@ fn gridShade(uv: vec2f, centre: vec4f) -> vec3f {
   }
   // The top layer's shadow falls wide and soft on the grid, inside a thin outline.
   let panelShadow = fieldAt(uv - vec2f(0.0, 22.0) / shade.viewport).g;
-  color *= 1.0 - (1.0 - smoothstep(-20.0, 80.0, panelShadow)) * 0.5 * lift;
-  color *= 1.0 - 0.5 * exp(-max(dp, 0.0) / 2.2) * lift;
+  color *= 1.0 - (1.0 - smoothstep(-20.0, 80.0, panelShadow)) * 0.22 * lift;
+  color *= 1.0 - 0.22 * exp(-max(dp, 0.0) / 1.6) * lift;
   // Under the top layer the grid's light fades toward the plain room, as its
   // copy does, so the rims behind never cross the panel's text; it comes back
   // in the panel's lens band.
   if (deep(dp)) {
     let behind = backdropAt(uv);
     let under = mix(behind.rgb * gridFade(), grid, GRID_THROUGH);
-    let lit = glass(flatAt(dp), under, behind.a, shade.panelHue, 0.0, shade.panelEnergy);
+    let lit = glass(flatAt(dp), under, behind.a, shade.panelHue, 0.0, shade.panelEnergy, p);
     color = mix(color, lit, lift);
   } else if (dp < 4.0) {
     let surface = surfaceAt(dp, gradientAt(uv).zw);
@@ -233,7 +240,7 @@ fn gridShade(uv: vec2f, centre: vec4f) -> vec3f {
       let behind = backdropAt(seen);
       let through = GRID_THROUGH + (1.0 - GRID_THROUGH) * surface.lens;
       let under = mix(behind.rgb * gridFade(), gridShade(seen, fieldAt(seen)), through);
-      let lit = glass(surface, under, behind.a, shade.panelHue, gain, shade.panelEnergy);
+      let lit = glass(surface, under, behind.a, shade.panelHue, gain, shade.panelEnergy, p);
       color = mix(color, lit, cov);
     }
   }

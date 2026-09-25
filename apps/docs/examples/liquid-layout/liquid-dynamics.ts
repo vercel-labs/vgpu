@@ -198,12 +198,13 @@ const NECK_REST = 0.35;
 const NECK_GROW = 0.9;
 const NECK_BREAK = 0.22;
 const NECK_INSET = 8;
-const NECK_BULGE = 4;
+const NECK_BULGE = 0;
 const NECK_K = 7;
 
-// Surface tension: edges bulge by up to WOBBLE px on a REACH_SIZE card.
-const WOBBLE = 6.5;
-const PANEL_WOBBLE = 7;
+// Resting edges stay exact rounded rects, like system glass; only motion
+// (strain, melt, necks) deforms them.
+const WOBBLE = 0;
+const PANEL_WOBBLE = 0;
 // Under reduced motion the surface still breathes, five times slower.
 const CALM_FLOW = 0.2;
 

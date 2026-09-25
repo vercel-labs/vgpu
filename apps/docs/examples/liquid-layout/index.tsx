@@ -23,7 +23,7 @@ export function Example() {
   }, [store]);
 
   return (
-    <div ref={rootRef} className="relative h-full w-full overflow-hidden bg-black">
+    <div ref={rootRef} className="relative h-full w-full overflow-hidden bg-[#b9bcc2]">
       <canvas ref={canvasRef} aria-hidden="true" className="absolute inset-0 block h-full w-full touch-none" />
       <LiquidCards store={store} />
     </div>

@@ -42,11 +42,11 @@ export interface Look {
 }
 
 export const DEFAULT_LOOK: Look = {
-  refraction: 13,
-  dispersion: 0.2,
-  lens: 24,
-  bloom: 0.3,
-  exposure: 1.05,
+  refraction: 16,
+  dispersion: 0.015,
+  lens: 30,
+  bloom: 0.12,
+  exposure: 1.0,
 };
 
 export interface SceneInput {
@@ -149,7 +149,7 @@ export function createPipeline(gpu: Gpu, size: Size, dpr: number, initialLook: L
     }),
     bright: effect(gpu, brightWgsl, {
       label: 'liquid-layout-bright',
-      set: { src: targets.scene, samp, bright: { texelSize: targets.scene.texelSize, threshold: 0.45, smoothing: 0.6 } },
+      set: { src: targets.scene, samp, bright: { texelSize: targets.scene.texelSize, threshold: 1.0, smoothing: 0.5 } },
     }),
     blur: BLURS.map((options, i) =>
       effect(gpu, blurWgsl, {
@@ -163,7 +163,7 @@ export function createPipeline(gpu: Gpu, size: Size, dpr: number, initialLook: L
         scene: targets.scene,
         bloomTex: targets.bloom[0],
         samp,
-        composite: { aspect: size[0] / Math.max(1, size[1]), bloom: look.bloom, exposure: look.exposure, vignette: 0.28 },
+        composite: { aspect: size[0] / Math.max(1, size[1]), bloom: look.bloom, exposure: look.exposure, vignette: 0.12 },
       },
     }),
   };
