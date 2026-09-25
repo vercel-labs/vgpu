@@ -188,7 +188,9 @@ the playbook or tools, and log feedback, verdicts, and changes in `.context/work
   `subharness wait <task-id>`. Never use shell `&`.
 - Follow up in the same session with `subharness send <session-id> --prompt "..."`; cancel with
   `subharness cancel <task-id>`. `subharness dashboard` shows live sessions.
-- Exit code 0 means a response arrived, not that the goal was met — read the response.
+- Exit code 0 means a response arrived, not that the goal was met — read the response. A response
+  with `State: waiting` means the specialist paused for its own child (e.g. the example-builder's
+  reviewer); follow it with `subharness wait <task-id> --after <response-id>` until `completed`.
 - Check readiness without spending a model turn: `npx subharness check repo:<name>`.
 
 ## Personal access (per user, not committed)

@@ -68,14 +68,22 @@ export async function press(page: ChromePage, pointer: Pointer, kind: PointerKin
   });
 }
 
-/** Jumps a touch pointer (touch has no hover, so it teleports) or glides a mouse to `point`. */
-export async function approach(page: ChromePage, pointer: Pointer, kind: PointerKind, point: Point): Promise<void> {
+/**
+ * Brings the pointer to `point` before a press. Touch teleports (it has no hover). A mouse glides
+ * for 60 ms, or jumps in one event when `snap` is set — used for element anchors, so a press on a
+ * moving element lands on it instead of where it was 60 ms earlier.
+ */
+export async function approach(page: ChromePage, pointer: Pointer, kind: PointerKind, point: Point, snap = false): Promise<void> {
   if (kind === "touch" && !pointer.pressed) {
     pointer.x = point.x;
     pointer.y = point.y;
     return;
   }
-  await glide(page, pointer, kind, [point], 60);
+  await glide(page, pointer, kind, [point], snap ? 0 : 60);
+}
+
+export function isElementAnchor(anchor: Anchor | undefined): boolean {
+  return Boolean(anchor && "selector" in anchor);
 }
 
 const namedKeys: Record<string, { code: string; keyCode: number; text?: string }> = {

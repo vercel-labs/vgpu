@@ -5,7 +5,7 @@ import path from "node:path";
 import type { ChromePage } from "./chrome.ts";
 import { contactSheet } from "./contact-sheet.ts";
 import { imageStats, type ImageStats } from "./image-stats.ts";
-import { approach, glide, press, pressKey, resolveAnchor, type Anchor, type Point, type Pointer, type PointerKind } from "./input.ts";
+import { approach, glide, isElementAnchor, press, pressKey, resolveAnchor, type Anchor, type Point, type Pointer, type PointerKind } from "./input.ts";
 import { focusExpression, guiExpression, perfExpression, rectExpression, rectsExpression, visibilityExpression } from "./page-scripts.ts";
 
 export type Clip =
@@ -90,20 +90,20 @@ export async function runSteps(context: StepContext, steps: readonly CaptureStep
     } else if (step.type === "move") {
       await glide(page, pointer, kind, [await resolveAnchor(page, step.to)], step.durationMs ?? 200);
     } else if (step.type === "down") {
-      if (step.at) await approach(page, pointer, kind, await resolveAnchor(page, step.at));
+      if (step.at) await approach(page, pointer, kind, await resolveAnchor(page, step.at), isElementAnchor(step.at));
       await press(page, pointer, kind, true);
     } else if (step.type === "up") {
       if (step.at) await glide(page, pointer, kind, [await resolveAnchor(page, step.at)], 60);
       await press(page, pointer, kind, false);
     } else if (step.type === "click") {
       const target = step.selector ? { selector: step.selector } : step.at;
-      if (target) await approach(page, pointer, kind, await resolveAnchor(page, target));
+      if (target) await approach(page, pointer, kind, await resolveAnchor(page, target), isElementAnchor(target));
       await press(page, pointer, kind, true);
       await sleep(kind === "touch" ? 40 : 0);
       await press(page, pointer, kind, false);
     } else if (step.type === "drag") {
       const route = await dragRoute(page, step);
-      await approach(page, pointer, kind, route[0]);
+      await approach(page, pointer, kind, route[0], isElementAnchor(step.from ?? step.points?.[0]));
       await press(page, pointer, kind, true);
       await glide(page, pointer, kind, route.slice(1), step.durationMs ?? 400);
       if (step.release ?? true) await press(page, pointer, kind, false);

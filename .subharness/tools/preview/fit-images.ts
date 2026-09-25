@@ -1,17 +1,17 @@
-// Keeps tool-result images inside the transport limits (5 MiB per image, 8 MiB per result) by
-// halving the largest PNGs until everything fits.
+// Keeps tool-result images inside the model's image limits (5 MB per image counted on the base64
+// payload, so ~3.7 MB of PNG) and the result limit, by halving the largest PNGs until they fit.
 import pngjs from "pngjs";
 
-const perImage = 4_500_000;
-const perResult = 7_000_000;
+const perImage = 2_500_000;
+const perResult = 6_000_000;
 
 /**
  * Returns `images` with oversized entries halved (2×2 box filter, repeatedly) so each stays under
- * ~4.5 MB and the set under ~7 MB. Files on disk keep full resolution; only the returned copies
+ * ~2.5 MB and the set under ~6 MB. Files on disk keep full resolution; only the returned copies
  * shrink.
  *
  * @example
- *   const [small] = fitImages([hugePng]); // small.length < 4_500_000
+ *   const [small] = fitImages([hugePng]); // small.length < 2_500_000
  */
 export function fitImages(images: readonly Buffer[]): Buffer[] {
   const fitted = images.map((image) => shrinkUntil(image, perImage));

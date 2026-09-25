@@ -1,6 +1,6 @@
 // subharness tool: render an example's thumbnail at full size on the local GPU (Metal on macOS) in
 // seconds, to judge composition before paying for the canonical Mesa render.
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { mkdir, readFile, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import pngjs from "pngjs";
 import { tool, toolResult } from "subharness";
@@ -10,7 +10,7 @@ import { runCommand } from "./run.ts";
 export const renderThumbnailTool = tool({
   description: [
     "Render an example's gallery thumbnails (card 1280×720 and hero 1600×900) through its real render-thumbnail.ts on this machine's GPU, in seconds, without touching the committed baselines.",
-    "Returns both images, their luma variance (must be ≥ 6), render time, whether two renders are byte-identical (repeat: 2), and the share of pixels that differ from the committed baseline (a code change that moves many pixels needs a Mesa --update).",
+    "Returns both images, their luma variance (must be ≥ 6), render time, whether two renders are byte-identical (repeat: 2), the share of pixels that changed since the previous preview (what your last edit did), and a coarse Metal-vs-committed-Mesa difference (~5–10% is normal; only the Mesa check decides).",
     "Use it to pick the thumbnail moment; then confirm in CI's renderer with `node .subharness/tools/thumbs/mesa.ts <slug>` (Bash, slow).",
   ].join(" "),
   inputSchema: z.object({
@@ -39,6 +39,10 @@ export const renderThumbnailTool = tool({
  */
 export async function renderThumbnailPreview(root: string, slug: string, repeat: 1 | 2) {
   const docs = path.join(root, "apps/docs");
+  const base = path.join(root, ".context/thumbs", slug);
+  // Keep the last preview so the report can say what the latest edit changed.
+  await rm(path.join(base, "previous"), { recursive: true, force: true });
+  await rename(path.join(base, "metal-1"), path.join(base, "previous")).catch(() => undefined);
   const runs = [];
   for (let index = 0; index < repeat; index++) {
     const dir = path.join(root, ".context/thumbs", slug, `metal-${index + 1}`);
@@ -57,7 +61,10 @@ export async function renderThumbnailPreview(root: string, slug: string, repeat:
     lines: runs[0].result.output.split("\n").filter((line) => line.startsWith(`- ${slug}.`)),
     files: kinds.map((kind) => path.join(runs[0].dir, `${slug}.${kind}.png`)),
     deterministic: repeat === 2 ? await identical(runs.map((run) => run.dir), slug) : undefined,
-    changedVsBaseline: Object.fromEntries(await Promise.all(kinds.map(async (kind) => [kind, await changedShare(files[kind], path.join(docs, "public/examples", `${slug}.${kind}.png`))]))),
+    changedVsPreviousPreview: Object.fromEntries(await Promise.all(kinds.map(async (kind) => [kind, await changedShare(files[kind], path.join(base, "previous", `${slug}.${kind}.png`))]))),
+    // Committed baselines come from CI's Mesa renderer, which differs from Metal by ~5–10% of pixels
+    // even for identical code, so this number is only a coarse signal; the Mesa check decides.
+    changedVsBaselineMetalVsMesa: Object.fromEntries(await Promise.all(kinds.map(async (kind) => [kind, await changedShare(files[kind], path.join(docs, "public/examples", `${slug}.${kind}.png`))]))),
   };
   return { report, files };
 }
@@ -73,7 +80,7 @@ async function identical(dirs: string[], slug: string): Promise<boolean> {
 /** Share of pixels whose largest channel difference exceeds 10% (pixelmatch's threshold scale). */
 async function changedShare(png: Buffer, baselinePath: string): Promise<string> {
   const baseline = await readFile(baselinePath).catch(() => undefined);
-  if (!baseline) return "no committed baseline";
+  if (!baseline) return "none";
   const a = pngjs.PNG.sync.read(png);
   const b = pngjs.PNG.sync.read(baseline);
   if (a.width !== b.width || a.height !== b.height) return `size differs (${b.width}×${b.height} committed)`;

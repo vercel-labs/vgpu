@@ -55,6 +55,19 @@ const step = z.discriminatedUnion("type", [
 
 const maxImages = 8;
 
+const inputSchema = z.object({
+  slug: z.string().regex(/^[a-z0-9-]+$/).describe("Example slug, e.g. \"fluid\"."),
+  path: z.string().startsWith("/").optional().describe("Override the URL path, e.g. \"/examples/fluid\" for the gallery page."),
+  width: z.number().int().min(320).max(2560).optional().describe("Viewport width in CSS px (default 1280)."),
+  height: z.number().int().min(240).max(1600).optional().describe("Viewport height in CSS px (default 720)."),
+  dpr: z.number().min(1).max(3).optional().describe("Device pixel ratio (default 1). Use 2 for realistic GPU cost."),
+  touch: z.boolean().optional().describe("Emulate a touch screen (needed for pointer: \"touch\")."),
+  settleMs: z.number().int().min(0).max(30_000).optional().describe("Wait after ready before the steps run (default 2500)."),
+  waitFor: z.string().optional().describe("CSS selector that marks the page ready (default \"canvas\")."),
+  reducedMotion: z.boolean().optional().describe("Start with prefers-reduced-motion: reduce."),
+  steps: z.array(step).max(80).optional(),
+});
+
 /**
  * `capture_preview` opens `/preview/<slug>` of this checkout's docs dev server (started on demand)
  * in headless Chrome with a real WebGPU adapter, runs scripted steps, and returns the screenshots
@@ -71,19 +84,18 @@ export const capturePreviewTool = tool({
     `Up to ${maxImages} screenshots/bursts per call; a final screenshot is taken if none is requested.`,
     "The report flags `uniform: true` frames (black/failed render), console problems, the vgpu preview error overlay, Next dev errors, and the focused element per screenshot. PNGs are saved under .context/shots/<slug>/.",
   ].join(" "),
-  inputSchema: z.object({
-    slug: z.string().regex(/^[a-z0-9-]+$/).describe("Example slug, e.g. \"fluid\"."),
-    path: z.string().startsWith("/").optional().describe("Override the URL path, e.g. \"/examples/fluid\" for the gallery page."),
-    width: z.number().int().min(320).max(2560).optional().describe("Viewport width in CSS px (default 1280)."),
-    height: z.number().int().min(240).max(1600).optional().describe("Viewport height in CSS px (default 720)."),
-    dpr: z.number().min(1).max(3).optional().describe("Device pixel ratio (default 1). Use 2 for realistic GPU cost."),
-    touch: z.boolean().optional().describe("Emulate a touch screen (needed for pointer: \"touch\")."),
-    settleMs: z.number().int().min(0).max(30_000).optional().describe("Wait after ready before the steps run (default 2500)."),
-    waitFor: z.string().optional().describe("CSS selector that marks the page ready (default \"canvas\")."),
-    reducedMotion: z.boolean().optional().describe("Start with prefers-reduced-motion: reduce."),
-    steps: z.array(step).max(80).optional(),
-  }),
+  inputSchema,
   execute: async (input) => {
+    // The harness reports a thrown tool error only as "custom tool failed"; return the reason instead.
+    try {
+      return await capture(input);
+    } catch (error) {
+      return `capture_preview failed: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  },
+});
+
+async function capture(input: z.infer<typeof inputSchema>) {
     const steps = input.steps ?? [];
     if (imageSteps(steps) > maxImages) throw new Error(`At most ${maxImages} screenshot/burst steps per call; got ${imageSteps(steps)}.`);
     const result = await capturePreview({
@@ -110,5 +122,4 @@ export const capturePreviewTool = tool({
         ]),
       ],
     });
-  },
-});
+}

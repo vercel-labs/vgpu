@@ -62,6 +62,8 @@ Paths below are relative to apps/docs unless they start at the repo root.
   vitest a .wgsl import is \`{ wgsl, functionExports, version }\` and module-level names are mangled
   (\`_vgsl_<hash>__NAME\`) — a test that checks WGSL constants against TypeScript must match that
   prefix. Keep constants shared by TS and WGSL in one place (a uniform, or a test that pins them).
+  When mocking \`motion\`, spread \`await importOriginal()\` so pure generators (\`inertia\`, \`spring\`)
+  stay real for tests and the thumbnail.
 
 ## Registration
 1. lib/example-slugs.ts — append the slug (order = gallery order).
@@ -92,10 +94,17 @@ Paths below are relative to apps/docs unless they start at the repo root.
     \`gui\` sets lil-gui controllers by label (option controllers by option label) to compare variants
     without editing code; \`rects\` and element anchors (\`{ selector, at }\`) target things that move;
     \`key\` Enter/Space activate buttons.
+  - Element anchors on down/click/drag jump straight to the element, so pressing a moving target
+    (a coasting orb) lands on it. Failures come back as text ("capture_preview failed: No element
+    matches ..."). Images are downscaled to fit the result (~2.5 MB each): prefer bursts of ≤ 8–12
+    frames and clip large scenes.
+  - Idle choreographies that pause while the pointer is over the demo never run after a mouse step:
+    capture idle before any pointer step, or in its own call.
   - Humans can run the same capture: \`node .subharness/tools/preview/cli.ts <slug> --dpr 2 --steps '<json>'\`.
 - render_thumbnail — card + hero through render-thumbnail.ts on the local GPU in ~2 s, into
-  .context/thumbs/<slug>/, with determinism (\`repeat: 2\`) and drift from the committed baselines.
-  Use it to pick the thumbnail moment.
+  .context/thumbs/<slug>/, with determinism (\`repeat: 2\`), what changed since the previous preview,
+  and a coarse Metal-vs-committed-Mesa difference (~5–10% is normal). Use it to pick the thumbnail
+  moment; only the Mesa check decides baselines.
 - \`node .subharness/tools/thumbs/mesa.ts <slug> [--update]\` (Bash; background it) — CI's exact
   thumbnail renderer: the pinned linux/amd64 Mesa lavapipe image from infra/snapshots/Dockerfile, in
   a long-lived container that keeps its install and build. The first run in a checkout takes
@@ -106,8 +115,9 @@ Paths below are relative to apps/docs unless they start at the repo root.
   focused vitest, import boundaries, vocabulary, filenames, apps/docs typecheck, ingest (commit what
   it regenerates), budget entry and PNGs present, and tree hygiene.
 - bundle_report — after \`pnpm --filter docs build\`: every route's gzip vs budget in one pass (the repo
-  checker stops at the first failure), shared chunks, the delta against the latest green canary CI
-  run, and a proposed budget entry. Manual fallback: run scripts/check-example-bundles.mjs with
+  checker stops at the first failure), the target route's chunks with gzip size, content hints and
+  sharing routes (for the \`$comment\`), the delta against the latest green canary CI run, and a
+  proposed budget entry. Manual fallback: run scripts/check-example-bundles.mjs with
   \`VGPU_EXAMPLE_BUDGETS_FILE\` pointing at a copy with loosened baselines, and read CI's numbers with
   \`gh api repos/vercel-labs/vgpu/actions/jobs/<docs-app-build job id>/logs\`.
 - Shell: the Bash tool's working directory persists between calls — use absolute paths or
@@ -142,6 +152,14 @@ Paths below are relative to apps/docs unless they start at the repo root.
   onClick. Hover ignores touch pointers. During a layoutId handoff both elements exist at once — key
   registries by id and let an unmount remove only its own handle. \`MotionConfig reducedMotion="user"\`
   skips transform/layout animations but still runs opacity.
+- Drag and inertia facts (motion 12.43): \`dragConstraints={ref}\` rescales the position on every
+  window/element resize from stale measurements and walks the element into a corner over a few
+  resizes — pass object constraints computed from measured bounds and rescale yourself in a layout
+  effect. Motion finishes a non-spring animation immediately when its keyframes do not change
+  (\`canAnimate\`), so \`animate(x, x.get(), { type: 'inertia', velocity })\` does nothing; pass two
+  different keyframes (inertia derives its target from velocity × power anyway). Inertia with
+  min/max hands over to a bounce spring (bounceStiffness/bounceDamping): the value overshoots the
+  bound and springs back — there is no restitution/reflection.
 
 ## DOM content, idle choreography, and controls
 - An idle/autoplay choreography (so the gallery card is alive) must pause while the pointer is over
@@ -152,8 +170,10 @@ Paths below are relative to apps/docs unless they start at the repo root.
   \`new GUI({ title, container, width })\` with \`Object.assign(gui.domElement.style, { position: 'absolute',
   top: '16px', right: '16px', zIndex: '10' })\` inside the example root; start it closed when it would
   cover content (narrow viewports); \`gui.destroy()\` in dispose. Sync programmatic changes with
-  \`controller.updateDisplay()\`, not \`.listen()\` (it polls every frame). Never build custom HTML/React
-  control panels.
+  \`controller.updateDisplay()\`, not \`.listen()\` (it polls every frame). lil-gui 0.21 DOM: root
+  \`.lil-gui.lil-root\`, title \`.lil-title\`, width via the \`--width\` CSS variable; \`onOpenClose\` also
+  fires for folders (compare its argument with the root). If a moving subject (an orb) can rest under
+  the panel, fade the panel while they overlap. Never build custom HTML/React control panels.
 
 ## GPU rules
 - Never hardcode a canvas format; compile/prewarm output effects with \`{ colors: [output.format] }\`.
@@ -173,6 +193,9 @@ Paths below are relative to apps/docs unless they start at the repo root.
   spring-choreography. Particle fill rate, not compute, usually dominates.
 - WGSL reserves many everyday words as identifiers (e.g. \`target\`, \`filter\`, \`sample\`, \`mod\`,
   \`self\`, \`ref\`, \`common\`, \`final\`, \`module\`, \`handle\`); pick descriptive names.
+- Grid fluid solvers: free-slip velocity walls also need a zero-gradient dye boundary, or clamped
+  backtraces re-feed stagnant dye into a bright line along the walls. Half-float render targets
+  (rg16float/r16float/rgba16float) with filtering work on Mesa compat.
 - Thumbnails must be deterministic run to run: make particle state a closed-form function of time
   where possible (and keep meta.thumb.warmupFrames low — lavapipe is slow at 1600×900), drive
   simulations with a fixed dt and fixed iteration counts, never read unwritten targets, and splat
@@ -187,7 +210,9 @@ Paths below are relative to apps/docs unless they start at the repo root.
   examples/spiral-galaxy (compute particles, instanced quads, HDR bloom chain, lil-gui, thorough tests),
   examples/liquid-layout (Motion + DOM + frame.postRender clock, store pattern, idle choreography),
   examples/spring-choreography (Motion spring/stagger LUTs, animate() timeline controls, 262k–1M
-  compute particles, triangle-strip sparks, deterministic superposition).
+  compute particles, triangle-strip sparks, deterministic superposition),
+  examples/throwable-fluid (motion/react drag + inertia orb driving a half-float fragment fluid,
+  object drag constraints, lens composite, panel fade).
 
 ## Thumbnails
 - Pick the moment with render_thumbnail (fast, local GPU). Then run the Mesa tool once: without

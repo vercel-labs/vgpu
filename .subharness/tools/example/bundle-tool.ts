@@ -2,6 +2,7 @@
 // one pass, show which chunks routes share, and compare with the latest canary CI measurement.
 import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { gzipSync } from "node:zlib";
 import path from "node:path";
 import { tool } from "subharness";
 import { z } from "zod";
@@ -70,10 +71,17 @@ export const bundleReportTool = tool({
       moved: routes.filter((route) => route.slug !== slug && route.localMinusCi !== undefined && Math.abs(route.localMinusCi) >= 100),
       target: target && {
         ...routes.find((route) => route.slug === slug),
-        chunks: target.chunks.map((chunk) => {
+        chunks: await Promise.all(target.chunks.map(async (chunk) => {
           const others = (owners.get(chunk) ?? []).filter((owner) => owner !== slug);
-          return { chunk, sharedWith: others.length > 6 ? `${others.length} other routes (framework)` : others };
-        }),
+          const source = await readFile(path.join(docs, ".next/static/chunks", chunk));
+          return {
+            chunk,
+            gzip: gzipSync(source).byteLength,
+            raw: source.byteLength,
+            hints: packageHints(source.toString("utf8")),
+            sharedWith: others.length > 6 ? `${others.length} other routes (framework)` : others,
+          };
+        })),
         proposedBudget: { [`examples.${slug}`]: target.gzip, [`$comment:${slug}`]: `Measured at ${target.gzip} B gzip from a local production build on Node ${process.versions.node} / Next <version>; <what dominates the size>.` },
       },
       ci: ciMeasured && ("routes" in ciMeasured ? { run: ciMeasured.run, sha: ciMeasured.sha } : ciMeasured),
@@ -82,6 +90,19 @@ export const bundleReportTool = tool({
     });
   },
 });
+
+/** Rough content hints for a minified chunk, for writing the `$comment` budget notes. */
+function packageHints(source: string): string[] {
+  const hints: [string, RegExp][] = [
+    ["motion/react (layout/drag/presence)", /layoutId|dragConstraints|AnimatePresence|PresenceContext/],
+    ["motion core", /springValue|stagger|inertia|calcGeneratorDuration/],
+    ["lil-gui", /lil-gui|\.lil-controller/],
+    ["vgpu", /VGPU-[A-Z]/],
+    ["example WGSL", /@fragment|@compute|@vertex/],
+    ["react-dom", /react-dom|__reactFiber/],
+  ];
+  return hints.filter(([, pattern]) => pattern.test(source)).map(([name]) => name);
+}
 
 function jsonSafe<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
