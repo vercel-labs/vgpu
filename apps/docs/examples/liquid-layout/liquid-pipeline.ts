@@ -1,6 +1,7 @@
 // GPU resources and the per-frame chain shared by the browser renderer and the
-// thumbnail: backdrop and liquid distance field at CSS-pixel resolution →
-// glass shading at device resolution → a faint quarter-resolution bloom →
+// thumbnail: backdrop at device resolution (its grid is hairlines) and the
+// liquid distance field at CSS-pixel resolution → glass shading at device
+// resolution → a faint quarter-resolution bloom →
 // composite (ACES, vignette, dither) into the output. Seven passes, one frame. The module
 // imports nothing DOM-bound.
 
@@ -82,7 +83,7 @@ export function createPipeline(gpu: Gpu, size: Size, dpr: number, initialLook: L
   let css = cssSize(size, dpr);
 
   const targets = {
-    backdrop: target(gpu, { size: css, format: FORMAT, label: 'liquid-layout-backdrop' }),
+    backdrop: target(gpu, { size, format: FORMAT, label: 'liquid-layout-backdrop' }),
     field: target(gpu, { size: css, format: FORMAT, label: 'liquid-layout-field' }),
     scene: target(gpu, { size, format: FORMAT, label: 'liquid-layout-scene' }),
     bloom: [
@@ -120,7 +121,7 @@ export function createPipeline(gpu: Gpu, size: Size, dpr: number, initialLook: L
   const effects = {
     backdrop: effect(gpu, backdropWgsl, {
       label: 'liquid-layout-backdrop',
-      set: { backdrop: { viewport: css, time: 0, dim: 0 } },
+      set: { backdrop: { viewport: css, time: 0, dim: 0, dpr } },
     }),
     field: effect(gpu, fieldWgsl, {
       label: 'liquid-layout-field',
@@ -169,7 +170,7 @@ export function createPipeline(gpu: Gpu, size: Size, dpr: number, initialLook: L
   };
 
   const bind = (outputSize: Size) => {
-    effects.backdrop.set({ backdrop: { viewport: css } });
+    effects.backdrop.set({ backdrop: { viewport: css, dpr: ratio } });
     effects.field.set({ field: { viewport: css } });
     effects.shade.set({ shade: { viewport: css, fieldTexel: targets.field.texelSize, dpr: ratio } });
     effects.bright.set({ bright: { texelSize: targets.scene.texelSize } });
@@ -183,7 +184,7 @@ export function createPipeline(gpu: Gpu, size: Size, dpr: number, initialLook: L
       ratio = nextDpr;
       css = cssSize(nextSize, nextDpr);
       // Effects bind the Target objects, so resized attachments follow automatically.
-      targets.backdrop.resize(css);
+      targets.backdrop.resize(nextSize);
       targets.field.resize(css);
       targets.scene.resize(nextSize);
       targets.bloom[0].resize(scaled(nextSize, BLOOM_DIVISOR));
