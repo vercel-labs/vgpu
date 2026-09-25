@@ -380,7 +380,7 @@ function createGui(
     gui.add(settings, 'autoplay').name('Autoplay');
     const liquid = gui.addFolder('Liquid');
     liquid.add(settings, 'smoothness', 0, 2, 0.05).name('Merge radius').onChange(actions.liquid);
-    liquid.add(settings, 'refraction', 0, 24, 1).name('Refraction').onChange(actions.liquid);
+    liquid.add(settings, 'refraction', 0, 60, 1).name('Refraction').onChange(actions.liquid);
     liquid.add(settings, 'dispersion', 0, 0.5, 0.01).name('Dispersion').onChange(actions.liquid);
     liquid.add(settings, 'bloom', 0, 1.5, 0.05).name('Bloom').onChange(actions.liquid);
     const spring = gui.addFolder('Layout spring');

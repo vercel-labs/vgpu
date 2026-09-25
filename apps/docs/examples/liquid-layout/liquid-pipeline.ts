@@ -31,7 +31,7 @@ const BLURS = [
 ] as const;
 
 export interface Look {
-  /** How far (CSS px) the lens band looks inward at the rim. */
+  /** Bezel width (CSS px): how far inside the edge the glass curves. */
   readonly refraction: number;
   /** Per-channel spread of the refraction offset (0 = no dispersion). */
   readonly dispersion: number;
@@ -42,9 +42,9 @@ export interface Look {
 }
 
 export const DEFAULT_LOOK: Look = {
-  refraction: 16,
-  dispersion: 0.015,
-  lens: 30,
+  refraction: 30,
+  dispersion: 0.14,
+  lens: 34,
   bloom: 0.12,
   exposure: 1.0,
 };
