@@ -174,19 +174,21 @@ describe('card bodies', () => {
 });
 
 describe('leaving cards', () => {
-  test('a removed card drains into a falling drop that finishes offscreen', () => {
+  test('a removed card closes into its centre as a circle, the entry in reverse', () => {
     const liquid = dynamics();
     run(liquid, 2, () => [sample({ id: 'a', hue: 1 })]);
-    // The card is gone, its liquid is not: the body drains in place.
-    const first = liquid.update([], DT, VIEWPORT);
-    expect(prims(first).map((prim) => [prim.type, prim.hue])).toEqual([[0, 1]]);
-    // The drop grows at the bottom edge, then lets go.
-    const hanging = run(liquid, 0.4, () => []);
-    expect(prims(hanging).map((prim) => [prim.type, prim.hue])).toEqual([
-      [0, 1],
-      [1, 1],
-    ]);
-    expect(run(liquid, 2.5, () => []).count).toBe(0);
+    // The card is gone, its glass is not: the body starts closing in place.
+    const [first, ...others] = prims(liquid.update([], DT, VIEWPORT));
+    expect(others).toHaveLength(0);
+    expect(first).toMatchObject({ type: 0, cx: 400, cy: 300, hw: 100, hh: 120, hue: 1 });
+    expect(first!.corner).toBeGreaterThan(CORNER);
+    // The corners round off, then a circle shrinks into the centre.
+    const [closing] = prims(run(liquid, 0.3, () => []));
+    expect(closing).toMatchObject({ type: 0, cx: 400, cy: 300 });
+    expect(closing!.hw).toBeLessThan(60);
+    expect(closing!.hh).toBe(closing!.hw);
+    expect(closing!.corner).toBe(closing!.hw);
+    expect(run(liquid, 0.3, () => []).count).toBe(0);
   });
 
   test('a card removed before it grew leaves nothing behind', () => {
@@ -277,7 +279,7 @@ describe('reduced motion', () => {
     expectUnstrained(moving!.matrix);
     expect(moving!.hw).toBe(100);
 
-    // A removed card fades where it stood: no drop forms and nothing falls.
+    // A removed card fades where it stood instead of closing into its centre.
     expect(prims(liquid.update([], DT, VIEWPORT)).map((prim) => [prim.type, prim.cy])).toEqual([[0, 300]]);
     expect(prims(run(liquid, 0.25, () => [])).map((prim) => [prim.type, prim.cy])).toEqual([[0, 300]]);
     expect(run(liquid, 0.3, () => []).count).toBe(0);

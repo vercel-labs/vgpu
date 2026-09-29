@@ -31,7 +31,7 @@ export const CARDS: readonly CardData[] = [
     title: 'effect',
     line: 'Fullscreen fragment passes. This liquid chains seven of them.',
     detail:
-      'The backdrop, the distance field, the glass shading, the bloom and the tonemap are all effects. Card rects and drips reach the field as a single uniform array.',
+      'The backdrop, the distance field, the glass shading, the bloom and the tonemap are all effects. Card rects reach the field as a single uniform array.',
     code: "effect(gpu, fieldWgsl, { set: { field } })",
     hue: 0,
   },
@@ -89,9 +89,9 @@ export const CARDS: readonly CardData[] = [
     id: 'presence',
     library: 'motion',
     title: 'AnimatePresence',
-    line: 'Filter the grid. Cards drip away and re-form.',
+    line: 'Filter the grid. Cards shrink away and open again.',
     detail:
-      'A card that exits hands its blob to a drip: it drains, necks and falls. A card that enters opens out of its centre as a circle and spreads into shape.',
+      'A card that exits keeps its glass while it closes: the corners round into a pill, the pill into a circle, and the circle shrinks into its centre. A card that enters plays the same thing forwards.',
     code: '<AnimatePresence mode="popLayout" />',
     hue: 1,
   },

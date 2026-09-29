@@ -1,10 +1,11 @@
 // Pure per-frame liquid dynamics. The renderer measures the laid-out cards and
 // hands over one sample per card; this module turns them into the primitives
-// the field shader blends (rounded rects for card bodies, capsules for drips).
-// It owns everything the DOM does not have: speed-driven softness, a jelly
-// strain spring, drips for cards that leave and circles that open out of the
-// centre of cards that arrive. Every card, a dragged one included, merges in the grid layer; only
-// the open panel and the card flying back from it float in the layer above.
+// the field shader blends (one rounded rect per card). It owns everything the
+// DOM does not have: speed-driven softness, a jelly strain spring, and circles
+// that open out of the centre of cards that arrive and close back into it for
+// cards that leave. Every card, a dragged one included, merges in the grid
+// layer; only the open panel and the card flying back from it float in the
+// layer above.
 // No DOM, no GPU.
 
 import { cornerRadius, type Layer } from './layout-store';
@@ -37,7 +38,7 @@ export interface CardSample {
 export interface DynamicsOptions {
   /** Multiplies every smooth-min radius; 1 is the tuned default. */
   smoothness: number;
-  /** Calmer path: no stretch, fades instead of drips and opening circles. */
+  /** Calmer path: no stretch, fades instead of opening and closing circles. */
   reducedMotion: boolean;
 }
 
@@ -93,20 +94,20 @@ interface Blob {
   seen: boolean;
 }
 
-interface Drip {
+/** A card that has left: its glass closes back into its centre, the entry in reverse. */
+interface Exit {
   readonly hue: number;
   readonly cx: number;
   readonly cy: number;
   readonly hw: number;
   readonly hh: number;
+  readonly corner: number;
+  readonly rotation: number;
   readonly energy: number;
   readonly calm: boolean;
-  driftX: number;
-  driftVelocity: number;
   age: number;
-  dropY: number;
-  dropVelocity: number;
-  dropRadius: number;
+  grow: number;
+  growVelocity: number;
 }
 
 interface RectPrim {
@@ -136,7 +137,6 @@ export const K_MOVING = 28;
 export const K_DRAG = 30;
 // Half-size (CSS px) below which a card's moving radius and wobble scale down with it.
 const REACH_SIZE = 120;
-const K_DRIP = 30;
 
 const STRETCH_MAX = 0.3;
 const JELLY_OMEGA = 2 * Math.PI * 3;
@@ -148,16 +148,14 @@ const LAG_LIMIT = 18;
 
 // Entry: circles open out of each card on a gentle spring (reaches the card in
 // about 0.4 s, swells ~4% past it), one card after another in reading order.
+// Exits run the same spring back to nothing.
 const ENTER_TOTAL = 1.1;
 const ENTER_STAGGER = 0.06;
 const ENTER_SWELL = 0.5;
 const GROW_OMEGA = 2 * Math.PI * 1.1;
 const GROW_DAMPING = 0.62;
 
-const DRAIN = 1.05;
-const DRIP_RELEASE = 0.5;
-const GRAVITY = 2400;
-const MAX_DRIPS = 9;
+const MAX_EXITS = 9;
 
 // A card counts as held once it is dragged this far (CSS px) from its slot.
 const HOLD_START = 4;
@@ -182,10 +180,9 @@ const CALM_FLOW = 0.2;
 export function createDynamics(options: DynamicsOptions) {
   const settings: DynamicsOptions = { ...options };
   const blobs = new Map<string, Blob>();
-  const drips: Drip[] = [];
+  const exits: Exit[] = [];
   const data = new Float32Array(MAX_PRIMS * PRIM_FLOATS);
   let count = 0;
-  let viewportHeight = 1;
   let flow = 0;
 
   const push = (): number => (count < MAX_PRIMS ? count++ : -1);
@@ -233,57 +230,6 @@ export function createDynamics(options: DynamicsOptions) {
     data[o + 15] = wobbleCode(prim.seed ?? 0, prim.wobble ?? 0);
   }
 
-  /** A tapered capsule (drips); skipped while it has no radius. */
-  function capsule(
-    ax: number,
-    ay: number,
-    bx: number,
-    by: number,
-    ra: number,
-    rb: number,
-    k: number,
-    layer: Layer,
-    hue: number,
-    energy: number,
-  ) {
-    if (ra <= 0.25 && rb <= 0.25) return;
-    segment(ax, ay, bx, by, ra, rb, k, layer === 'panel' ? 3 : 1, hue, energy, 0);
-  }
-
-  function segment(
-    ax: number,
-    ay: number,
-    bx: number,
-    by: number,
-    ra: number,
-    rb: number,
-    k: number,
-    kind: number,
-    hue: number,
-    energy: number,
-    erode: number,
-  ) {
-    const i = push();
-    if (i < 0) return;
-    const o = i * PRIM_FLOATS;
-    data[o] = ax;
-    data[o + 1] = ay;
-    data[o + 2] = bx;
-    data[o + 3] = by;
-    data[o + 4] = Math.max(0, ra);
-    data[o + 5] = Math.max(1, k * settings.smoothness);
-    data[o + 6] = kind;
-    data[o + 7] = hue;
-    data[o + 8] = Math.max(0, rb);
-    data[o + 9] = 0;
-    data[o + 10] = 0;
-    data[o + 11] = 0;
-    data[o + 12] = erode;
-    data[o + 13] = energy;
-    data[o + 14] = 1;
-    data[o + 15] = 0;
-  }
-
   function createBlob(sample: CardSample): Blob {
     return {
       id: sample.id,
@@ -316,25 +262,26 @@ export function createDynamics(options: DynamicsOptions) {
     };
   }
 
-  function startDrip(blob: Blob) {
-    // A card that has not finished entering has less liquid to lose.
-    const grown = blob.enter === Infinity ? 1 : Math.min(1, Math.max(0, blob.grow));
-    if (grown < 0.2) return;
-    if (drips.length >= MAX_DRIPS) drips.shift();
-    drips.push({
+  function startExit(blob: Blob) {
+    // A card that leaves mid-entry closes from wherever its circle had reached,
+    // keeping the spring's momentum.
+    const entered = blob.enter === Infinity;
+    const grow = entered ? 1 : blob.grow;
+    if (grow < 0.05) return;
+    if (exits.length >= MAX_EXITS) exits.shift();
+    exits.push({
       hue: blob.hue,
       cx: blob.cx,
       cy: blob.cy,
-      hw: blob.hw * grown,
-      hh: blob.hh * grown,
+      hw: blob.hw,
+      hh: blob.hh,
+      corner: cornerRadius(2 * blob.hw, 2 * blob.hh),
+      rotation: blob.rotation,
       energy: blob.energy,
       calm: settings.reducedMotion,
-      driftX: 0,
-      driftVelocity: blob.vx * 0.25,
       age: 0,
-      dropY: blob.cy + blob.hh * grown,
-      dropVelocity: 0,
-      dropRadius: 0,
+      grow,
+      growVelocity: entered ? 0 : blob.growVelocity,
     });
   }
 
@@ -504,27 +451,15 @@ export function createDynamics(options: DynamicsOptions) {
       });
       return;
     }
-    // A circle opens out of the card's centre. It grows until it meets the
-    // card's nearer sides, stretches into a pill along the longer axis, then
-    // squares off into the card's corners, all on one spring that swells the
+    // A circle opens out of the card's centre on one spring that swells the
     // card a touch past its size before it settles.
     const accel = GROW_OMEGA * GROW_OMEGA * (1 - blob.grow) - 2 * GROW_DAMPING * GROW_OMEGA * blob.growVelocity;
     blob.growVelocity += accel * dt;
     blob.grow += blob.growVelocity * dt;
-    const short = Math.min(blob.hw, blob.hh);
-    const long = Math.max(blob.hw, blob.hh);
-    // The circle's radius runs from 0 to the short half-size, on to the long
-    // one, then on by as much as the corners have left to tighten.
-    const radius = Math.max(0, blob.grow) * (long + Math.max(0, short - corner));
-    const swell = 1 + ENTER_SWELL * Math.max(0, blob.grow - 1);
     rect({
       cx: blob.cx,
       cy: blob.cy,
-      hw: Math.min(radius, blob.hw) * swell,
-      hh: Math.min(radius, blob.hh) * swell,
-      // While the circle is smaller than the card the rect clamps this to its
-      // half-size, so it stays round.
-      corner: clamp(Math.min(radius, short) - Math.max(0, radius - long), corner, short),
+      ...opening(blob.hw, blob.hh, corner, blob.grow),
       k,
       layer: blob.layer,
       hue: blob.hue,
@@ -538,60 +473,41 @@ export function createDynamics(options: DynamicsOptions) {
     }
   }
 
-  function emitDrip(drip: Drip, dt: number): boolean {
-    drip.age += dt;
-    drip.driftVelocity *= Math.exp(-dt / 0.3);
-    drip.driftX += drip.driftVelocity * dt;
-    const cx = drip.cx + drip.driftX;
-    const corner = Math.min(cornerRadius(2 * drip.hw, 2 * drip.hh), 0.3 * Math.min(drip.hw, drip.hh));
-    if (drip.calm) {
-      const u = smoothstep(0, 0.45, drip.age);
+  function emitExit(exit: Exit, dt: number): boolean {
+    exit.age += dt;
+    if (exit.calm) {
+      const u = smoothstep(0, 0.45, exit.age);
       rect({
-        cx,
-        cy: drip.cy,
-        hw: drip.hw,
-        hh: drip.hh,
-        corner,
+        cx: exit.cx,
+        cy: exit.cy,
+        hw: exit.hw,
+        hh: exit.hh,
+        corner: exit.corner,
         k: K_REST,
         layer: 'grid',
-        hue: drip.hue,
+        hue: exit.hue,
         energy: 0,
-        erode: u * Math.min(drip.hw, drip.hh) * 1.05,
+        erode: u * Math.min(exit.hw, exit.hh) * 1.05,
       });
-      return drip.age < 0.45;
+      return exit.age < 0.45;
     }
-
-    // The body drains downward: its top sinks, it narrows and rounds, then erodes.
-    const u = easeInOut(clamp(drip.age / DRAIN, 0, 1));
-    const bottom = drip.cy + drip.hh;
-    const hh = Math.max(1, drip.hh * (1 - 0.9 * u));
-    const hw = Math.max(1, drip.hw * (1 - 0.55 * u));
-    const erode = smoothstep(0.7, 1, drip.age / DRAIN) * Math.min(hw, hh) * 1.2;
+    // The entry in reverse, on its spring: the corners round into a pill, the
+    // pill into a circle, and the circle shrinks into the card's centre.
+    const accel = -GROW_OMEGA * GROW_OMEGA * exit.grow - 2 * GROW_DAMPING * GROW_OMEGA * exit.growVelocity;
+    exit.growVelocity += accel * dt;
+    exit.grow += exit.growVelocity * dt;
+    if (exit.grow <= 0) return false;
     rect({
-      cx,
-      cy: bottom - hh,
-      hw,
-      hh,
-      corner: Math.min(hw, hh) * (0.3 + 0.7 * u) + corner * (1 - u),
-      k: K_DRIP,
+      cx: exit.cx,
+      cy: exit.cy,
+      ...opening(exit.hw, exit.hh, exit.corner, exit.grow),
+      k: K_REST,
       layer: 'grid',
-      hue: drip.hue,
-      energy: Math.max(drip.energy, 0.6 * (1 - u)),
-      erode,
+      hue: exit.hue,
+      energy: Math.max(exit.energy, 1 - clamp(exit.grow, 0, 1)),
+      rotation: exit.rotation,
     });
-
-    // The drop grows at the bottom edge, necks, then lets go and falls.
-    const grownRadius = Math.min(drip.hw * 0.32, 30);
-    drip.dropRadius = grownRadius * smoothstep(0.1, 0.55, drip.age);
-    if (drip.age < DRIP_RELEASE) {
-      drip.dropY = bottom - drip.dropRadius * 0.4 + drip.dropRadius * 1.4 * smoothstep(0.2, DRIP_RELEASE, drip.age);
-    } else {
-      drip.dropVelocity += GRAVITY * dt;
-      drip.dropY += drip.dropVelocity * dt;
-    }
-    const tail = Math.min(drip.dropVelocity * 0.035, 60) + drip.dropRadius * 0.5;
-    capsule(cx, drip.dropY - tail, cx, drip.dropY, drip.dropRadius * 0.45, drip.dropRadius, K_DRIP, 'grid', drip.hue, 0.9);
-    return drip.dropY - tail - drip.dropRadius < viewportHeight + 40 || drip.age < DRAIN;
+    return true;
   }
 
   return {
@@ -604,7 +520,6 @@ export function createDynamics(options: DynamicsOptions) {
      */
     update(samples: readonly CardSample[], dt: number, viewport: readonly [number, number], teleport = false): LiquidFrame {
       const step = clamp(dt, 1 / 1000, 1 / 20);
-      viewportHeight = viewport[1];
       flow += step * (settings.reducedMotion ? CALM_FLOW : 1);
       const jump = 0.5 * Math.max(viewport[0], viewport[1]);
       for (const blob of blobs.values()) blob.seen = false;
@@ -634,7 +549,7 @@ export function createDynamics(options: DynamicsOptions) {
       for (const [id, blob] of blobs) {
         if (blob.seen) continue;
         blobs.delete(id);
-        startDrip(blob);
+        startExit(blob);
       }
 
       count = 0;
@@ -651,8 +566,8 @@ export function createDynamics(options: DynamicsOptions) {
           panelEnergy = Math.max(blob.energy, blob.hover * 0.55);
         }
       }
-      for (let i = drips.length - 1; i >= 0; i--) {
-        if (!emitDrip(drips[i]!, step)) drips.splice(i, 1);
+      for (let i = exits.length - 1; i >= 0; i--) {
+        if (!emitExit(exits[i]!, step)) exits.splice(i, 1);
       }
       return { data, count, flow, panelHue, panelEnergy, panelLift, minCorner };
     },
@@ -670,8 +585,25 @@ export function smoothstep(edge0: number, edge1: number, value: number): number 
   return t * t * (3 - 2 * t);
 }
 
-function easeInOut(t: number): number {
-  return t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+/**
+ * A card's shape `grow` of the way through opening out of its centre: a circle
+ * until it meets the card's nearer sides, a pill until it meets the farther
+ * ones, then the corners tighten to the card's own. Past 1 the card swells.
+ */
+function opening(hw: number, hh: number, corner: number, grow: number) {
+  const short = Math.min(hw, hh);
+  const long = Math.max(hw, hh);
+  // The circle's radius runs from 0 to the short half-size, on to the long
+  // one, then on by as much as the corners have left to tighten.
+  const radius = Math.max(0, grow) * (long + Math.max(0, short - corner));
+  const swell = 1 + ENTER_SWELL * Math.max(0, grow - 1);
+  return {
+    hw: Math.min(radius, hw) * swell,
+    hh: Math.min(radius, hh) * swell,
+    // While the circle is smaller than the card the rect clamps this to its
+    // half-size, so it stays round.
+    corner: clamp(Math.min(radius, short) - Math.max(0, radius - long), corner, short),
+  };
 }
 
 /** FNV-1a: a stable seed per card id. */

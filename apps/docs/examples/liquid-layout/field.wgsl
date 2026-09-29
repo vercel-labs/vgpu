@@ -1,5 +1,5 @@
 // Distance field of the liquid, rendered at CSS-pixel resolution. Every
-// primitive (card bodies, droplets, drips) is blended into its layer with a
+// primitive (a rounded rect per card) is blended into its layer with a
 // polynomial smooth-min whose radius comes from the primitive, so a fast or
 // dragged card melts into whatever it passes while resting cards keep crisp
 // gaps. A rect's edges can bulge by its wobble amplitude (resting cards use 0).
@@ -8,11 +8,9 @@
 //         b = blended hue (0 pale blue → 1 lavender), a = blended energy.
 //
 // Primitive layout, four vec4f each:
-//   rect:    p0 = centre.xy, half.xy   p1 = corner, k, kind, hue
-//            p2 = world→local 2×2      p3 = erode, energy, distScale, wobble
-//   capsule: p0 = a.xy, b.xy           p1 = radiusA, k, kind, hue
-//            p2 = radiusB, -, -, -     p3 = erode, energy, 1, -
-// kind: 0 rect, 1 capsule; +2 for the panel layer.
+//   p0 = centre.xy, half.xy   p1 = corner, k, kind, hue
+//   p2 = world→local 2×2      p3 = erode, energy, distScale, wobble
+// kind: 0 grid layer, 2 panel layer.
 // wobble = phase * 16 + amplitude (CSS px, < 16).
 
 const MAX_PRIMS = 32u;
@@ -31,27 +29,6 @@ fn sdRoundRect(p: vec2f, half: vec2f, corner: f32) -> f32 {
   let r = min(corner, min(half.x, half.y));
   let q = abs(p) - half + r;
   return length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0) - r;
-}
-
-// Tapered capsule between a (radius ra) and b (radius rb).
-fn sdTaperedCapsule(p: vec2f, a: vec2f, b: vec2f, ra: f32, rb: f32) -> f32 {
-  let axis = b - a;
-  let h = length(axis);
-  if (h <= abs(ra - rb) + 0.001) {
-    return min(length(p - a) - ra, length(p - b) - rb);
-  }
-  let dir = axis / h;
-  let local = vec2f(abs(dot(p - a, vec2f(dir.y, -dir.x))), dot(p - a, dir));
-  let s = (ra - rb) / h;
-  let c = sqrt(1.0 - s * s);
-  let k = dot(local, vec2f(-s, c));
-  if (k < 0.0) {
-    return length(local) - ra;
-  }
-  if (k > c * h) {
-    return length(local - vec2f(0.0, h)) - rb;
-  }
-  return dot(local, vec2f(c, s)) - ra;
 }
 
 // How far each edge bulges out at this point: most at mid-edge, none at the
@@ -103,27 +80,21 @@ fn blend(acc: Accum, d: f32, radius: f32, k: f32, hue: f32, energy: f32) -> Accu
     let onPanel = (kind & 2u) != 0u;
     let accD = select(grid.d, panel.d, onPanel);
     let radius = max(max(p1.y, select(grid.k, panel.k, onPanel)), 1.0);
-    var d: f32;
-    if ((kind & 1u) == 0u) {
-      let offset = p - p0.xy;
-      let local = vec2f(dot(p2.xy, offset), dot(p2.zw, offset));
-      var half = p0.zw;
-      let seed = floor(p3.w / 16.0);
-      let amp = p3.w - seed * 16.0;
-      // A card at least `radius` beyond the surface so far leaves the blend
-      // unchanged, so skip its bulge: each edge bows out by at most 1.75 × amp.
-      let nearest = (sdRoundRect(local, half, p1.x) - 2.5 * amp) * p3.z + p3.x;
-      if (nearest >= accD + radius) {
-        continue;
-      }
-      if (amp > 0.01) {
-        half += bulge(clamp(local / half, vec2f(-1.0), vec2f(1.0)), field.time, seed * 2.39996, amp);
-      }
-      d = sdRoundRect(local, half, p1.x) * p3.z;
-    } else {
-      d = sdTaperedCapsule(p, p0.xy, p0.zw, p1.x, p2.x);
+    let offset = p - p0.xy;
+    let local = vec2f(dot(p2.xy, offset), dot(p2.zw, offset));
+    var half = p0.zw;
+    let seed = floor(p3.w / 16.0);
+    let amp = p3.w - seed * 16.0;
+    // A card at least `radius` beyond the surface so far leaves the blend
+    // unchanged, so skip its bulge: each edge bows out by at most 1.75 × amp.
+    let nearest = (sdRoundRect(local, half, p1.x) - 2.5 * amp) * p3.z + p3.x;
+    if (nearest >= accD + radius) {
+      continue;
     }
-    d += p3.x;
+    if (amp > 0.01) {
+      half += bulge(clamp(local / half, vec2f(-1.0), vec2f(1.0)), field.time, seed * 2.39996, amp);
+    }
+    let d = sdRoundRect(local, half, p1.x) * p3.z + p3.x;
     if (onPanel) {
       panel = blend(panel, d, radius, p1.y, p1.w, p3.y);
     } else {
