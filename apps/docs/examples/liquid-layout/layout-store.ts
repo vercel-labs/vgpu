@@ -261,7 +261,7 @@ export function gridFrame(width: number, height: number, count: number): GridFra
 
 /** Corner radius (CSS px) of a card or the panel; the DOM focus ring and the liquid share it. */
 export function cornerRadius(width: number, height: number): number {
-  return Math.round(Math.min(44, Math.max(20, Math.min(width, height) * 0.18)));
+  return Math.round(Math.min(22, Math.max(10, Math.min(width, height) * 0.09)));
 }
 
 const ARROW_STEPS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] } as const;

@@ -43,10 +43,10 @@ export interface Look {
 }
 
 export const DEFAULT_LOOK: Look = {
-  refraction: 120,
-  dispersion: 0.015,
-  lens: 40,
-  bloom: 0.12,
+  refraction: 8,
+  dispersion: 0.02,
+  lens: 20,
+  bloom: 0.06,
   exposure: 1.0,
 };
 
@@ -164,7 +164,7 @@ export function createPipeline(gpu: Gpu, size: Size, dpr: number, initialLook: L
         scene: targets.scene,
         bloomTex: targets.bloom[0],
         samp,
-        composite: { aspect: size[0] / Math.max(1, size[1]), bloom: look.bloom, exposure: look.exposure, vignette: 0.12 },
+        composite: { aspect: size[0] / Math.max(1, size[1]), bloom: look.bloom, exposure: look.exposure, vignette: 0.16 },
       },
     }),
   };
@@ -198,6 +198,9 @@ export function createPipeline(gpu: Gpu, size: Size, dpr: number, initialLook: L
     },
     update(input) {
       const { liquid } = input;
+      // A bezel wider than a corner's radius would reach the fold in the
+      // rounded rect's field along the corner diagonal and draw a seam there.
+      const lens = Math.max(4, Math.min(look.lens, liquid.minCorner - 1));
       effects.backdrop.set({ backdrop: { time: liquid.flow, dim: input.dim } });
       effects.field.set({ field: { count: liquid.count, time: liquid.flow, prims: views(liquid.data) } });
       effects.shade.set({
@@ -207,9 +210,10 @@ export function createPipeline(gpu: Gpu, size: Size, dpr: number, initialLook: L
           panelHue: liquid.panelHue,
           panelEnergy: liquid.panelEnergy,
           panelLift: liquid.panelLift,
-          // A bezel wider than a corner's radius would reach the fold in the
-          // rounded rect's field along the corner diagonal and draw a seam there.
-          lens: Math.max(4, Math.min(look.lens, liquid.minCorner - 1)),
+          lens,
+          // The bend narrows with the bezel, so a small card's edge still
+          // magnifies instead of mirroring.
+          refraction: (look.refraction * lens) / look.lens,
         },
       });
     },

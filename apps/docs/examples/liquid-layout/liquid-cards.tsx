@@ -61,7 +61,7 @@ const FLIGHT_COPY_MS = 420;
 const HELP_ID = 'liquid-layout-help';
 
 const LIBRARY_LABEL = { vgpu: 'vgpu', motion: 'Motion' } as const;
-const LIBRARY_DOT = { vgpu: 'bg-[#2f86d6]', motion: 'bg-[#9453e0]' } as const;
+const LIBRARY_DOT = { vgpu: 'bg-[#4ea4ff]', motion: 'bg-[#b07cff]' } as const;
 
 function assignRef<T>(ref: Ref<T> | undefined, value: T | null) {
   if (typeof ref === 'function') ref(value);
@@ -294,8 +294,8 @@ function Card({
       }}
       // The focus ring waits for the card to land: mid-flight, the layout
       // transform would stretch it with the card.
-      className={`relative cursor-grab select-none text-left text-[#16181d] outline-none active:cursor-grabbing ${
-        flying || raised ? '' : 'focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-4 focus-visible:outline-black/45'
+      className={`relative cursor-grab select-none text-left text-[#eceef2] outline-none active:cursor-grabbing ${
+        flying || raised ? '' : 'focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-4 focus-visible:outline-white/60'
       }`}
     >
       <motion.span
@@ -307,7 +307,7 @@ function Card({
         // sinks, and while another card is dragged it steps back, so it never
         // reads through the copy of a card that crosses it.
         animate={{
-          opacity: dimmed ? 0.22 : flying ? 0.15 : muted ? 0.28 : 1,
+          opacity: dimmed ? 0.1 : flying ? 0.15 : muted ? 0.28 : 1,
           filter: dimmed ? 'blur(3px)' : flying ? 'blur(2px)' : 'blur(0px)',
         }}
         // The copy's own layout correction must ride the card's spring, or it
@@ -318,21 +318,21 @@ function Card({
         }}
       >
         <span
-          className="absolute flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-black/50"
+          className="absolute flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-white/45"
           style={{ left: pad, top: Math.round(pad * 0.85) }}
         >
           <span className={`size-[7px] rounded-full ${LIBRARY_DOT[card.library]}`} />
           {LIBRARY_LABEL[card.library]}
         </span>
         <span
-          className="absolute flex flex-col gap-2 [text-shadow:0_1px_0_rgba(255,255,255,0.35)]"
+          className="absolute flex flex-col gap-2 [text-shadow:0_1px_2px_rgba(0,0,0,0.35)]"
           style={{ left: pad, right: pad, top: copyTop }}
         >
           <span className="font-mono font-semibold tracking-tight" style={{ fontSize: title, lineHeight: 1.1 }}>
             {card.title}
           </span>
           {height >= 130 ? (
-            <span className="line-clamp-3 text-black/60" style={{ fontSize: body, lineHeight: 1.45 }}>
+            <span className="line-clamp-3 text-white/60" style={{ fontSize: body, lineHeight: 1.45 }}>
               {card.line}
             </span>
           ) : null}
@@ -406,7 +406,7 @@ function Panel({ card, store, bounds, spring, autoFocus, onClose }: PanelProps) 
         layout
         transition={{ layout: layoutSpring }}
         style={{ x, y, scale, rotate, width, height, borderRadius: cornerRadius(width, height) }}
-        className="pointer-events-auto relative text-[#16181d]"
+        className="pointer-events-auto relative text-[#eceef2]"
       >
         <motion.div
           layout="position"
@@ -416,7 +416,7 @@ function Panel({ card, store, bounds, spring, autoFocus, onClose }: PanelProps) 
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.16, duration: 0.35, layout: layoutSpring }}
         >
-          <span className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-black/50">
+          <span className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-white/45">
             <span className={`size-[7px] rounded-full ${LIBRARY_DOT[card.library]}`} />
             {LIBRARY_LABEL[card.library]}
           </span>
@@ -428,13 +428,13 @@ function Panel({ card, store, bounds, spring, autoFocus, onClose }: PanelProps) 
             {card.title}
           </h2>
           <p
-            className="max-w-[46ch] text-black/65"
+            className="max-w-[46ch] text-white/70"
             style={{ fontSize: compact ? 13.5 : 15, lineHeight: 1.55 }}
           >
             {card.detail}
           </p>
           <code
-            className="mt-auto block overflow-x-auto whitespace-nowrap rounded-xl bg-black/[0.06] px-3.5 py-2.5 font-mono text-black/75"
+            className="mt-auto block overflow-x-auto whitespace-nowrap rounded-xl bg-white/[0.07] px-3.5 py-2.5 font-mono text-white/80"
             style={{ fontSize: compact ? 11.5 : 13 }}
           >
             {card.code}
@@ -450,7 +450,7 @@ function Panel({ card, store, bounds, spring, autoFocus, onClose }: PanelProps) 
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.16, duration: 0.35, layout: layoutSpring }}
-          className="absolute right-4 top-4 flex size-8 items-center justify-center rounded-full bg-black/[0.06] text-lg leading-none text-black/70 outline-none transition-colors hover:bg-black/10 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-black/45"
+          className="absolute right-4 top-4 flex size-8 items-center justify-center rounded-full bg-white/[0.08] text-lg leading-none text-white/75 outline-none transition-colors hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-white/60"
         >
           ×
         </motion.button>
