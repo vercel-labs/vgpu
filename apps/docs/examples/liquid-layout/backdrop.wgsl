@@ -23,11 +23,11 @@ const MINOR = 24.0;
 const MAJOR_EVERY = 5.0;
 const MINOR_WIDTH = 0.5;
 const MAJOR_WIDTH = 1.0;
-const MINOR_INK = 0.11;
-const MAJOR_INK = 0.34;
+const MINOR_INK = 0.4;
+const MAJOR_INK = 0.5;
 // Linear floor colour right under the light and in the far corner.
-const LIT = vec3f(1.32, 1.34, 1.38);
-const FAR = vec3f(0.07, 0.075, 0.09);
+const LIT = vec3f(1.5);
+const FAR = vec3f(0.5);
 // The light sits above the upper-left corner, a little off frame.
 const LIGHT = vec2f(-0.08, -0.22);
 // Distance (in frame heights) over which the light falls to the far colour.
@@ -66,7 +66,7 @@ fn lineInk(dist: f32, width: f32) -> f32 {
   let minor = lineInk(lineDistance(q, MINOR * dpr), MINOR_WIDTH * dpr);
   let majorLine = lineInk(lineDistance(q, major * dpr), MAJOR_WIDTH * dpr);
   var colour = floorColour(uv);
-  colour *= 1.0 - max(MINOR_INK * minor, MAJOR_INK * majorLine);
-  let fade = mix(1.0, 0.72, backdrop.dim);
+  colour *= 1.0 - max(MINOR_INK * minor, MAJOR_INK * majorLine) * (1. - backdrop.dim * 0.8);
+  let fade = mix(1.0, 0.9, backdrop.dim);
   return vec4f(colour * fade, 0.0);
 }
