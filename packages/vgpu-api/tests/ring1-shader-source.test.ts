@@ -35,6 +35,14 @@ const RENDER_ENTRIES = `
 @fragment fn fs() -> @location(0) vec4f { return vec4f(1.0); }
 `;
 
+const TWO_BUFFER_LAYOUTS = `
+struct Floats { value: f32 }
+struct Ints { value: u32 }
+@group(0) @binding(0) var<uniform> a: Floats;
+@group(0) @binding(1) var<uniform> b: Ints;
+${RENDER_ENTRIES}
+`;
+
 test("effect(gpu, ...) accepts a prepared ShaderSource", async () => {
   const gpu = await init();
   const fromArtifact = effect(gpu, prepareShader(FRAGMENT), { label: "shader" });
@@ -167,6 +175,40 @@ ${RENDER_ENTRIES}
   gpu.dispose();
 });
 
+test("a binding cannot use another binding's canonical layout", async () => {
+  const gpu = await init();
+  const artifact = mutableShader(TWO_BUFFER_LAYOUTS);
+  artifact.reflection.bindings[0].layout = structuredClone(artifact.reflection.bindings[1].layout);
+
+  expectInvalidShaderAt(() => draw(gpu, { shader: artifact }), "reflection.bindings[0].layout");
+  gpu.dispose();
+});
+
+test("a binding layout type must agree even when both layout copies are mutated", async () => {
+  const gpu = await init();
+  const artifact = mutableShader(TWO_BUFFER_LAYOUTS);
+  const binding = artifact.reflection.bindings[0];
+  const replacement = structuredClone(artifact.reflection.bindings[1].layout);
+  replacement.name = binding.name;
+  replacement.mangledName = binding.mangledName;
+  binding.layout = structuredClone(replacement);
+  artifact.reflection.hostShareableLayouts[0] = replacement;
+
+  expectInvalidShaderAt(() => draw(gpu, { shader: artifact }), "reflection.bindings[0].layout.type");
+  gpu.dispose();
+});
+
+test("a canonical binding struct must agree with the binding type", async () => {
+  const gpu = await init();
+  const artifact = mutableShader(TWO_BUFFER_LAYOUTS);
+  artifact.reflection.bindings[0].struct = structuredClone(
+    artifact.reflection.structs.find((struct: any) => struct.name === "Ints"),
+  );
+
+  expectInvalidShaderAt(() => draw(gpu, { shader: artifact }), "reflection.bindings[0].struct");
+  gpu.dispose();
+});
+
 test("producer-valid explicit align and size metadata is accepted", async () => {
   const gpu = await init();
   const artifact = prepareShader(`
@@ -190,6 +232,27 @@ alias ItemAlias = Item;
 alias Items = array<ItemAlias>;
 @group(0) @binding(0) var<storage, read> items: Items;
 @compute @workgroup_size(1) fn main() { _ = items[0].value.x; }
+`);
+
+  expect(() => compute(gpu, artifact)).not.toThrow();
+  gpu.dispose();
+});
+
+test.each([
+  ["direct scalar", "", "f32", "_ = value;"],
+  ["aliased scalar f16", "enable f16; alias Value = f16;", "Value", "_ = value;"],
+  ["direct vector", "", "vec3<u32>", "_ = value.x;"],
+  ["aliased vector", "alias Scalar = f32; alias Value = vec2<Scalar>;", "Value", "_ = value.x;"],
+  ["direct padded struct", "struct Value { @align(16) @size(16) item: f32 }", "Value", "_ = value.item;"],
+  ["aliased struct", "struct Value { item: vec2<f32> } alias ValueAlias = Value;", "ValueAlias", "_ = value.item.x;"],
+  ["direct fixed array", "", "array<vec2<f32>, 2>", "_ = value[0].x;"],
+  ["aliased runtime array", "alias Item = u32; alias Value = array<Item>;", "Value", "_ = value[0];"],
+] as const)("producer-valid %s binding layout is accepted", async (_case, declarations, type, use) => {
+  const gpu = await init();
+  const artifact = prepareShader(`
+${declarations}
+@group(0) @binding(0) var<storage, read> value: ${type};
+@compute @workgroup_size(1) fn main() { ${use} }
 `);
 
   expect(() => compute(gpu, artifact)).not.toThrow();

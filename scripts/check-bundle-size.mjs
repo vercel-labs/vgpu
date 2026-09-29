@@ -349,7 +349,7 @@ function report() {
     for (const warning of warnings) console.log(`  ${warning.label}: ${warning.verdict.measuredBytes} B gzip vs ${warning.verdict.budgetBytes} B budget (+${warning.verdict.overBudgetBytes} B) -> re-baseline with \`pnpm bundle-check --update\``);
   }
   if (!failures.length && !structuralFailures.length) return;
-  if (structuralFailures.length) console.error(`\n${structuralFailures.length} experience metafile assertion${structuralFailures.length === 1 ? "" : "s"} failed:\n${structuralFailures.map((failure) => `  ${failure}`).join("\n")}\n`);
+  if (structuralFailures.length) console.error(`\n${structuralFailures.length} experience/complete-consumer metafile assertion${structuralFailures.length === 1 ? "" : "s"} failed:\n${structuralFailures.map((failure) => `  ${failure}`).join("\n")}\n`);
   if (failures.length) console.error(`\n${failures.length} bundle budget${failures.length === 1 ? "" : "s"} exceeded:\n`);
   for (const failure of failures) console.error(`${formatFailure(failure)}\n`);
   if (failures.length) console.error("Run `pnpm bundle-check --update` to re-baseline every budget to the convention (next 512 B multiple strictly above measured), then review the one-line diffs.");

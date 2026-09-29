@@ -125,8 +125,8 @@
   },
   "vgpuExperienceBundleBudgetsGzipBytes": {
     "init-only": 1536,
-    "effect-only": 36864,
-    "triangle-low-level": 39936,
+    "effect-only": 37376,
+    "triangle-low-level": 40448,
     "draw-recipe-box": 40960,
     "full-root": 51712
   },

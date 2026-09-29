@@ -323,14 +323,22 @@ function validateReflection(reflection: Reflection): void {
     if (type.kind === "identifier" && !structs.has(type.mangledName ?? type.name) && !aliases.has(type.mangledName ?? type.name)) fail(path, `unknown type reference '${type.mangledName ?? type.name}'`);
   });
   for (const [index, binding] of reflection.bindings.entries()) {
+    const bindingPath = `reflection.bindings[${index}]`;
+    const resolvedBindingType = resolveType(binding.type, structs, aliases, new Set(), `${bindingPath}.type`);
     if (binding.struct) {
       const canonical = structs.get(binding.struct.mangledName) ?? structs.get(binding.struct.name);
-      if (!canonical || !dataEqual(canonical, binding.struct)) fail(`reflection.bindings[${index}].struct`, "does not match a canonical reflected struct");
+      if (!canonical || !dataEqual(canonical, binding.struct)) fail(`${bindingPath}.struct`, "does not match a canonical reflected struct");
+      const typeStruct = resolvedBindingType.kind === "identifier"
+        ? structs.get(resolvedBindingType.mangledName ?? resolvedBindingType.name)
+        : undefined;
+      if (!typeStruct || !dataEqual(typeStruct, binding.struct)) fail(`${bindingPath}.struct`, "does not match the alias-resolved binding type");
     }
     if (binding.layout) {
+      if (binding.layout.name !== binding.name || binding.layout.mangledName !== binding.mangledName) fail(`${bindingPath}.layout`, "does not belong to the binding identity");
       const canonical = reflection.hostShareableLayouts.find(layout => layout.name === binding.layout!.name && layout.mangledName === binding.layout!.mangledName);
-      if (!canonical || !dataEqual(canonical, binding.layout)) fail(`reflection.bindings[${index}].layout`, "does not match a canonical host-shareable layout");
-      if (binding.bindingLayout?.kind === "buffer" && binding.bindingLayout.buffer.minBindingSize !== binding.layout.size) fail(`reflection.bindings[${index}].bindingLayout.buffer.minBindingSize`, "does not match the host-shareable layout size");
+      if (!canonical || !dataEqual(canonical, binding.layout)) fail(`${bindingPath}.layout`, "does not match a canonical host-shareable layout");
+      if (!dataEqual(resolvedBindingType, binding.layout.type)) fail(`${bindingPath}.layout.type`, "does not match the alias-resolved binding type");
+      if (binding.bindingLayout?.kind === "buffer" && binding.bindingLayout.buffer.minBindingSize !== binding.layout.size) fail(`${bindingPath}.bindingLayout.buffer.minBindingSize`, "does not match the host-shareable layout size");
     }
   }
   reflection.hostShareableLayouts.forEach((layout, index) => validateLayoutReferences(layout, `reflection.hostShareableLayouts[${index}]`, structs, aliases));
