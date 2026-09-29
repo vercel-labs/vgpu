@@ -6,7 +6,7 @@
   "$comment:glass-sculpture": "Measured at 72804 B gzip from the current canary production build on Node 22.21.1; the external proposal's provisional 78000 B value was not carried forward.",
   "$comment:matcap": "Measured at 70640 B gzip from the current canary production build on Node 22.21.1 / Next 16.3.3 after the reviewed lifecycle and vertex-shading refinements.",
   "$comment:video-to-texture": "Measured at 68829 B gzip from the current canary production build on Node 22.21.1 / Next 16.3.3 after lifecycle, media-provenance, and current texture-API integration.",
-  "$comment:b1-prepared-shaders": "Final B1 route budget provenance: TypeGPU Liquid Glass moved from 150554 to 158712 B gzip because it performs explicit runtime shader preparation; Atmosphere moved from 106538 to 142860 B gzip with 21 prepared artifacts carrying heterogeneous metadata. These comparisons include shared chunks, so they are final route budget baselines rather than an isolated matched benchmark and make no universal savings claim.",
+  "$comment:b1-prepared-shaders": "Final B1 route budget provenance: TypeGPU Liquid Glass moved from 150554 to 158810 B gzip because it performs explicit runtime shader preparation; Atmosphere moved from 106538 to 142958 B gzip with 21 prepared artifacts carrying heterogeneous metadata. These comparisons include shared chunks, so they are final route budget baselines rather than an isolated matched benchmark and make no universal savings claim.",
   "sharedHost": {
     "gzipBytes": 2104,
     "maxGrowthBytes": 5120
@@ -40,9 +40,9 @@
     "tsl-exports": 239570,
     "three-tsl": 279113,
     "particle-orbit": 160967,
-    "typegpu-liquid-glass": 158712,
+    "typegpu-liquid-glass": 158810,
     "adaptive-quality": 63030,
-    "atmosphere": 142860,
+    "atmosphere": 142958,
     "glass-sculpture": 72804,
     "spiral-galaxy": 86662
   },
