@@ -213,7 +213,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @vgpu/adapter-node build
       - name: Test examples online commands on Windows
-        run: pnpm exec vitest run packages/vgpu/tests/examples/http-client.test.ts packages/vgpu/tests/mcp-stdio.test.ts
+        run: pnpm exec vitest run packages/vgpu/tests/examples packages/vgpu/tests/mcp-stdio.test.ts
 
   wgsl-turbopack-smoke:
     runs-on: ubuntu-latest
