@@ -32,7 +32,7 @@ export async function renderThumbnail(gpu: Gpu, output: Target, options: ThumbOp
     pipeline.resize(output.size, 1);
     await pipeline.prewarm(output);
 
-    const end = options.time ?? 6.4;
+    const end = options.time ?? 7.9;
     const dt = options.dt ?? 1 / 60;
     const frames = Math.max(1, options.warmupFrames ?? 1);
     const aspect = output.size[0] / output.size[1];
@@ -45,7 +45,6 @@ export async function renderThumbnail(gpu: Gpu, output: Target, options: ThumbOp
         pipeline.encode(currentFrame, output, {
           time,
           viewProjection: camera.viewProjection,
-          yaw: camera.yaw,
           baseShape: baseShape(time, segments),
           segments,
           pattern: 'auto',

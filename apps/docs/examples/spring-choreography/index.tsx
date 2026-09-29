@@ -24,7 +24,7 @@ export function Example() {
       <canvas
         ref={canvasRef}
         role="img"
-        aria-label="A swarm of up to a million particles morphing on Motion springs between a triangle, a planet, a torus knot, a galaxy and a wave field. Move the pointer to push them aside; click to send a spring burst through them."
+        aria-label="A swarm of up to a million particles morphing on Motion springs between a rippling wave field, a ringed planet and a torus knot. Move the pointer to push them aside; click to send a spring burst through them."
         className="block h-full w-full touch-none"
       />
     </div>

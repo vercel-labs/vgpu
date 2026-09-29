@@ -423,23 +423,23 @@ test('every frame is a function of the playhead Motion’s timeline writes', asy
   const renderer = start(env);
   await renderer.ready;
 
-  // Mid-morph from the knot into the galaxy: the segment is in the state buffer.
-  timeline().time = 11.1;
+  // Mid-morph from the sphere into the knot: the segment is in the state buffer.
+  timeline().time = 7.9;
   env.tick();
   const params = merged(env.swarm()).params;
-  expect(params).toMatchObject({ time: expect.closeTo(11.1, 9), activeCount: 1, baseShape: 2, count: DEFAULT_COUNT });
+  expect(params).toMatchObject({ time: expect.closeTo(7.9, 9), activeCount: 1, baseShape: 1, count: DEFAULT_COUNT });
   expect(params.springDuration).toBeCloseTo(bakeSpring(DEFAULT_SPRING).duration, 6);
   const state = env.stateFloats();
-  expect(new Uint32Array(state.buffer, 0, 2)).toEqual(new Uint32Array([2, 3]));
-  expect(state[4]).toBeCloseTo(11.1 - arrivalCue(3), 5);
+  expect(new Uint32Array(state.buffer, 0, 2)).toEqual(new Uint32Array([1, 2]));
+  expect(state[4]).toBeCloseTo(7.9 - arrivalCue(2), 5);
 
   // The panel shows the playhead and the shape a few times a second, not every frame.
   const gui = guiHarness.instances[0]!;
   expect(gui.control('Time').updateDisplay).not.toHaveBeenCalled();
   env.play(0.25);
-  expect(gui.control('Time').model.time).toBe(11.1);
+  expect(gui.control('Time').model.time).toBe(7.9);
   expect(gui.control('Time').updateDisplay).toHaveBeenCalled();
-  expect(gui.control('Jump to').model.shape).toBe(3);
+  expect(gui.control('Jump to').model.shape).toBe(2);
 
   // The playhead wraps with the looping timeline.
   timeline().time = LOOP + 1;
@@ -530,12 +530,12 @@ describe('the lil-gui panel', () => {
     const controls = timeline();
     controls.time = 1;
 
-    gui.set('Jump to', 3);
+    gui.set('Jump to', 2);
     expect(controls.pause).toHaveBeenCalledOnce();
     const tween = motion.tweens.at(-1)!;
-    // Playing, it lands on the galaxy's cue and the morph plays out live.
+    // Playing, it lands on the knot's cue and the morph plays out live.
     expect(tween.from).toBe(1);
-    expect(tween.to).toBeCloseTo(arrivalCue(3), 9);
+    expect(tween.to).toBeCloseTo(arrivalCue(2), 9);
     tween.options.onUpdate(5);
     expect(controls.time).toBe(5);
     tween.options.onComplete();
@@ -552,8 +552,8 @@ describe('the lil-gui panel', () => {
     gui.press('Pause');
     expect(running.stop).toHaveBeenCalled();
     controls.time = 1;
-    gui.set('Jump to', 3);
-    expect(motion.tweens.at(-1)!.to).toBeGreaterThan(arrivalCue(3) + DEFAULT_STAGGER.spread);
+    gui.set('Jump to', 2);
+    expect(motion.tweens.at(-1)!.to).toBeGreaterThan(arrivalCue(2) + DEFAULT_STAGGER.spread);
     motion.tweens.at(-1)!.options.onComplete();
     expect(controls.play).toHaveBeenCalledOnce();
     renderer.dispose();
@@ -566,7 +566,7 @@ describe('the lil-gui panel', () => {
     const controls = timeline();
     controls.time = 1.45;
 
-    // The triangle's cue is 5 s back, before the timeline's 0: start one loop later instead.
+    // The wave field's cue is 6.55 s back, before the timeline's 0: start one loop later instead.
     guiHarness.instances[0]!.set('Jump to', 0);
     const tween = motion.tweens.at(-1)!;
     expect(tween.from).toBeCloseTo(1.45 + LOOP, 9);
@@ -583,14 +583,14 @@ describe('the lil-gui panel', () => {
     const controls = timeline();
 
     gui.press('Pause');
-    controls.time = 11.1;
+    controls.time = 7.9;
     gui.press('Replay morph');
     expect(controls.play).toHaveBeenCalledOnce();
     expect(gui.control('Pause').label).toBe('Pause');
-    // Playing again, it lands on the cue itself and the morph into the galaxy plays out.
+    // Playing again, it lands on the cue itself and the morph into the knot plays out.
     const tween = motion.tweens.at(-1)!;
-    expect(tween.from).toBe(11.1);
-    expect(tween.to).toBeCloseTo(arrivalCue(3), 9);
+    expect(tween.from).toBe(7.9);
+    expect(tween.to).toBeCloseTo(arrivalCue(2), 9);
     renderer.dispose();
   });
 
@@ -635,7 +635,7 @@ describe('the lil-gui panel', () => {
     expect(merged(env.sparks()).particles).toBe(large);
     env.tick();
     expect(env.dispatches.at(-1)).toEqual([env.swarm(), PARTICLE_COUNTS['1M'] / 64]);
-    // Four times the sparks, each dimmer.
+    // Twice the sparks, each dimmer.
     const energies = env.swarm().set.mock.calls.map(([values]) => values.params?.energy).filter(Boolean);
     expect(energies.at(-1)).toBeLessThan(energies.at(-2));
 
@@ -736,7 +736,7 @@ test('trails fade the previous frame at constant brightness, and a scrub cuts th
   const env = setup();
   const renderer = start(env);
   await renderer.ready;
-  guiHarness.instances[0]!.set('Trails', true);
+  expect(guiHarness.instances[0]!.control('Trails').model.trails).toBe(true);
 
   // The first frame after a resize has no previous frame to fade.
   env.tick();
@@ -782,7 +782,7 @@ test('reduced motion keeps the choreography but calms it, and follows a change m
   const params = merged(env.swarm()).params;
   expect(params.springDuration).toBeCloseTo(bakeSpring(criticallyDamped(DEFAULT_SPRING)).duration, 6);
   expect(params.streak).toBe(0);
-  gui.set('Trails', true);
+  // Trails stay off while calm, even though they are on by default.
   env.play(0.2);
   expect(env.passes.at(-7)).toMatchObject({ clear: [0, 0, 0, 1] });
   pointer(env, 'pointermove', 320, 180);

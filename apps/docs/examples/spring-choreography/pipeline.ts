@@ -51,7 +51,9 @@ const REFERENCE_HEIGHT = 720;
 export const MAX_BURSTS = 4;
 /** Particle counts offered in the controls; the default is 2^18. */
 export const PARTICLE_COUNTS = { '65k': 65_536, '262k': 262_144, '524k': 524_288, '1M': 1_048_576 } as const;
-export const DEFAULT_COUNT = PARTICLE_COUNTS['262k'];
+export const DEFAULT_COUNT = PARTICLE_COUNTS['524k'];
+/** Particle count the spark energy is tuned for. */
+const REFERENCE_COUNT = PARTICLE_COUNTS['262k'];
 
 const BLURS = [
   { direction: [1, 0], radius: 1.3 },
@@ -74,7 +76,7 @@ export interface Look {
 }
 
 export const DEFAULT_LOOK: Look = {
-  colorMode: COLOR_MODES.Shape,
+  colorMode: COLOR_MODES.Velocity,
   size: 1.7,
   streak: 0.016,
   bloom: true,
@@ -92,7 +94,6 @@ export interface Burst {
 export interface FrameState {
   readonly time: number;
   readonly viewProjection: Float32Array<ArrayBuffer>;
-  readonly yaw: number;
   readonly baseShape: number;
   readonly segments: readonly ActiveSegment[];
   readonly pattern: PatternChoice;
@@ -180,7 +181,6 @@ export function createPipeline(gpu: Gpu, options: PipelineOptions = {}): Pipelin
         energy: 1,
         size: look.size,
         streak: look.streak,
-        yaw: 0,
         pixelRatio: 1,
         pad: 0,
       },
@@ -317,7 +317,6 @@ export function createPipeline(gpu: Gpu, options: PipelineOptions = {}): Pipelin
           time: frameState.time,
           activeCount: frameState.segments.length,
           baseShape: frameState.baseShape,
-          yaw: frameState.yaw,
         },
       });
       currentFrame.computePass((pass) => pass.dispatch(swarm, Math.ceil(count / WORKGROUP_SIZE)));
@@ -352,7 +351,7 @@ export function createPipeline(gpu: Gpu, options: PipelineOptions = {}): Pipelin
 function energyFor(count: number, size: readonly [number, number], pixelRatio: number): number {
   const shapeHeight = size[1] / pixelRatio / pullback(size[0] / Math.max(1, size[1]));
   const area = (shapeHeight / REFERENCE_HEIGHT) ** 2;
-  return 0.13 * Math.pow(DEFAULT_COUNT / count, 0.8) * Math.min(Math.max(area, 0.15), 4);
+  return 0.13 * Math.pow(REFERENCE_COUNT / count, 0.8) * Math.min(Math.max(area, 0.15), 4);
 }
 
 /** Largest aspect-corrected NDC distance from `origin` to a viewport corner. */

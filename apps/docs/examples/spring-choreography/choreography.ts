@@ -19,16 +19,14 @@ export interface Pose {
 }
 
 export const SHAPES = [
-  { id: 'triangle', label: 'Hello triangle', pose: { yaw: 0, pitch: 0.08, distance: 4.6 } },
+  { id: 'waves', label: 'Wave field', pose: { yaw: -0.3, pitch: 0.5, distance: 4.9 } },
   { id: 'sphere', label: 'Sphere', pose: { yaw: 0.35, pitch: 0.32, distance: 4.8 } },
   { id: 'knot', label: 'Torus knot', pose: { yaw: -0.25, pitch: 0.62, distance: 4.7 } },
-  { id: 'galaxy', label: 'Galaxy', pose: { yaw: 0.2, pitch: 0.98, distance: 4.6 } },
-  { id: 'waves', label: 'Wave field', pose: { yaw: -0.3, pitch: 0.5, distance: 4.9 } },
 ] as const satisfies readonly { id: string; label: string; pose: Pose }[];
 
 export const SHAPE_COUNT = SHAPES.length;
-/** Seconds between morph cues. */
-export const SEGMENT = 4.5;
+/** Seconds between morph cues: each shape settles and holds for a few seconds. */
+export const SEGMENT = 6;
 /** The first morph starts after a short look at the opening shape. */
 export const LEAD = 0.9;
 export const LOOP = SHAPE_COUNT * SEGMENT;
@@ -176,7 +174,7 @@ export const PATTERNS = {
 export type PatternId = keyof typeof PATTERNS;
 export type PatternChoice = PatternId | 'auto';
 /** Auto gives every cue of the loop its own pattern. */
-export const AUTO_PATTERNS: readonly PatternId[] = ['center', 'sweep', 'noise', 'spiral', 'edges'];
+export const AUTO_PATTERNS: readonly PatternId[] = ['center', 'sweep', 'noise'];
 
 export function patternFor(choice: PatternChoice, k: number): PatternId {
   return choice === 'auto' ? AUTO_PATTERNS[k % AUTO_PATTERNS.length]! : choice;
@@ -243,7 +241,7 @@ const FOV = (38 * Math.PI) / 180;
 
 export interface Camera {
   readonly viewProjection: Float32Array<ArrayBuffer>;
-  /** Orbit angle, so the triangle can keep facing the viewer. */
+  /** Orbit angle around the vertical axis, in radians. */
   readonly yaw: number;
 }
 

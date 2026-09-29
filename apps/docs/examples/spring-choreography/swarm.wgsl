@@ -10,7 +10,7 @@ import { hashU32, unitFloat } from "@vgpu/wgsl-std/hash";
 import { simplex3d } from "@vgpu/wgsl-std/noise/simplex";
 
 const TAU = 6.2831853;
-const LOOP = 22.5;
+const LOOP = 18.0;
 const SPRING_SAMPLES = 1024u;
 const STAGGER_BASE = 2048u;
 const STAGGER_BINS = 256u;
@@ -36,7 +36,6 @@ struct Params {
   energy: f32,
   size: f32,
   streak: f32,
-  yaw: f32,
   pixelRatio: f32,
   pad: f32,
 }
@@ -98,12 +97,6 @@ struct Point {
   color: vec3f,
 }
 
-fn rotateY(p: vec3f, angle: f32) -> vec3f {
-  let c = cos(angle);
-  let s = sin(angle);
-  return vec3f(p.x * c + p.z * s, p.y, -p.x * s + p.z * c);
-}
-
 fn rotateX(p: vec3f, angle: f32) -> vec3f {
   let c = cos(angle);
   let s = sin(angle);
@@ -114,36 +107,6 @@ fn rotateX(p: vec3f, angle: f32) -> vec3f {
 // loop seam is seamless even for particles still on their way.
 fn loopPhase(t: f32) -> f32 {
   return t / LOOP * TAU;
-}
-
-// The hello triangle: barycentric red, green and blue, facing the camera.
-fn triangle(seed: Seed) -> Point {
-  let a = vec3f(0.0, 1.02, 0.0);
-  let b = vec3f(-1.1, -0.82, 0.0);
-  let c = vec3f(1.1, -0.82, 0.0);
-  var bary: vec3f;
-  if (seed.w < 0.3) {
-    // A third of the particles trace the edges so the outline stays crisp.
-    let f = seed.u;
-    let edge = u32(seed.x * 3.0);
-    if (edge == 0u) {
-      bary = vec3f(1.0 - f, f, 0.0);
-    } else if (edge == 1u) {
-      bary = vec3f(0.0, 1.0 - f, f);
-    } else {
-      bary = vec3f(f, 0.0, 1.0 - f);
-    }
-  } else {
-    var p = vec2f(seed.u, seed.v);
-    if (p.x + p.y > 1.0) {
-      p = 1.0 - p;
-    }
-    bary = vec3f(1.0 - p.x - p.y, p.x, p.y);
-  }
-  let depth = (seed.y - 0.5) * 0.05;
-  let pos = a * bary.x + b * bary.y + c * bary.z + vec3f(0.0, 0.0, depth);
-  let color = vec3f(1.0, 0.13, 0.2) * bary.x + vec3f(0.16, 1.0, 0.38) * bary.y + vec3f(0.2, 0.38, 1.0) * bary.z;
-  return Point(rotateY(pos, params.yaw), color * 1.15);
 }
 
 // A banded planet with a tilted ring.
@@ -186,36 +149,6 @@ fn knot(seed: Seed, t: f32) -> Point {
   return Point(pos, (color * color + 0.08) * 1.35);
 }
 
-// Three logarithmic arms around a warm bulge, turning once per loop.
-fn galaxy(seed: Seed, t: f32) -> Point {
-  if (seed.w < 0.14) {
-    let z = 1.0 - 2.0 * seed.v;
-    let rho = sqrt(max(0.0, 1.0 - z * z));
-    let a = seed.u * TAU;
-    let r = 0.3 * pow(seed.x, 1.6);
-    let p = vec3f(rho * cos(a), z * 0.55, rho * sin(a)) * r;
-    return Point(rotateY(p, -loopPhase(t)), vec3f(1.0, 0.78, 0.5) * 1.3);
-  }
-  // An exponential disk, cut off at r = 1.6 and faded out before it: no hard rim.
-  let r = 0.14 - 0.4 * log(1.0 - seed.u * 0.975);
-  let arm = floor(seed.x * 3.0);
-  // Logistic scatter across the arm: a dense spine with soft, unbounded edges.
-  // A quarter of the particles fill the disk between the arms.
-  let v = clamp(seed.v, 0.001, 0.999);
-  let scatter = log(v / (1.0 - v)) * select(0.075, 0.5, fract(seed.x * 3.0) < 0.25);
-  let angle = arm * TAU / 3.0 + log(r / 0.14) * 2.1 + scatter * (0.35 + 0.12 / r) - loopPhase(t);
-  let height = (seed.y - 0.5) * 0.07 * (1.3 - r * 0.7);
-  let pos = vec3f(cos(angle) * r, height, sin(angle) * r);
-  let inner = vec3f(1.0, 0.62, 0.9);
-  let outer = vec3f(0.28, 0.52, 1.0);
-  var color = mix(inner, outer, smoothstep(0.2, 1.3, r)) * (0.45 + 0.8 * exp(-abs(scatter) * 4.0));
-  if (fract(seed.y * 37.0) < 0.035) {
-    // Sparse star-forming knots along the arms.
-    color = vec3f(1.0, 0.32, 0.6) * 2.2;
-  }
-  return Point(pos, color * (1.0 - smoothstep(1.2, 1.62, r)));
-}
-
 // A rippling lattice: most particles sit on grid lines, so it reads as a mesh.
 fn waves(seed: Seed, t: f32) -> Point {
   var x = (seed.u - 0.5) * 3.4;
@@ -237,11 +170,9 @@ fn waves(seed: Seed, t: f32) -> Point {
 
 fn shapeAt(id: u32, seed: Seed, t: f32) -> Point {
   switch id {
-    case 0u: { return triangle(seed); }
+    case 0u: { return waves(seed, t); }
     case 1u: { return sphere(seed, t); }
-    case 2u: { return knot(seed, t); }
-    case 3u: { return galaxy(seed, t); }
-    default: { return waves(seed, t); }
+    default: { return knot(seed, t); }
   }
 }
 

@@ -2,7 +2,7 @@ export const meta = {
   slug: 'spring-choreography',
   title: 'Spring Choreography',
   description:
-    'A quarter of a million GPU particles morph between shapes, each on a real Motion spring and stagger, sequenced by a scrubbable Motion timeline.',
+    'Half a million GPU particles morph between shapes, each on a real Motion spring and stagger, sequenced by a scrubbable Motion timeline.',
   tags: ['motion', 'particles', 'spring', 'animation', 'compute', 'instancing', 'bloom', 'hdr'],
   capabilities: [
     'webgpu',
@@ -23,7 +23,7 @@ export const meta = {
   thumb: {
     warmupFrames: 1,
     dt: 1 / 60,
-    time: 6.4,
+    time: 7.9,
     requiredLimits: { maxStorageBuffersInVertexStage: 1 },
   },
   files: [

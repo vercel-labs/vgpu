@@ -143,7 +143,7 @@ export function createRenderer({ canvas, container = canvas.parentElement ?? und
     count: DEFAULT_COUNT,
     colorMode: DEFAULT_LOOK.colorMode,
     streaks: DEFAULT_LOOK.streak,
-    trails: false,
+    trails: true,
     bloom: DEFAULT_LOOK.bloom,
     exposure: DEFAULT_LOOK.exposure,
     calm: false,
@@ -421,7 +421,6 @@ export function createRenderer({ canvas, container = canvas.parentElement ?? und
     const state = {
       time,
       viewProjection: camera.viewProjection,
-      yaw: camera.yaw,
       baseShape: baseShape(time, segments),
       segments,
       pattern: settings.pattern,
