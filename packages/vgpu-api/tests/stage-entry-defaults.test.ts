@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { describe, expect, test } from "vitest";
 import { reflectSource } from "@vgpu/wgsl/reflect-source";
 import { selectEntryPoint } from "../src/pipeline-store.ts";
@@ -49,7 +50,7 @@ test("draw resolves partial overrides independently and caches by resolved entri
     const shader = `${VERTICES}\n${FRAGMENTS}`;
     const output = target(gpu, { size: [2, 2] });
     const entries = [undefined, { vertex: "vs_main", fragment: "fs_main" }, { vertex: "preview_vertex" }, { fragment: "preview_fragment" }];
-    for (const entry of entries) draw(gpu, { shader, entry }).compileSync(output);
+    for (const entry of entries) draw(gpu, { shader: prepareShader(shader), entry }).compileSync(output);
     const mock = getMockGPUDeviceInstrumentation(gpu.gpu);
     expect(mock.createRenderPipelineDescriptors.map(d => [d.vertex.entryPoint, d.fragment?.entryPoint])).toEqual([
       ["vs_main", "fs_main"], ["preview_vertex", "fs_main"], ["vs_main", "preview_fragment"],
@@ -62,10 +63,10 @@ test("effect overrides the fragment and snapshots it before lazy compilation", a
   try {
     const output = target(gpu, { size: [2, 2] });
     const entry = { fragment: "preview_fragment" };
-    const explicit = effect(gpu, FRAGMENTS, { entry });
+    const explicit = effect(gpu, prepareShader(FRAGMENTS), { entry });
     entry.fragment = "fs_main";
     for (const entry of [undefined, {}, { fragment: undefined }, { fragment: "fs_main" }]) {
-      effect(gpu, FRAGMENTS, { entry }).draw(output);
+      effect(gpu, prepareShader(FRAGMENTS), { entry }).draw(output);
     }
     await explicit.compile(output);
     await frame(gpu, f => f.pass(output, explicit)).done;
@@ -80,9 +81,9 @@ test("effect rejects invalid selections and cannot forward a vertex override", a
   const gpu = await init();
   try {
     for (const entry of [null, 4, "fs_main", [], { fragment: 5 }, { fragment: "missing" }, { fragment: "vs_main" }, { vertex: "preview_vertex" }]) {
-      expect(() => effect(gpu, `${VERTICES}\n${FRAGMENTS}`, { entry: entry as never })).toThrow(expect.objectContaining({ code: "VGPU-ENTRY-INVALID" }));
+      expect(() => effect(gpu, prepareShader(`${VERTICES}\n${FRAGMENTS}`), { entry: entry as never })).toThrow(expect.objectContaining({ code: "VGPU-ENTRY-INVALID" }));
     }
-    effect(gpu, `${VERTICES}\n${FRAGMENTS}`).compileSync({ colors: ["rgba8unorm"] });
+    effect(gpu, prepareShader(`${VERTICES}\n${FRAGMENTS}`)).compileSync({ colors: ["rgba8unorm"] });
     expect(getMockGPUDeviceInstrumentation(gpu.gpu).createRenderPipelineDescriptors.at(-1)?.vertex.entryPoint).toBe("vs_main");
   } finally { gpu.dispose(); }
 });
@@ -94,7 +95,7 @@ test("default vertex metadata drives geometry inputs", async () => {
       @vertex fn vs_main(@location(0) position: vec2f) -> @builtin(position) vec4f { return vec4f(position, 0, 1); }
       ${declaration("fragment", "color")}`;
     const mesh = geometry(gpu, { buffers: [{ data: new Float32Array(6), attributes: { position: "float32x2" } }] });
-    draw(gpu, { shader, geometry: mesh }).compileSync({ colors: ["rgba8unorm"] });
+    draw(gpu, { shader: prepareShader(shader), geometry: mesh }).compileSync({ colors: ["rgba8unorm"] });
     expect(getMockGPUDeviceInstrumentation(gpu.gpu).createRenderPipelineDescriptors.at(-1)?.vertex.buffers).toEqual([
       { arrayStride: 8, attributes: [{ shaderLocation: 0, offset: 0, format: "float32x2" }] },
     ]);
@@ -107,21 +108,21 @@ test("effect resource layouts and fragment storage limits follow the selected en
     const shader = `@group(0) @binding(3) var<storage, read> values: array<vec4f>;
       ${declaration("fragment", "preview_fragment")}
       @fragment fn fs_main() -> @location(0) vec4f { return values[0]; }`;
-    effect(gpu, shader, { label: "selected-resource" });
+    effect(gpu, prepareShader(shader), { label: "selected-resource" });
     const mock = getMockGPUDeviceInstrumentation(gpu.gpu);
     expect([...mock.createBindGroupLayoutDescriptors.at(-1)!.entries].map(e => [e.binding, e.visibility])).toEqual([[3, 2]]);
     Object.defineProperty(gpu.gpu.limits, "maxStorageBuffersInFragmentStage", { value: 0 });
-    expect(() => effect(gpu, shader)).toThrow(expect.objectContaining({ code: "VGPU-LIMIT-STORAGE-FRAGMENT" }));
-    expect(() => effect(gpu, shader, { entry: { fragment: "preview_fragment" } })).not.toThrow();
+    expect(() => effect(gpu, prepareShader(shader))).toThrow(expect.objectContaining({ code: "VGPU-LIMIT-STORAGE-FRAGMENT" }));
+    expect(() => effect(gpu, prepareShader(shader), { entry: { fragment: "preview_fragment" } })).not.toThrow();
   } finally { gpu.dispose(); }
 });
 
 test("compute shares concurrent preparation by resolved entry and remains lazy", async () => {
   const gpu = await init();
   try {
-    const automatic = compute(gpu, KERNELS);
-    const explicit = compute(gpu, KERNELS, { entry: "cs_main" });
-    const alternative = compute(gpu, KERNELS, { entry: "preview_compute" });
+    const automatic = compute(gpu, prepareShader(KERNELS));
+    const explicit = compute(gpu, prepareShader(KERNELS), { entry: "cs_main" });
+    const alternative = compute(gpu, prepareShader(KERNELS), { entry: "preview_compute" });
     const mock = getMockGPUDeviceInstrumentation(gpu.gpu);
     expect(mock.calls.createComputePipeline).toBe(0);
     expect(mock.calls.createComputePipelineAsync).toBe(0);
@@ -138,8 +139,8 @@ test("compute synchronous compilation checks the chosen workgroup size", async (
   try {
     const shader = `${declaration("compute", "preview_compute")}\n@compute @workgroup_size(2) fn cs_main() {}`;
     Object.defineProperty(gpu.gpu.limits, "maxComputeWorkgroupSizeX", { value: 1 });
-    expect(() => compute(gpu, shader).compileSync()).toThrow(expect.objectContaining({ code: "VGPU-COMPUTE-WORKGROUP-INVALID", detail: expect.objectContaining({ entry: "cs_main" }) }));
-    compute(gpu, shader, { entry: "preview_compute" }).compileSync();
+    expect(() => compute(gpu, prepareShader(shader)).compileSync()).toThrow(expect.objectContaining({ code: "VGPU-COMPUTE-WORKGROUP-INVALID", detail: expect.objectContaining({ entry: "cs_main" }) }));
+    compute(gpu, prepareShader(shader), { entry: "preview_compute" }).compileSync();
     expect(getMockGPUDeviceInstrumentation(gpu.gpu).createComputePipelineDescriptors.at(-1)?.compute.entryPoint).toBe("preview_compute");
   } finally { gpu.dispose(); }
 });
@@ -152,10 +153,10 @@ test("compute storage visibility and aliasing use the selected kernel", async ()
       @compute @workgroup_size(1) fn preview_compute() { left[0] = 1; }
       @compute @workgroup_size(1) fn cs_main() { left[0] = right[0]; }`;
     const data = storage(gpu, 4);
-    const automatic = compute(gpu, shader, { set: { left: data, right: data } });
+    const automatic = compute(gpu, prepareShader(shader), { set: { left: data, right: data } });
     const mock = getMockGPUDeviceInstrumentation(gpu.gpu);
     expect([...mock.createBindGroupLayoutDescriptors.at(-1)!.entries].map(e => [e.binding, e.visibility])).toEqual([[0, 4], [1, 4]]);
     expect(() => automatic.dispatch(1)).toThrow(expect.objectContaining({ code: "VGPU-R1-STORAGE-ALIASING" }));
-    expect(() => compute(gpu, shader, { entry: "preview_compute", set: { left: data } }).dispatch(1)).not.toThrow();
+    expect(() => compute(gpu, prepareShader(shader), { entry: "preview_compute", set: { left: data } }).dispatch(1)).not.toThrow();
   } finally { gpu.dispose(); }
 });

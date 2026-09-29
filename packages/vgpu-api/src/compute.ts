@@ -4,7 +4,7 @@ import { deliverOperations, operationError, validateOperation, type OperationVal
 import { submittedWorkDone } from "./claim-validation.ts";
 import type { Device } from "@vgpu/core";
 import type { ShaderSource } from "@vgpu/wgsl";
-import { reflectSource, type BindingInfo, type EntryPointInfo, type Reflection } from "@vgpu/wgsl/reflect-source";
+import type { BindingInfo, EntryPointInfo, Reflection } from "@vgpu/wgsl/reflect-source";
 import { entryMetadata } from "./entry-metadata.ts";
 import { createBindGroupCache, identityKey, type BindGroupCache, type BindGroupIdentityPart } from "./bind-cache.ts";
 import { createSetCore, bindGroupLayoutsForReflection, type SetBag, type SetCore } from "./set-core.ts";
@@ -16,7 +16,7 @@ import { assertDeviceUsable } from "./lifecycle.ts";
 import type { Gpu } from "./kernel.ts";
 import { liveKernel } from "./live-kernel.ts";
 import { renderService } from "./render-service.ts";
-import { toWgsl } from "./shader-source.ts";
+import { snapshotShaderSource, type PreparedShaderSnapshot } from "./shader-source.ts";
 import { resolveIndirect } from "./indirect.ts";
 
 /**
@@ -25,10 +25,10 @@ import { resolveIndirect } from "./indirect.ts";
  * Compute shares the gpu's lazy pipeline lifecycle and bind group caches. Entries remain scoped to their pipeline owner: matching
  * resources alone do not imply compatible layouts. The service tears down the shared cache once.
  */
-export function compute(gpu: Gpu, source: string | ShaderSource, opts: ComputeOptions = {}): Compute {
+export function compute(gpu: Gpu, source: ShaderSource, opts: ComputeOptions = {}): Compute {
   const kernel = liveKernel(gpu, "compute");
   const service = renderService(kernel);
-  return new ComputePipeline(kernel.device, toWgsl(source), opts, service.binds, service.computePipelines, service.shaderModules, service.pipelineLayouts, error => kernel.reportError(error), promise => { void kernel.trackDelivery(promise); });
+  return new ComputePipeline(kernel.device, snapshotShaderSource(source), opts, service.binds, service.computePipelines, service.shaderModules, service.pipelineLayouts, error => kernel.reportError(error), promise => { void kernel.trackDelivery(promise); });
 }
 
 let nextComputeId = 1;
@@ -54,7 +54,7 @@ export class ComputePipeline implements Compute {
 
   constructor(
     readonly device: Device,
-    readonly source: string,
+    shader: PreparedShaderSnapshot,
     readonly opts: ComputeOptions = {},
     private readonly cache: BindGroupCache = createBindGroupCache(),
     private readonly pipelines: PipelineStore<GPUComputePipeline> = createPipelineStore<GPUComputePipeline>(device),
@@ -64,8 +64,9 @@ export class ComputePipeline implements Compute {
     private readonly trackSettled?: (promise: Promise<unknown>) => void,
   ) {
     assertDeviceUsable(device, "Compute.constructor");
+    this.source = shader.wgsl;
     this.label = opts.label ?? "compute";
-    this.reflection = reflectSource(source, `${this.label}.wgsl`);
+    this.reflection = shader.reflection;
     // Entry selection runs before everything derived from the selected entry — binding visibility, bind group
     // layouts, and the active-binding set for storage aliasing all reflect the chosen variant.
     const entry = computeEntryPoint(this.reflection, this.label, opts.entry);
@@ -74,7 +75,7 @@ export class ComputePipeline implements Compute {
     const { constants, constantsKey } = normalizeConstantsOptions(this.label, opts.constants, this.reflection.overrides, "compute");
     this.bindGroupLayouts = bindGroupLayoutsForReflection(device, this.label, this.reflection, visibilityForEntries(this.reflection.bindings, [entry]));
     this.pipelineLayout = pipelineLayouts.get(this.bindGroupLayouts);
-    this.shaderModule = shaderModules.get(source, `${this.label}.shader`);
+    this.shaderModule = shaderModules.get(shader.wgsl, `${this.label}.shader`);
     this.#descriptor = {
       label: `${this.label}.pipeline`, layout: this.pipelineLayout,
       compute: { module: this.shaderModule, entryPoint: this.entryPoint, ...(constants ? { constants: { ...constants } } : {}) },
@@ -85,6 +86,8 @@ export class ComputePipeline implements Compute {
     this.#storageBindings = this.reflection.bindings.filter((binding) => binding.kind === "buffer" && binding.addressSpace === "storage" && active.has(`${binding.group}:${binding.binding}`));
     if (opts.set) this.set(opts.set);
   }
+
+  readonly source: string;
 
   set(values: SetBag): this {
     assertDeviceUsable(this.device, `${this.label}.set`);

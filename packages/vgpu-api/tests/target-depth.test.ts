@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { effect, frame, init, sampler, target } from "../src/mock.ts";
 import type { VGPUError } from "../src/errors.ts";
@@ -43,7 +44,7 @@ describe("sampleable target depth", () => {
     const layoutSpy = vi.spyOn(device, "createBindGroupLayout");
     const scene = target(gpu, { size: [32, 32], depth: true });
     const output = target(gpu, { size: [32, 32] });
-    const fog = effect(gpu, DEPTH_READ, { label: "fog", set: { sceneDepth: scene.depth } });
+    const fog = effect(gpu, prepareShader(DEPTH_READ), { label: "fog", set: { sceneDepth: scene.depth } });
     expect(() => frame(gpu!, (current) => current.pass({ target: output }, (pass) => pass.draw(fog)))).not.toThrow();
     const descriptor = layoutSpy.mock.calls.find(([desc]) => desc?.label?.includes("fog.group0"))?.[0];
     expect(descriptor?.entries?.find((entry) => entry.binding === 0)?.texture?.sampleType).toBe("depth");
@@ -55,7 +56,7 @@ describe("sampleable target depth", () => {
     const device = gpu.device.gpu as GPUDevice;
     const layoutSpy = vi.spyOn(device, "createBindGroupLayout");
     const scene = target(gpu, { size: [32, 32], depth: true });
-    effect(gpu, DEPTH_SAMPLE, { label: "fog-sample", set: { sceneDepth: scene, depthSampler: sampler(gpu, { minFilter: "nearest", magFilter: "nearest" }) } });
+    effect(gpu, prepareShader(DEPTH_SAMPLE), { label: "fog-sample", set: { sceneDepth: scene, depthSampler: sampler(gpu, { minFilter: "nearest", magFilter: "nearest" }) } });
     const descriptor = layoutSpy.mock.calls.find(([desc]) => desc?.label?.includes("fog-sample.group0"))?.[0];
     expect(descriptor?.entries?.find((entry) => entry.binding === 0)?.texture?.sampleType).toBe("depth");
     expect(descriptor?.entries?.find((entry) => entry.binding === 1)?.sampler?.type).toBe("non-filtering");
@@ -66,7 +67,7 @@ describe("sampleable target depth", () => {
     gpu = await init();
     const scene = target(gpu, { size: [32, 32], depth: true });
     const spy = vi.spyOn(scene.depth!.gpu, "createView");
-    effect(gpu, DEPTH_READ, { label: "fog", set: { sceneDepth: scene } });
+    effect(gpu, prepareShader(DEPTH_READ), { label: "fog", set: { sceneDepth: scene } });
     expect(spy).toHaveBeenCalled();
     spy.mockRestore();
   });
@@ -74,7 +75,7 @@ describe("sampleable target depth", () => {
   test("a Target without depth is rejected with a fix-it", async () => {
     gpu = await init();
     const scene = target(gpu, { size: [32, 32] });
-    const fog = effect(gpu, DEPTH_READ, { label: "fog" });
+    const fog = effect(gpu, prepareShader(DEPTH_READ), { label: "fog" });
     expect(codeOf(() => fog.set({ sceneDepth: scene }))).toBe("VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE");
     expect(messageOf(() => fog.set({ sceneDepth: scene }))).toMatch(/depth: true/);
   });
@@ -83,7 +84,7 @@ describe("sampleable target depth", () => {
     gpu = await init();
     const scene = target(gpu, { size: [32, 32], depth: "depth24plus-stencil8" });
     const spy = vi.spyOn(scene.depth!.gpu, "createView");
-    effect(gpu, DEPTH_READ, { label: "fog", set: { sceneDepth: scene.depth } });
+    effect(gpu, prepareShader(DEPTH_READ), { label: "fog", set: { sceneDepth: scene.depth } });
     expect(spy.mock.calls.at(-1)?.[0]?.aspect).toBe("depth-only");
     spy.mockRestore();
   });
@@ -92,7 +93,7 @@ describe("sampleable target depth", () => {
     gpu = await init();
     const scene = target(gpu, { size: [32, 32], depth: true });
     const output = target(gpu, { size: [64, 64] });
-    const fog = effect(gpu, DEPTH_READ, { label: "fog", set: { sceneDepth: scene } });
+    const fog = effect(gpu, prepareShader(DEPTH_READ), { label: "fog", set: { sceneDepth: scene } });
     scene.resize([64, 64]);
     expect(() => frame(gpu!, (current) => current.pass({ target: output }, (pass) => pass.draw(fog)))).not.toThrow();
     await gpu.settled();

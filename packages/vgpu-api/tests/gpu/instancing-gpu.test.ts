@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { describe, expect, test } from "vitest";
 import { init, draw, frame, target } from "../../src/node.ts";
 
@@ -29,7 +30,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu instancing GPU accep
     const gpu = await init();
     try {
       const colorTarget = target(gpu, { size: [32, 16], format: "rgba8unorm" });
-      const quads = draw(gpu, { shader: INSTANCED_QUADS, label: "instanced-quads", vertices: 6, instances: 2 });
+      const quads = draw(gpu, { shader: prepareShader(INSTANCED_QUADS), label: "instanced-quads", vertices: 6, instances: 2 });
 
       frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, clear: [0, 0, 0, 1] }, (pass) => pass.draw(quads)));
 

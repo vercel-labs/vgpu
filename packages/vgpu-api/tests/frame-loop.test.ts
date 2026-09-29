@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { afterEach, expect, test, vi } from "vitest";
 import { FrameRunner } from "../src/frame.ts";
 import { init, effect, frame, frameLoop, target } from "../src/mock.ts";
@@ -138,7 +139,7 @@ test("gpu.dispose() stops the render loops that gpu started", async () => {
   const callbacks = mockAnimationFrames();
   const gpu = await init();
   const colorTarget = target(gpu, { size: [4, 4] });
-  const shader = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+  const shader = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`));
 
   let calls = 0;
   frameLoop(gpu, (currentFrame) => {
@@ -222,7 +223,7 @@ test("dispose stops the loops before the device goes down, then tears down once"
   const stop = handle.stop.bind(handle);
   handle.stop = () => { order.push("loop.stop"); stop(); };
   const colorTarget = target(gpu, { size: [4, 4] });
-  const shader = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+  const shader = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`));
   frame(gpu, (currentFrame) => currentFrame.pass(colorTarget, shader)); // materializes the pipeline cache
   vi.spyOn(gpu.device, "dispose").mockImplementation(() => { order.push("device.dispose"); });
 

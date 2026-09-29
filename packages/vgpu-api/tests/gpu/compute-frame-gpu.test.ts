@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { describe, expect, test, vi } from "vitest";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
@@ -13,8 +14,8 @@ describe.skipIf(!native)("native frame compute and uniform capture", () => {
       const a = target(gpu, { size: [1, 1], format: "rgba8unorm" });
       const b = target(gpu, { size: [1, 1], format: "rgba8unorm" });
       const shared = ownership === "shared" ? uniforms(gpu, { value: 0.25 }) : undefined;
-      const fx = effect(gpu, `struct Params { value:f32 } @group(0) @binding(0) var<uniform> params:Params;
-        @fragment fn main() -> @location(0) vec4f { return vec4f(params.value, 0, 0, 1); }`, { set: { params: shared ?? { value: 0.25 } } });
+      const fx = effect(gpu, prepareShader(`struct Params { value:f32 } @group(0) @binding(0) var<uniform> params:Params;
+        @fragment fn main() -> @location(0) vec4f { return vec4f(params.value, 0, 0, 1); }`), { set: { params: shared ?? { value: 0.25 } } });
       const set = (value: number) => shared ? shared.set({ value }) : fx.set({ params: { value } });
       await fx.compile(a);
       const f = frame(gpu, f => {
@@ -53,15 +54,15 @@ describe.skipIf(!native)("native frame compute and uniform capture", () => {
       const output = target(gpu, { size: [1, 1] });
       const data = storage(gpu, 4);
       data.write(new Float32Array([0]));
-      const fill = effect(gpu, "@fragment fn main() -> @location(0) vec4f { return vec4f(64.0/255.0, 0, 0, 1); }");
-      const sim = compute(gpu, `
+      const fill = effect(gpu, prepareShader("@fragment fn main() -> @location(0) vec4f { return vec4f(64.0/255.0, 0, 0, 1); }"));
+      const sim = compute(gpu, prepareShader(`
         @group(0) @binding(0) var input: texture_2d<f32>;
         @group(0) @binding(1) var<storage, read_write> data: array<f32>;
         @group(0) @binding(2) var<uniform> delta: f32;
         @compute @workgroup_size(1) fn main() { data[0] += round(textureLoad(input, vec2i(0), 0).r * 255.0) + delta; }
-      `, { set: { input, data, delta: 1 } });
-      const show = effect(gpu, `@group(0) @binding(0) var<storage, read> data: array<f32>;
-        @fragment fn main() -> @location(0) vec4f { return vec4f(data[0] / 255.0, 0, 0, 1); }`, { set: { data } });
+      `), { set: { input, data, delta: 1 } });
+      const show = effect(gpu, prepareShader(`@group(0) @binding(0) var<storage, read> data: array<f32>;
+        @fragment fn main() -> @location(0) vec4f { return vec4f(data[0] / 255.0, 0, 0, 1); }`), { set: { data } });
       await Promise.all([fill.compile(input), sim.compile(), show.compile(output)]);
       const f = frame(gpu, f => {
         f.pass(input, fill);
@@ -81,8 +82,8 @@ describe.skipIf(!native)("native frame compute and uniform capture", () => {
       const b = target(gpu, { size: [1, 1] });
       const c = target(gpu, { size: [1, 1] });
       const params = uniforms(gpu, { value: 0.25 });
-      const fx = effect(gpu, `struct Params { value:f32 } @group(0) @binding(0) var<uniform> params: Params;
-        @fragment fn main() -> @location(0) vec4f { return vec4f(params.value, 0, 0, 1); }`, { set: { params } });
+      const fx = effect(gpu, prepareShader(`struct Params { value:f32 } @group(0) @binding(0) var<uniform> params: Params;
+        @fragment fn main() -> @location(0) vec4f { return vec4f(params.value, 0, 0, 1); }`), { set: { params } });
       await fx.compile(a);
       const recorded = bundle(gpu, { target: a }, p => p.draw(fx));
       const f = frame(gpu, f => {
@@ -103,12 +104,12 @@ describe.skipIf(!native)("native frame compute and uniform capture", () => {
     try {
       const args = storage(gpu, 12, { indirect: true });
       const state = uniforms(gpu, { count: 0 });
-      const prepare = compute(gpu, `@group(0) @binding(0) var<storage,read_write> args:array<u32,3>;
-        @compute @workgroup_size(1) fn main(){ args[0]=1; args[1]=1; args[2]=1; }`, { set: { args } });
+      const prepare = compute(gpu, prepareShader(`@group(0) @binding(0) var<storage,read_write> args:array<u32,3>;
+        @compute @workgroup_size(1) fn main(){ args[0]=1; args[1]=1; args[2]=1; }`), { set: { args } });
       const out = storage(gpu, 4);
-      const step = compute(gpu, `struct S { count:u32 } @group(0) @binding(0) var<storage,read_write> state:S;
+      const step = compute(gpu, prepareShader(`struct S { count:u32 } @group(0) @binding(0) var<storage,read_write> state:S;
         @group(0) @binding(1) var<storage,read_write> out:array<u32>;
-        @compute @workgroup_size(1) fn main(){ state.count += 1; out[0]=state.count; }`, { set: { state, out } });
+        @compute @workgroup_size(1) fn main(){ state.count += 1; out[0]=state.count; }`), { set: { state, out } });
       await Promise.all([prepare.compile(), step.compile()]);
       const f = frame(gpu, f => f.computePass(p => {
         p.dispatch(prepare, 1); p.dispatch(step, { indirect: args }); p.dispatch(step, { indirect: args });
@@ -127,12 +128,12 @@ describe.skipIf(!native)("native frame compute and uniform capture", () => {
     try {
       const pair = pingPongStorage(gpu, 4);
       pair.read.write(new Float32Array([1]));
-      const sim = compute(gpu, `
+      const sim = compute(gpu, prepareShader(`
         @group(0) @binding(0) var<storage, read> src: array<f32>;
         @group(0) @binding(1) var<storage, read_write> dst: array<f32>;
         @group(0) @binding(2) var<uniform> delta: f32;
         @compute @workgroup_size(1) fn main() { dst[0] = src[0] + delta; }
-      `);
+      `));
       await sim.compile();
       const f = frame(gpu, f => f.computePass(p => {
         for (let delta = 1; delta <= 3; delta++) {
@@ -148,12 +149,14 @@ describe.skipIf(!native)("native frame compute and uniform capture", () => {
 
   test.each(["async", "sync"])("handled native pipeline validation leaves stdout parseable JSON (%s)", mode => {
     const entry = pathToFileURL(resolve("packages/vgpu-api/dist/node.js")).href;
+    const prepareEntry = pathToFileURL(resolve("packages/wgsl/dist/prepare.js")).href;
     const code = `
       import { init, compute, storage } from ${JSON.stringify(entry)};
+      import { prepareShader } from ${JSON.stringify(prepareEntry)};
       const gpu = await init();
       const events=[]; gpu.onError(e => events.push(e.code));
       const data=storage(gpu,4); data.write(new Float32Array([1.5]));
-      const kernel=compute(gpu, '@group(0) @binding(0) var<storage,read_write> data:array<f32>; override WG:u32=1; @compute @workgroup_size(WG) fn main(){ data[0]=42; }', { constants:{WG:gpu.device.limits.maxComputeWorkgroupSizeX+1}, set:{data} });
+      const kernel=compute(gpu, prepareShader('@group(0) @binding(0) var<storage,read_write> data:array<f32>; override WG:u32=1; @compute @workgroup_size(WG) fn main(){ data[0]=42; }'), { constants:{WG:gpu.device.limits.maxComputeWorkgroupSizeX+1}, set:{data} });
       let error; if (${JSON.stringify(mode)} === "async") { try { await kernel.compile(); } catch(e){ error=e.code; } } else { kernel.compileSync(); kernel.dispatch(1); }
       await gpu.settled();
       console.log(JSON.stringify({error,events,value:new Float32Array(await data.read())[0]}));

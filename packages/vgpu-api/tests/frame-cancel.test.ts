@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { expect, test, vi } from "vitest";
 import { createMockAdapter, init, effect, frame, target, timer, visibility } from "../src/mock.ts";
 import type { FramePass } from "../src/frame.ts";
@@ -137,7 +138,7 @@ test("a FramePass retained by user code cannot encode after its frame is cancele
   const scene = target(gpu, { size: [4, 4], depth: true });
   const vis = visibility(gpu);
   const query = vis.query("statue");
-  const shader = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+  const shader = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`));
   const currentFrame = frame(gpu);
   let stalePass: FramePass | undefined;
 

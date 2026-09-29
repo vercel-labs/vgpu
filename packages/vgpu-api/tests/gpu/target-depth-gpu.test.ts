@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { describe, expect, test } from "vitest";
 import { draw, effect, frame, init, sampler, target } from "../../src/node.ts";
 
@@ -27,8 +28,8 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("sampleable depth on Dawn"
     try {
       const scene = target(gpu, { size: [8, 8], format: "rgba8unorm", depth: true, label: "scene" });
       const output = target(gpu, { size: [8, 8], format: "rgba8unorm", label: "output" });
-      const geometry = draw(gpu, { shader: WRITE_DEPTH, vertices: 3, targets: [scene] });
-      const fog = effect(gpu, READ_DEPTH, { label: "fog", set: { sceneDepth: scene, depthCompare: sampler(gpu, { compare: "less" }) } });
+      const geometry = draw(gpu, { shader: prepareShader(WRITE_DEPTH), vertices: 3, targets: [scene] });
+      const fog = effect(gpu, prepareShader(READ_DEPTH), { label: "fog", set: { sceneDepth: scene, depthCompare: sampler(gpu, { compare: "less" }) } });
       frame(gpu, (current) => {
         current.pass({ target: scene, clear: [0, 0, 0, 1] }, (pass) => pass.draw(geometry));
         current.pass({ target: output, clear: [0, 0, 0, 1] }, (pass) => pass.draw(fog));

@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { expect, test, vi } from "vitest";
 import { compute, init } from "../../src/mock.ts";
 const SHADER = "@compute @workgroup_size(1) fn main() {}";
@@ -12,7 +13,7 @@ function scopes(device: GPUDevice) {
 test("compile after compileSync waits for validation and rejects the invalid candidate", async () => {
   const gpu = await init();
   try {
-    const sim = compute(gpu, SHADER);
+    const sim = compute(gpu, prepareShader(SHADER));
     const pending = scopes(gpu.gpu);
     const errors: unknown[] = [];
     gpu.onError(error => errors.push(error));
@@ -36,7 +37,7 @@ test("compile after compileSync waits for validation and rejects the invalid can
 test("sync takeover cannot settle async preparation before validation", async () => {
   const gpu = await init();
   try {
-    const sim = compute(gpu, SHADER);
+    const sim = compute(gpu, prepareShader(SHADER));
     let rejectNative!: (error: Error) => void;
     gpu.gpu.createComputePipelineAsync = () => new Promise((_resolve, reject) => { rejectNative = reject; });
     const pending = scopes(gpu.gpu);
@@ -57,7 +58,7 @@ test("sync takeover cannot settle async preparation before validation", async ()
 test("explicit async failure belongs to the promise, not onError", async () => {
   const gpu = await init();
   try {
-    const sim = compute(gpu, SHADER);
+    const sim = compute(gpu, prepareShader(SHADER));
     const errors: unknown[] = [];
     gpu.onError(e => errors.push(e));
     gpu.gpu.createComputePipelineAsync = () => Promise.reject(new Error("native validation"));
@@ -69,7 +70,7 @@ test("explicit async failure belongs to the promise, not onError", async () => {
 
 test("dispose rejects pending compilation even if native creation never settles", async () => {
   const gpu = await init();
-  const sim = compute(gpu, SHADER);
+  const sim = compute(gpu, prepareShader(SHADER));
   gpu.gpu.createComputePipelineAsync = () => new Promise(() => {});
   const rejected = expect(sim.compile()).rejects.toMatchObject({ code: "VGPU-COMPILE-DISPOSED" });
   gpu.dispose();
@@ -80,7 +81,7 @@ test("dispose rejects pending compilation even if native creation never settles"
 test.each([0, 1, 2, 3, 4])("standalone native validation phase %i is delivered once and joins settled", async phase => {
   const gpu = await init();
   try {
-    const sim = compute(gpu, SHADER);
+    const sim = compute(gpu, prepareShader(SHADER));
     await sim.compile();
     const pending = scopes(gpu.gpu);
     const errors: unknown[] = [];
@@ -100,7 +101,7 @@ test.each([0, 1, 2, 3, 4])("standalone native validation phase %i is delivered o
 
 test("disposal rejects compile awaiting an unresolved synchronous candidate", async () => {
   const gpu = await init();
-  const sim = compute(gpu, SHADER);
+  const sim = compute(gpu, prepareShader(SHADER));
   scopes(gpu.gpu);
   sim.compileSync();
   const rejection = expect(sim.compile()).rejects.toMatchObject({ code: "VGPU-COMPILE-DISPOSED" });
@@ -115,7 +116,7 @@ test("unconsumed shader creation failures reach onError and settled", async () =
     const pending = scopes(gpu.gpu);
     const errors: unknown[] = [];
     gpu.onError(e => errors.push(e));
-    compute(gpu, SHADER);
+    compute(gpu, prepareShader(SHADER));
     // No bindings: pipeline layout then shader module, without a compute pipeline.
     pending.forEach((resolve, index) => resolve(index === pending.length - 1 ? { message: "shader creation failed" } as GPUError : null));
     await gpu.settled();
@@ -127,7 +128,7 @@ test("unconsumed shader creation failures reach onError and settled", async () =
 test("deferred pass-end errors do not duplicate the originating pipeline failure", async () => {
   const gpu = await init();
   try {
-    const sim = compute(gpu, SHADER);
+    const sim = compute(gpu, prepareShader(SHADER));
     const pending = scopes(gpu.gpu);
     const errors: unknown[] = [];
     gpu.onError(e => errors.push(e));
@@ -143,7 +144,7 @@ test("deferred pass-end errors do not duplicate the originating pipeline failure
 
 test("a cached compile cannot resolve to a device disposed before promise delivery", async () => {
   const gpu = await init();
-  const sim = compute(gpu, SHADER);
+  const sim = compute(gpu, prepareShader(SHADER));
   await sim.compile();
   const pending = sim.compile();
   gpu.dispose();

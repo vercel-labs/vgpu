@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { describe, expect, test, vi } from "vitest";
 import { init, target, effect, frame, bundle } from "../../src/node.ts";
 
@@ -10,8 +11,8 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("texture replacement on Da
     try {
       const source = target(gpu, { size: [4, 4], depth: true });
       const output = target(gpu, { size: [2, 2] });
-      const followed = effect(gpu, SAMPLE, { set: { src: source } });
-      const fixed = effect(gpu, SAMPLE, { set: { src: source.color } });
+      const followed = effect(gpu, prepareShader(SAMPLE), { set: { src: source } });
+      const fixed = effect(gpu, prepareShader(SAMPLE), { set: { src: source.color } });
       const recorded = bundle(gpu, { target: output }, recorder => recorder.draw(fixed));
       const paint = (clear: [number, number, number, number]) => frame(gpu, f => f.pass({ target: source, clear }, () => {}));
       const render = () => frame(gpu, f => f.pass({ target: output }, p => p.draw(followed)));

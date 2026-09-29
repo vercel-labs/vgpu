@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { expect, test, vi } from "vitest";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
 import { init, bundle, effect, frame, target } from "../src/mock.ts";
@@ -18,7 +19,7 @@ const TEXTURE = `
 test("bundle(gpu, ...) can record against a target signature and replay on a compatible target", async () => {
   const gpu = await init();
   const scene = target(gpu, { size: [4, 4], format: "rgba8unorm" });
-  const shader = effect(gpu, SOLID, { label: "signatureFx" });
+  const shader = effect(gpu, prepareShader(SOLID), { label: "signatureFx" });
 
   const recorded = bundle(gpu, { target: { colors: ["rgba8unorm"] }, label: "signatureBundle" }, (b) => b.draw(shader));
 
@@ -29,7 +30,7 @@ test("bundle(gpu, ...) can record against a target signature and replay on a com
 test("bundle replay target signature mismatches throw R3 stale with recorded and actual keys", async () => {
   const gpu = await init();
   const scene = target(gpu, { size: [4, 4], format: "bgra8unorm" });
-  const shader = effect(gpu, SOLID, { label: "mismatchFx" });
+  const shader = effect(gpu, prepareShader(SOLID), { label: "mismatchFx" });
   const recorded = bundle(gpu, { target: { colors: ["rgba8unorm"] }, label: "signatureMismatch" }, (b) => b.draw(shader));
 
   expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: scene }, (p) => p.bundles(recorded)))).toThrowError(
@@ -44,7 +45,7 @@ test("bundle replay target signature mismatches throw R3 stale with recorded and
 
 test("bundle(gpu, ...) validates malformed signatures at record time", async () => {
   const gpu = await init();
-  const shader = effect(gpu, SOLID);
+  const shader = effect(gpu, prepareShader(SOLID));
 
   expect(() => bundle(gpu, { target: { colors: [] }, label: "badSignature" }, (b) => b.draw(shader))).toThrowError(/VGPU-COMPILE-SIGNATURE-INVALID|colors/);
   gpu.dispose();
@@ -53,7 +54,7 @@ test("bundle(gpu, ...) validates malformed signatures at record time", async () 
 test("bundle replay survives resize of the replay target when the signature is unchanged", async () => {
   const gpu = await init();
   const scene = target(gpu, { size: [4, 4], format: "rgba8unorm" });
-  const shader = effect(gpu, SOLID, { label: "resizeFx" });
+  const shader = effect(gpu, prepareShader(SOLID), { label: "resizeFx" });
   const recorded = bundle(gpu, { target: scene, label: "resizeBundle" }, (b) => b.draw(shader));
 
   scene.resize([8, 8]);
@@ -64,7 +65,7 @@ test("bundle replay survives resize of the replay target when the signature is u
 
 test("precompiled draws record into signature bundles without sync pipeline creation", async () => {
   const gpu = await init();
-  const shader = effect(gpu, SOLID, { label: "precompiledFx" });
+  const shader = effect(gpu, prepareShader(SOLID), { label: "precompiledFx" });
   const signature = { colors: ["rgba8unorm"] as const };
   const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
 
@@ -81,7 +82,7 @@ test("precompiled draws record into signature bundles without sync pipeline crea
 
 test("signature bundle recording still requires draw resources to be set", async () => {
   const gpu = await init();
-  const post = effect(gpu, TEXTURE, { label: "post" });
+  const post = effect(gpu, prepareShader(TEXTURE), { label: "post" });
 
   expect(() => bundle(gpu, { target: { colors: ["rgba8unorm"] }, label: "unsetTextureBundle" }, (b) => b.draw(post))).toThrowError(/VGPU-R1-BINDING-NEVER-SET|Unset/);
   gpu.dispose();
@@ -89,7 +90,7 @@ test("signature bundle recording still requires draw resources to be set", async
 
 test("cold signature bundle recording throws synchronous pipeline failures", async () => {
   const gpu = await init();
-  const shader = effect(gpu, SOLID, { label: "coldFailure" });
+  const shader = effect(gpu, prepareShader(SOLID), { label: "coldFailure" });
   const nativeError = new Error("sync pipeline failed during bundle recording");
   const errors: unknown[] = [];
   gpu.onError((error) => errors.push(error));

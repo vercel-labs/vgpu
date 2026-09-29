@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { expect, test, vi } from "vitest";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
 import { init as initBrowser, bundle, draw, effect, frame, pingPong, surface, target } from "../src/index.ts";
@@ -193,8 +194,8 @@ test("resize and frame reentrancy are guarded, but resizing another surface and 
 
 test("target is required for frame and one-shot draws, and target size is required at runtime", async () => {
   const gpu = await init();
-  const shader1 = effect(gpu, SOLID);
-  const drawable = draw(gpu, { shader: SOLID });
+  const shader1 = effect(gpu, prepareShader(SOLID));
+  const drawable = draw(gpu, { shader: prepareShader(SOLID) });
   expect(() => {
     // @ts-expect-error Frame.pass requires an explicit target; this asserts the runtime JS error.
     frame(gpu, (currentFrame) => currentFrame.pass({}, (p) => p.draw(shader1)));
@@ -227,7 +228,7 @@ test("bloom pattern immediate same-size resize does not recreate derived target 
 test("surface bundle survives resize, and re-recording from onResize is usable in the same frame", async () => {
   const gpu = await initBrowser({ adapter: createMockAdapter() });
   const manual = surface(gpu, canvasLike(10, 10), { autoResize: false });
-  const shader1 = effect(gpu, SOLID);
+  const shader1 = effect(gpu, prepareShader(SOLID));
   const resizeBundle = bundle(gpu, { target: { colors: [manual.format] }, label: "surfaceBundle" }, (b) => b.draw(shader1));
 
   manual.resize([12, 12]);
@@ -248,7 +249,7 @@ test("surface bundle survives resize, and re-recording from onResize is usable i
 test("a deferred frame can pass a surface before manual submit", async () => {
   const gpu = await initBrowser({ adapter: createMockAdapter() });
   const canvasSurface = surface(gpu, canvasLike(4, 4), { autoResize: false });
-  const shader1 = effect(gpu, SOLID);
+  const shader1 = effect(gpu, prepareShader(SOLID));
   const currentFrame = frame(gpu);
 
   expect(() => currentFrame.pass(canvasSurface, shader1)).not.toThrow();

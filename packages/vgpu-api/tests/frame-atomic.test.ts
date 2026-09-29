@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { afterEach, expect, test, vi } from "vitest";
 import { createMockAdapter, init, effect, frame, target, timer, visibility } from "../src/mock.ts";
 import { Frame } from "../src/frame.ts";
@@ -47,7 +48,7 @@ test("a callback that encodes passes and then throws submits nothing", async () 
   const submits = spyQueueSubmits(gpu.device.gpu);
   const ops = spyFrameEncoders(gpu.device.gpu);
   const colorTarget = target(gpu, { size: [4, 4] });
-  const shader = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+  const shader = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`));
   const failure = new Error("second pass setup failed");
 
   let thrown: unknown;

@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { expect, test, vi } from "vitest";
 import { init, draw, effect, frame, target } from "../src/mock.ts";
 
@@ -31,7 +32,7 @@ test("frame.pass accepts a bare target with a callback", async () => {
   const drawCalls = spyRenderPassDraws(gpu.device.gpu);
   try {
     const colorTarget = target(gpu, { size: [4, 4] });
-    const shader1 = effect(gpu, EFFECT_SHADER, { label: "target-callback" });
+    const shader1 = effect(gpu, prepareShader(EFFECT_SHADER), { label: "target-callback" });
 
     frame(gpu, (currentFrame) => currentFrame.pass(colorTarget, (pass) => pass.draw(shader1)));
 
@@ -48,8 +49,8 @@ test("frame.pass routes Effect and Draw shortcut bodies through FramePass.draw",
   try {
     const effectTarget = target(gpu, { size: [4, 4] });
     const drawTarget = target(gpu, { size: [4, 4] });
-    const shader1 = effect(gpu, EFFECT_SHADER, { label: "shortcut-effect" });
-    const drawable = draw(gpu, { shader: DRAW_SHADER, label: "shortcut-draw", vertices: 3 });
+    const shader1 = effect(gpu, prepareShader(EFFECT_SHADER), { label: "shortcut-effect" });
+    const drawable = draw(gpu, { shader: prepareShader(DRAW_SHADER), label: "shortcut-draw", vertices: 3 });
 
     frame(gpu, (currentFrame) => currentFrame.pass(effectTarget, shader1));
     frame(gpu, (currentFrame) => currentFrame.pass(drawTarget, drawable));
@@ -69,7 +70,7 @@ test("frame.pass keeps option bags and honors clear with an Effect shortcut", as
   const renderPasses = spyRenderPassDescriptors(gpu.device.gpu);
   try {
     const colorTarget = target(gpu, { size: [4, 4] });
-    const shader1 = effect(gpu, EFFECT_SHADER, { label: "clear-shortcut" });
+    const shader1 = effect(gpu, prepareShader(EFFECT_SHADER), { label: "clear-shortcut" });
 
     frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, clear: [1, 0, 0, 1] }, shader1));
 
@@ -85,7 +86,7 @@ test("effect.draw accepts a bare target and keeps DrawCallOptions bags", async (
   const drawCalls = spyRenderPassDraws(gpu.device.gpu);
   try {
     const colorTarget = target(gpu, { size: [4, 4] });
-    const shader1 = effect(gpu, EFFECT_SHADER, { label: "effect-overload" });
+    const shader1 = effect(gpu, prepareShader(EFFECT_SHADER), { label: "effect-overload" });
 
     shader1.draw(colorTarget);
     shader1.draw({ target: colorTarget, instances: 2 });
@@ -105,7 +106,7 @@ test("draw.draw accepts a bare target and keeps DrawCallOptions bags", async () 
   const drawCalls = spyRenderPassDraws(gpu.device.gpu);
   try {
     const colorTarget = target(gpu, { size: [4, 4] });
-    const drawable = draw(gpu, { shader: DRAW_SHADER, label: "draw-overload", vertices: 3 });
+    const drawable = draw(gpu, { shader: prepareShader(DRAW_SHADER), label: "draw-overload", vertices: 3 });
 
     drawable.draw(colorTarget);
     drawable.draw({ target: colorTarget, instances: 2 });
