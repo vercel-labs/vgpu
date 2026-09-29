@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { describe, expect, test } from "vitest";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
 import { init, effect, geometry } from "../../src/mock.ts";
@@ -54,7 +55,7 @@ describe("vgpu/scene", () => {
   test("effect() rejects geometry options and points to draw()", async () => {
     const gpu = await init();
     const geo = geometry(gpu, box());
-    expect(() => effect(gpu, SIMPLE_DRAW, { geometry: geo } as never)).toThrowError(/effect\(\) never accepts vertex buffers; use draw\(gpu, /);
+    expect(() => effect(gpu, prepareShader(SIMPLE_DRAW), { geometry: geo } as never)).toThrowError(/effect\(\) never accepts vertex buffers; use draw\(gpu, /);
     gpu.dispose();
   });
 });

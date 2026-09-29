@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { expect, test, vi } from "vitest";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
 import { init, draw, frame, target } from "../src/mock.ts";
@@ -14,7 +15,7 @@ const DRAW_SHADER = `
 test("omitted depth defaults to write with less-equal on depth targets", async () => {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [2, 2], depth: true });
-  draw(gpu, { shader: DRAW_SHADER, label: "depth-default" }).draw(colorTarget);
+  draw(gpu, { shader: prepareShader(DRAW_SHADER), label: "depth-default" }).draw(colorTarget);
 
   const desc = getMockGPUDeviceInstrumentation(gpu.device.gpu).createRenderPipelineDescriptors.at(-1);
   expect(desc?.depthStencil).toEqual({ format: "depth24plus", depthWriteEnabled: true, depthCompare: "less-equal" });
@@ -24,7 +25,7 @@ test("omitted depth defaults to write with less-equal on depth targets", async (
 test("depth false disables testing via always compare without writes", async () => {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [2, 2], depth: true });
-  draw(gpu, { shader: DRAW_SHADER, label: "depth-off", depth: false }).draw(colorTarget);
+  draw(gpu, { shader: prepareShader(DRAW_SHADER), label: "depth-off", depth: false }).draw(colorTarget);
 
   const desc = getMockGPUDeviceInstrumentation(gpu.device.gpu).createRenderPipelineDescriptors.at(-1);
   expect(desc?.depthStencil).toEqual({ format: "depth24plus", depthWriteEnabled: false, depthCompare: "always" });
@@ -34,9 +35,9 @@ test("depth false disables testing via always compare without writes", async () 
 test("each depth field threads into the pipeline depthStencil state", async () => {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [2, 2], depth: true });
-  draw(gpu, { shader: DRAW_SHADER, label: "depth-full", depth: { write: false, compare: "greater", bias: 2, biasSlopeScale: 1.5, biasClamp: 0.25 } }).draw(colorTarget);
-  draw(gpu, { shader: DRAW_SHADER, label: "depth-partial", depth: { compare: "less" } }).draw(colorTarget);
-  draw(gpu, { shader: DRAW_SHADER, label: "depth-empty", depth: {} }).draw(colorTarget);
+  draw(gpu, { shader: prepareShader(DRAW_SHADER), label: "depth-full", depth: { write: false, compare: "greater", bias: 2, biasSlopeScale: 1.5, biasClamp: 0.25 } }).draw(colorTarget);
+  draw(gpu, { shader: prepareShader(DRAW_SHADER), label: "depth-partial", depth: { compare: "less" } }).draw(colorTarget);
+  draw(gpu, { shader: prepareShader(DRAW_SHADER), label: "depth-empty", depth: {} }).draw(colorTarget);
 
   const descs = getMockGPUDeviceInstrumentation(gpu.device.gpu).createRenderPipelineDescriptors;
   expect(descs.at(-3)?.depthStencil).toEqual({ format: "depth24plus", depthWriteEnabled: false, depthCompare: "greater", depthBias: 2, depthBiasSlopeScale: 1.5, depthBiasClamp: 0.25 });
@@ -48,7 +49,7 @@ test("each depth field threads into the pipeline depthStencil state", async () =
 test("targets without depth keep depthStencil undefined regardless of depth options", async () => {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [2, 2] });
-  draw(gpu, { shader: DRAW_SHADER, label: "no-depth", depth: { compare: "greater", bias: 4 } }).draw(colorTarget);
+  draw(gpu, { shader: prepareShader(DRAW_SHADER), label: "no-depth", depth: { compare: "greater", bias: 4 } }).draw(colorTarget);
 
   const desc = getMockGPUDeviceInstrumentation(gpu.device.gpu).createRenderPipelineDescriptors.at(-1);
   expect(desc?.depthStencil).toBeUndefined();
@@ -65,7 +66,7 @@ test("depth participates in pipeline keys", () => {
 test("invalid depth options fail at draw construction", async () => {
   const gpu = await init();
   const expectInvalid = (label: string, depth: unknown): void => {
-    expect(() => draw(gpu, { shader: DRAW_SHADER, label, depth: depth as never })).toThrowError(/VGPU-DEPTH-INVALID|Invalid depth/);
+    expect(() => draw(gpu, { shader: prepareShader(DRAW_SHADER), label, depth: depth as never })).toThrowError(/VGPU-DEPTH-INVALID|Invalid depth/);
   };
   expectInvalid("depth-true", true);
   expectInvalid("depth-null", null);
@@ -81,27 +82,27 @@ test("invalid depth options fail at draw construction", async () => {
 test("depth bias outside the i32 range fails at draw construction", async () => {
   const gpu = await init();
   const expectInvalid = (label: string, bias: number): void => {
-    expect(() => draw(gpu, { shader: DRAW_SHADER, label, depth: { bias } })).toThrowError(/VGPU-DEPTH-INVALID|Invalid depth/);
+    expect(() => draw(gpu, { shader: prepareShader(DRAW_SHADER), label, depth: { bias } })).toThrowError(/VGPU-DEPTH-INVALID|Invalid depth/);
   };
   expectInvalid("bias-over-i32", 2147483648);
   expectInvalid("bias-under-i32", -2147483649);
   expectInvalid("bias-huge", 1e12);
   // The i32 bounds themselves stay legal.
-  expect(() => draw(gpu, { shader: DRAW_SHADER, label: "bias-i32-max", depth: { bias: 2147483647 } })).not.toThrow();
-  expect(() => draw(gpu, { shader: DRAW_SHADER, label: "bias-i32-min", depth: { bias: -2147483648 } })).not.toThrow();
+  expect(() => draw(gpu, { shader: prepareShader(DRAW_SHADER), label: "bias-i32-max", depth: { bias: 2147483647 } })).not.toThrow();
+  expect(() => draw(gpu, { shader: prepareShader(DRAW_SHADER), label: "bias-i32-min", depth: { bias: -2147483648 } })).not.toThrow();
   gpu.dispose();
 });
 
 test("nonzero depth bias is rejected for non-triangle topologies", async () => {
   const gpu = await init();
   const expectInvalid = (label: string, topology: GPUPrimitiveTopology, depth: unknown): void => {
-    expect(() => draw(gpu, { shader: DRAW_SHADER, label, geometry: { topology }, depth: depth as never })).toThrowError(/VGPU-DEPTH-INVALID|Invalid depth/);
+    expect(() => draw(gpu, { shader: prepareShader(DRAW_SHADER), label, geometry: { topology }, depth: depth as never })).toThrowError(/VGPU-DEPTH-INVALID|Invalid depth/);
   };
   expectInvalid("bias-line-list", "line-list", { bias: 1 });
   expectInvalid("slope-line-strip", "line-strip", { biasSlopeScale: 0.5 });
   expectInvalid("clamp-point-list", "point-list", { biasClamp: 0.5 });
-  expect(() => draw(gpu, { shader: DRAW_SHADER, label: "zero-bias-lines", geometry: { topology: "line-list" }, depth: { bias: 0, compare: "less" } })).not.toThrow();
-  expect(() => draw(gpu, { shader: DRAW_SHADER, label: "bias-strip", geometry: { topology: "triangle-strip", stripIndexFormat: "uint16" }, depth: { bias: 1 } })).not.toThrow();
+  expect(() => draw(gpu, { shader: prepareShader(DRAW_SHADER), label: "zero-bias-lines", geometry: { topology: "line-list" }, depth: { bias: 0, compare: "less" } })).not.toThrow();
+  expect(() => draw(gpu, { shader: prepareShader(DRAW_SHADER), label: "bias-strip", geometry: { topology: "triangle-strip", stripIndexFormat: "uint16" }, depth: { bias: 1 } })).not.toThrow();
   gpu.dispose();
 });
 

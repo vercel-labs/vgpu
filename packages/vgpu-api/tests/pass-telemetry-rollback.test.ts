@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { expect, test, vi } from "vitest";
 import { createMockAdapter, init, draw, frame, target, timer, visibility } from "../src/mock.ts";
 
@@ -130,7 +131,7 @@ test("a throwing pass callback leaves no phantom visibility result", async () =>
   const ops = spyFrameEncoders(gpu.device.gpu);
   const vis = visibility(gpu);
   const scene = target(gpu, { size: [4, 4], depth: true });
-  const proxy = draw(gpu, { shader: SOLID, label: "proxy" });
+  const proxy = draw(gpu, { shader: prepareShader(SOLID), label: "proxy" });
   // Slot 0 reads back the mock's fake value 0 — a phantom "hidden" would cull the object forever.
   const query = vis.query("statue");
 

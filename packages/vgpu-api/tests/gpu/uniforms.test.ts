@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { describe, expect, test } from "vitest";
 import { init, effect, frame, target, uniforms } from "../../src/node.ts";
 
@@ -25,8 +26,8 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("uniforms(gpu) Docker GPU"
     const createBufferCount = countCreateBufferCalls(gpu.gpu);
     try {
       const globals = uniforms(gpu, { time: 0, mouse: [0, 0] });
-      const wave = effect(gpu, WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
-      const blur = effect(gpu, BLUR_WGSL, { label: "BLUR_WGSL", set: { g: globals } });
+      const wave = effect(gpu, prepareShader(WAVE_WGSL), { label: "WAVE_WGSL", set: { globals } });
+      const blur = effect(gpu, prepareShader(BLUR_WGSL), { label: "BLUR_WGSL", set: { g: globals } });
       const waveTarget = target(gpu, { size: [8, 8], format: "rgba8unorm", label: "waveTarget" });
       const blurTarget = target(gpu, { size: [8, 8], format: "rgba8unorm", label: "blurTarget" });
 

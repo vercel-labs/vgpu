@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { afterEach, expect, test, vi } from "vitest";
 import { compute, effect, frame, init, storage, target, uniforms, getMockGPUDeviceInstrumentation, type FrameComputePass } from "../../src/mock.ts";
 
@@ -8,7 +9,7 @@ afterEach(() => vi.restoreAllMocks());
 test("compute is lazy, compile is chainable and concurrent preparation shares native work", async () => {
   const gpu = await init();
   try {
-    const sim = compute(gpu, EMPTY);
+    const sim = compute(gpu, prepareShader(EMPTY));
     const mock = getMockGPUDeviceInstrumentation(gpu.gpu);
     expect(mock.calls.createComputePipeline).toBe(0);
     expect(await Promise.all([sim.compile(), sim.compile()])).toEqual([sim, sim]);
@@ -21,7 +22,7 @@ test("compute is lazy, compile is chainable and concurrent preparation shares na
 test("a frame shares one encoder and submission across render and compute passes", async () => {
   const gpu = await init();
   try {
-    const sim = compute(gpu, EMPTY);
+    const sim = compute(gpu, prepareShader(EMPTY));
     const color = target(gpu, { size: [2, 2] });
     const submits = vi.spyOn(gpu.gpu.queue, "submit");
     const encoders = vi.spyOn(gpu.gpu, "createCommandEncoder");
@@ -42,8 +43,8 @@ test("compute pass lifecycle guards, cancellation, and foreign devices", async (
   const gpu = await init();
   const foreign = await init();
   try {
-    const sim = compute(gpu, EMPTY);
-    const wrong = compute(foreign, EMPTY);
+    const sim = compute(gpu, prepareShader(EMPTY));
+    const wrong = compute(foreign, prepareShader(EMPTY));
     const submits = vi.spyOn(gpu.gpu.queue, "submit");
     let saved!: FrameComputePass;
     const f = frame(gpu);
@@ -68,14 +69,14 @@ test("compute pass lifecycle guards, cancellation, and foreign devices", async (
 test("direct counts and literal workgroup limits fail before submission; zero is legal", async () => {
   const gpu = await init();
   try {
-    const sim = compute(gpu, EMPTY);
+    const sim = compute(gpu, prepareShader(EMPTY));
     const submit = vi.spyOn(gpu.gpu.queue, "submit");
     for (const count of [-1, 0.5, NaN, Infinity, 65536]) expect(() => sim.dispatch(count)).toThrow(/Dispatch x/);
     expect(submit).not.toHaveBeenCalled();
     expect(() => sim.dispatch(0)).not.toThrow();
-    const large = compute(gpu, "@compute @workgroup_size(257) fn main() {}");
+    const large = compute(gpu, prepareShader("@compute @workgroup_size(257) fn main() {}"));
     expect(() => large.compileSync()).toThrow(/granted limit/);
-    const product = compute(gpu, "@compute @workgroup_size(32, 32) fn main() {}");
+    const product = compute(gpu, prepareShader("@compute @workgroup_size(32, 32) fn main() {}"));
     await expect(product.compile()).rejects.toMatchObject({ code: "VGPU-COMPILE-FAILED" });
   } finally { gpu.dispose(); }
 });
@@ -85,8 +86,8 @@ test("managed uniform snapshots capture each revision and share unchanged values
   try {
     const shared = uniforms(gpu, { x: 1 });
     const shader = "struct U { x:f32 } @group(0) @binding(0) var<uniform> u: U; @compute @workgroup_size(1) fn main() { let x = u.x; }";
-    const a = compute(gpu, shader, { set: { u: shared } });
-    const b = compute(gpu, shader, { set: { u: shared } });
+    const a = compute(gpu, prepareShader(shader), { set: { u: shared } });
+    const b = compute(gpu, prepareShader(shader), { set: { u: shared } });
     const mock = getMockGPUDeviceInstrumentation(gpu.gpu);
     const f = frame(gpu);
     f.computePass(p => {
@@ -114,8 +115,8 @@ test("managed uniform snapshots capture each revision and share unchanged values
 test("JS-owned uniform values are captured across draw and dispatch", async () => {
   const gpu = await init();
   try {
-    const sim = compute(gpu, UNIFORM, { set: { value: 1 } });
-    const fx = effect(gpu, "@group(0) @binding(0) var<uniform> value:f32; @fragment fn main() -> @location(0) vec4f { return vec4f(value); }", { set: { value: 3 } });
+    const sim = compute(gpu, prepareShader(UNIFORM), { set: { value: 1 } });
+    const fx = effect(gpu, prepareShader("@group(0) @binding(0) var<uniform> value:f32; @fragment fn main() -> @location(0) vec4f { return vec4f(value); }"), { set: { value: 3 } });
     const color = target(gpu, { size: [2, 2] });
     const mock = getMockGPUDeviceInstrumentation(gpu.gpu);
     const f = frame(gpu, f => {
@@ -136,7 +137,7 @@ test("indirect buffers reject destruction and foreign ownership", async () => {
   const gpu = await init();
   const foreign = await init();
   try {
-    const sim = compute(gpu, EMPTY);
+    const sim = compute(gpu, prepareShader(EMPTY));
     const args = storage(foreign, 12, { indirect: true });
     expect(() => sim.dispatch({ indirect: args })).toThrow(/different GPU/);
     const local = storage(gpu, 12, { indirect: true });
@@ -148,7 +149,7 @@ test("indirect buffers reject destruction and foreign ownership", async () => {
 test("outstanding manual frames keep independent snapshots and cancel releases their pages", async () => {
   const gpu = await init();
   try {
-    const sim = compute(gpu, UNIFORM, { set: { value: 1 } });
+    const sim = compute(gpu, prepareShader(UNIFORM), { set: { value: 1 } });
     const mock = getMockGPUDeviceInstrumentation(gpu.gpu);
     const a = frame(gpu);
     a.computePass(p => p.dispatch(sim, 1));
@@ -177,7 +178,7 @@ test("outstanding manual frames keep independent snapshots and cancel releases t
 test("frame.done remains resolve-only if submitted work completion rejects", async () => {
   const gpu = await init();
   try {
-    const sim = compute(gpu, UNIFORM, { set: { value: 1 } });
+    const sim = compute(gpu, prepareShader(UNIFORM), { set: { value: 1 } });
     const errors: unknown[] = [];
     gpu.onError(e => errors.push(e));
     gpu.gpu.queue.onSubmittedWorkDone = () => Promise.reject(new Error("lost device"));
@@ -192,10 +193,10 @@ test("compute cache keys include constants and constructor options are snapshott
   try {
     const shader = "override WG:u32=1; @compute @workgroup_size(WG) fn main() {}";
     const constants = { WG: 2 };
-    const a = compute(gpu, shader, { constants });
+    const a = compute(gpu, prepareShader(shader), { constants });
     constants.WG = 4;
-    const b = compute(gpu, shader, { constants: { WG: 2 } });
-    const c = compute(gpu, shader, { constants });
+    const b = compute(gpu, prepareShader(shader), { constants: { WG: 2 } });
+    const c = compute(gpu, prepareShader(shader), { constants });
     await Promise.all([a.compile(), b.compile(), c.compile()]);
     const mock = getMockGPUDeviceInstrumentation(gpu.gpu);
     expect(mock.calls.createComputePipelineAsync).toBe(2);
@@ -208,9 +209,9 @@ test("workgroup preflight uses restricted device limits rather than core default
   try {
     Object.defineProperty(gpu.gpu.limits, "maxComputeWorkgroupSizeX", { value: 128 });
     Object.defineProperty(gpu.gpu.limits, "maxComputeInvocationsPerWorkgroup", { value: 128 });
-    const invalid = compute(gpu, "@compute @workgroup_size(256) fn main() {}");
+    const invalid = compute(gpu, prepareShader("@compute @workgroup_size(256) fn main() {}"));
     expect(() => invalid.compileSync()).toThrow(/granted limit is 128/);
-    const valid = compute(gpu, "@compute @workgroup_size(128) fn main() {}");
+    const valid = compute(gpu, prepareShader("@compute @workgroup_size(128) fn main() {}"));
     await expect(valid.compile()).resolves.toBe(valid);
   } finally { gpu.dispose(); }
 });

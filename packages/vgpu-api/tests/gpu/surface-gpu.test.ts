@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { Worker } from "node:worker_threads";
 import { describe, expect, test } from "vitest";
 import { init, effect, frame, surface, target } from "../../src/node.ts";
@@ -35,12 +36,12 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Surface Docker GPU accept
     try {
       const canvas = gpuCanvasLike(8, 8, true);
       const canvasSurface = surface(gpu, canvas, { dpr: 1, autoResize: false, label: "gpuSurface" });
-      const red = effect(gpu, RED, { label: "surfaceRed" });
+      const red = effect(gpu, prepareShader(RED), { label: "surfaceRed" });
       frame(gpu, (currentFrame) => currentFrame.pass({ target: canvasSurface }, (pass) => pass.draw(red)));
       expect(rgbaAt(await canvasSurface.color.read({ mipLevel: 0, region: "all" }), 8, 4, 4)).toEqual([255, 0, 0, 255]);
 
       canvasSurface.resize([12, 4]);
-      const green = effect(gpu, GREEN_BY_RESOLUTION, { label: "surfaceGreen", set: { resolution: canvasSurface.size } });
+      const green = effect(gpu, prepareShader(GREEN_BY_RESOLUTION), { label: "surfaceGreen", set: { resolution: canvasSurface.size } });
       frame(gpu, (currentFrame) => currentFrame.pass({ target: canvasSurface }, (pass) => pass.draw(green)));
       const pixels = await canvasSurface.color.read({ mipLevel: 0, region: "all" });
       expect(canvasSurface.size).toEqual([12, 4]);
@@ -66,8 +67,8 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Surface Docker GPU accept
     try {
       const a = surface(gpu, gpuCanvasLike(6, 6, true), { dpr: 1, label: "surfaceA" });
       const b = surface(gpu, gpuCanvasLike(5, 5, true), { dpr: 1, label: "surfaceB" });
-      const blue = effect(gpu, BLUE, { label: "blue" });
-      const yellow = effect(gpu, YELLOW, { label: "yellow" });
+      const blue = effect(gpu, prepareShader(BLUE), { label: "blue" });
+      const yellow = effect(gpu, prepareShader(YELLOW), { label: "yellow" });
 
       frame(gpu, (currentFrame) => {
         currentFrame.pass({ target: a }, (pass) => pass.draw(blue));

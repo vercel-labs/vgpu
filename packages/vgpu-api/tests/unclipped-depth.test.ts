@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { expect, test } from "vitest";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
 import { createMockAdapter, init, draw, target } from "../src/mock.ts";
@@ -18,7 +19,7 @@ test("unclippedDepth reaches the render pipeline primitive state", async () => {
   const gpu = await initWithDepthClipControl();
   const colorTarget = target(gpu, { size: [4, 4], depth: true });
 
-  draw(gpu, { shader: SOLID, label: "unclipped", unclippedDepth: true }).draw(colorTarget);
+  draw(gpu, { shader: prepareShader(SOLID), label: "unclipped", unclippedDepth: true }).draw(colorTarget);
 
   const desc = getMockGPUDeviceInstrumentation(gpu.device.gpu).createRenderPipelineDescriptors.at(-1);
   expect(desc?.primitive).toEqual({ topology: "triangle-list", unclippedDepth: true });
@@ -29,8 +30,8 @@ test("absent or false unclippedDepth keeps byte-identical primitive descriptors"
   const gpu = await initWithDepthClipControl();
   const colorTarget = target(gpu, { size: [4, 4] });
 
-  draw(gpu, { shader: SOLID, label: "absent" }).draw(colorTarget);
-  draw(gpu, { shader: SOLID, label: "explicit-false", unclippedDepth: false }).draw(colorTarget);
+  draw(gpu, { shader: prepareShader(SOLID), label: "absent" }).draw(colorTarget);
+  draw(gpu, { shader: prepareShader(SOLID), label: "explicit-false", unclippedDepth: false }).draw(colorTarget);
 
   const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
   // Byte-identical descriptors share one cached pipeline; the only descriptor has no unclippedDepth member.
@@ -43,9 +44,9 @@ test("explicit false shares the pipeline cache key with the absent option", asyn
   const gpu = await initWithDepthClipControl();
   const colorTarget = target(gpu, { size: [4, 4] });
 
-  draw(gpu, { shader: SOLID, label: "plain" }).draw(colorTarget);
-  draw(gpu, { shader: SOLID, label: "false", unclippedDepth: false }).draw(colorTarget);
-  draw(gpu, { shader: SOLID, label: "true", unclippedDepth: true }).draw(colorTarget);
+  draw(gpu, { shader: prepareShader(SOLID), label: "plain" }).draw(colorTarget);
+  draw(gpu, { shader: prepareShader(SOLID), label: "false", unclippedDepth: false }).draw(colorTarget);
+  draw(gpu, { shader: prepareShader(SOLID), label: "true", unclippedDepth: true }).draw(colorTarget);
 
   const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
   expect(mock.calls.createShaderModule).toBe(1);
@@ -57,7 +58,7 @@ test("explicit false shares the pipeline cache key with the absent option", asyn
 test("non-boolean unclippedDepth fails at draw construction", async () => {
   const gpu = await initWithDepthClipControl();
   for (const value of ["yes", 1, {}, [], null]) {
-    expect(() => draw(gpu, { shader: SOLID, label: "bad", unclippedDepth: value as never })).toThrowError(/VGPU-UNCLIPPED-DEPTH-INVALID|expected a boolean/);
+    expect(() => draw(gpu, { shader: prepareShader(SOLID), label: "bad", unclippedDepth: value as never })).toThrowError(/VGPU-UNCLIPPED-DEPTH-INVALID|expected a boolean/);
   }
   gpu.dispose();
 });
@@ -66,14 +67,14 @@ test("unclippedDepth: true without the depth-clip-control feature throws with th
   const gpu = await init();
   expect(gpu.device.features.has("depth-clip-control")).toBe(false);
   let error: unknown;
-  try { draw(gpu, { shader: SOLID, label: "no-feature", unclippedDepth: true }); }
+  try { draw(gpu, { shader: prepareShader(SOLID), label: "no-feature", unclippedDepth: true }); }
   catch (thrown) { error = thrown; }
   expect(error).toMatchObject({
     code: "VGPU-UNCLIPPED-DEPTH-INVALID",
     message: expect.stringContaining(`init({ requiredFeatures: ["depth-clip-control"] })`),
   });
   // false stays valid on a device without the feature; it behaves exactly like the absent option.
-  expect(() => draw(gpu, { shader: SOLID, label: "false-ok", unclippedDepth: false })).not.toThrow();
+  expect(() => draw(gpu, { shader: prepareShader(SOLID), label: "false-ok", unclippedDepth: false })).not.toThrow();
   gpu.dispose();
 });
 
@@ -81,7 +82,7 @@ test("unclippedDepth composes with cull and frontFace in the primitive state", a
   const gpu = await initWithDepthClipControl();
   const colorTarget = target(gpu, { size: [4, 4], depth: true });
 
-  draw(gpu, { shader: SOLID, label: "combo", cull: "back", frontFace: "cw", unclippedDepth: true }).draw(colorTarget);
+  draw(gpu, { shader: prepareShader(SOLID), label: "combo", cull: "back", frontFace: "cw", unclippedDepth: true }).draw(colorTarget);
 
   const desc = getMockGPUDeviceInstrumentation(gpu.device.gpu).createRenderPipelineDescriptors.at(-1);
   expect(desc?.primitive).toEqual({ topology: "triangle-list", cullMode: "back", frontFace: "cw", unclippedDepth: true });

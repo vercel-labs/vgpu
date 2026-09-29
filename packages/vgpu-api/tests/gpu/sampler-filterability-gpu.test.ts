@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { bindGroupLayoutMetadata } from "@vgpu/core";
 import { describe, expect, test } from "vitest";
 import { init, draw, frame, sampler, target } from "../../src/node.ts";
@@ -66,8 +67,8 @@ describe.skipIf(dockerOnly)("sampler filterability real-world Docker regressions
       expect(gpu.device.features.has("float32-filterable")).toBe(false);
       const source = target(gpu, { size: [8, 8], format: "rgba32float", label: "load-only-hdr" });
       const output = target(gpu, { size: [8, 8], format: "rgba8unorm", label: "load-only-output" });
-      const solid = draw(gpu, { shader: SOLID, vertices: 3 });
-      const loaded = draw(gpu, { shader: LOAD_SHAPE, vertices: 3 });
+      const solid = draw(gpu, { shader: prepareShader(SOLID), vertices: 3 });
+      const loaded = draw(gpu, { shader: prepareShader(LOAD_SHAPE), vertices: 3 });
       expect(textureSampleType(loaded.layout(0), 0)).toBe("unfilterable-float");
       expect(() => loaded.set({ source })).not.toThrow();
       frame(gpu, (currentFrame) => {
@@ -82,7 +83,7 @@ describe.skipIf(dockerOnly)("sampler filterability real-world Docker regressions
     const gpu = await init();
     try {
       const source = target(gpu, { size: [1, 1], format: "rgba32float", label: "sampled-hdr" });
-      const sampled = draw(gpu, { shader: BLOOM_SHAPE, label: "sampled-hdr-draw", vertices: 3 });
+      const sampled = draw(gpu, { shader: prepareShader(BLOOM_SHAPE), label: "sampled-hdr-draw", vertices: 3 });
       expect(() => sampled.set({ source, linearSampler: sampler(gpu) })).toThrow(expect.objectContaining({
         code: "VGPU-SET-TEXTURE-FILTERABILITY",
         detail: expect.objectContaining({ format: "rgba32float", bindingName: "source", samplerName: "linearSampler" }),
@@ -100,8 +101,8 @@ async function renderSampledFixture(
 ): Promise<void> {
   const source = target(gpu, { size: [8, 8], format: "rgba8unorm", label: `${label}-source` });
   const output = target(gpu, { size: [8, 8], format: "rgba8unorm", label: `${label}-output` });
-  const solid = draw(gpu, { shader: SOLID, label: `${label}-solid`, vertices: 3 });
-  const sampled = draw(gpu, { shader, label, vertices: 3 });
+  const solid = draw(gpu, { shader: prepareShader(SOLID), label: `${label}-solid`, vertices: 3 });
+  const sampled = draw(gpu, { shader: prepareShader(shader), label, vertices: 3 });
   expect(textureSampleType(sampled.layout(0), 0)).toBe("float");
   sampled.set({ [textureName]: source, [samplerName]: sampler(gpu, { minFilter: "linear", magFilter: "linear" }) });
   frame(gpu, (currentFrame) => {
