@@ -70,12 +70,20 @@ describe('bakeSpring', () => {
     expect(table.peakVelocity).toBeGreaterThan(1);
   });
 
-  test('the bouncy default overshoots and critical damping does not', () => {
-    expect(bakeSpring(DEFAULT_SPRING).overshoot).toBeGreaterThan(0.2);
-    const calm = bakeSpring(criticallyDamped(DEFAULT_SPRING));
+  test('a bouncy spring overshoots and critical damping does not', () => {
+    const bouncy = bakeSpring(SPRING_PRESETS.Bouncy);
+    expect(bouncy.overshoot).toBeGreaterThan(0.2);
+    const calm = bakeSpring(criticallyDamped(SPRING_PRESETS.Bouncy));
     expect(calm.overshoot).toBeLessThan(0.01);
     // Critical damping keeps the stiffness, so the morph is not slower.
-    expect(calm.duration).toBeLessThan(bakeSpring(DEFAULT_SPRING).duration);
+    expect(calm.duration).toBeLessThan(bouncy.duration);
+  });
+
+  test('the heavy default barely overshoots and settles well inside a segment', () => {
+    const table = bakeSpring(DEFAULT_SPRING);
+    expect(table.overshoot).toBeGreaterThan(0);
+    expect(table.overshoot).toBeLessThan(0.05);
+    expect(morphWindow(DEFAULT_STAGGER.spread, table.duration)).toBeLessThan(SEGMENT);
   });
 
   test('a spring that would ring for ages is capped and still lands on 1', () => {

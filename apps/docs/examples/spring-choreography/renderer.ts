@@ -136,7 +136,7 @@ export function createRenderer({ canvas, container = canvas.parentElement ?? und
     time: 0,
     speed: 1,
     shape: 0,
-    preset: 'Bouncy',
+    preset: 'Heavy',
     ...DEFAULT_SPRING,
     pattern: 'auto',
     ...DEFAULT_STAGGER,

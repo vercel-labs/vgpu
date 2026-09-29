@@ -51,6 +51,7 @@ export interface SpringSettings {
 }
 
 export const SPRING_PRESETS = {
+  Heavy: { stiffness: 62, damping: 25.5, mass: 4.65 },
   Bouncy: { stiffness: 140, damping: 8, mass: 1 },
   Wobbly: { stiffness: 70, damping: 4.5, mass: 1.4 },
   Snappy: { stiffness: 380, damping: 26, mass: 1 },
@@ -58,7 +59,7 @@ export const SPRING_PRESETS = {
 } as const satisfies Record<string, SpringSettings>;
 
 export type SpringPreset = keyof typeof SPRING_PRESETS;
-export const DEFAULT_SPRING: SpringSettings = SPRING_PRESETS.Bouncy;
+export const DEFAULT_SPRING: SpringSettings = SPRING_PRESETS.Heavy;
 
 export const SPRING_SAMPLES = 1024;
 /** Longer springs are faded into their target over the last quarter. */

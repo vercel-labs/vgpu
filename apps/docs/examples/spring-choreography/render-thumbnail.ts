@@ -14,7 +14,7 @@ import { DEFAULT_COUNT, createPipeline } from './pipeline';
 
 interface ThumbOptions {
   readonly warmupFrames?: number;
-  /** Timeline seconds of the last frame; the default is the knot overshooting out of the sphere. */
+  /** Timeline seconds of the last frame; the default is the knot forming out of the sphere. */
   readonly time?: number;
   readonly dt?: number;
 }
