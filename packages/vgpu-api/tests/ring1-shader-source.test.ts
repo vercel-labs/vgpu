@@ -131,6 +131,71 @@ test("intrinsic scalar, vector, atomic and matrix layout corruption is rejected 
   gpu.dispose();
 });
 
+test("canonical struct member size must agree with duplicated layout metadata", async () => {
+  const gpu = await init();
+  const artifact = mutableShader(`
+struct Params { first: f32, second: f32 }
+@group(0) @binding(0) var<uniform> params: Params;
+${RENDER_ENTRIES}
+`);
+  for (const layout of duplicateLayouts(artifact)) {
+    layout.members[0].explicitSize = 8;
+    layout.members[0].size = 8;
+    layout.members[1].offset = 8;
+    layout.size = 12;
+  }
+  artifact.reflection.bindings[0].bindingLayout.buffer.minBindingSize = 12;
+
+  expectInvalidShaderAt(() => draw(gpu, { shader: artifact }), "reflection.hostShareableLayouts[0].members[0].explicitSize");
+  gpu.dispose();
+});
+
+test("canonical struct member align must agree with duplicated layout metadata", async () => {
+  const gpu = await init();
+  const artifact = mutableShader(`
+struct Params { first: f32, second: f32 }
+@group(0) @binding(0) var<uniform> params: Params;
+${RENDER_ENTRIES}
+`);
+  for (const layout of duplicateLayouts(artifact)) {
+    layout.members[0].explicitAlign = 8;
+    layout.members[0].align = 8;
+    layout.align = 8;
+  }
+
+  expectInvalidShaderAt(() => draw(gpu, { shader: artifact }), "reflection.hostShareableLayouts[0].members[0].explicitAlign");
+  gpu.dispose();
+});
+
+test("producer-valid explicit align and size metadata is accepted", async () => {
+  const gpu = await init();
+  const artifact = prepareShader(`
+struct Params { first: f32, @align(32) @size(32) second: f32 }
+@group(0) @binding(0) var<uniform> params: Params;
+${RENDER_ENTRIES}
+`);
+
+  expect(() => draw(gpu, { shader: artifact })).not.toThrow();
+  gpu.dispose();
+});
+
+test("producer-valid nested aliases with f16 runtime arrays are accepted", async () => {
+  const gpu = await init();
+  const artifact = prepareShader(`
+enable f16;
+alias Scalar = f16;
+alias Pair = vec2<Scalar>;
+struct Item { value: Pair }
+alias ItemAlias = Item;
+alias Items = array<ItemAlias>;
+@group(0) @binding(0) var<storage, read> items: Items;
+@compute @workgroup_size(1) fn main() { _ = items[0].value.x; }
+`);
+
+  expect(() => compute(gpu, artifact)).not.toThrow();
+  gpu.dispose();
+});
+
 test.each([
   ["vector", "vec4<Scalar>", "draw"],
   ["array", "array<vec4<Scalar>, 2>", "compute"],
@@ -226,4 +291,11 @@ function corruptMatrixElement(layout: any): void {
 
 function expectCode(fn: () => unknown, code: string): void {
   expect(fn).toThrow(expect.objectContaining({ code }));
+}
+
+function expectInvalidShaderAt(fn: () => unknown, path: string): void {
+  expect(fn).toThrow(expect.objectContaining({
+    code: "VGPU-SHADER-SOURCE-INVALID",
+    detail: expect.objectContaining({ path }),
+  }));
 }

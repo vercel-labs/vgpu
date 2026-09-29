@@ -421,6 +421,8 @@ function validateLayoutReferences(layout: HostShareableLayout, path: string, str
       const canonical = struct.members[index]!;
       const member = layout.members[index]!;
       if (member.name !== canonical.name || !dataEqual(member.type, canonical.type)) fail(`${path}.members[${index}]`, "does not match the canonical struct member");
+      if (member.explicitAlign !== canonical.align) fail(`${path}.members[${index}].explicitAlign`, "does not match the canonical struct member align attribute");
+      if (member.explicitSize !== canonical.size) fail(`${path}.members[${index}].explicitSize`, "does not match the canonical struct member size attribute");
       const expectedType = resolveType(canonical.type, structs, aliases, new Set(), `${path}.members[${index}].type`);
       if (!dataEqual(expectedType, member.layout.type)) fail(`${path}.members[${index}].layout.type`, "does not match the resolved member type");
     }
