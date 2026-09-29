@@ -19,6 +19,8 @@ import {
   nextBudgetBytes,
   parseTarEntries,
   prohibitedExperienceInputs,
+  prohibitedPreparedConsumerModules,
+  retainedMetafileModules,
   retainedMetafileInputs,
   resolveExportAudience,
   resolvePackageAudience,
@@ -54,6 +56,8 @@ for (const name of (await readdir(packagesDir)).sort()) {
   else if (pkg[PACKAGE_BUDGET_FIELD]) await checkPackageBudget(dir, manifestPath, pkg);
   if (options.experiences && pkg.name === "vgpu") await checkExperienceBudgets(dir, manifestPath, pkg);
 }
+
+if (options.experiences) await checkPreparedConsumerBundles();
 
 report();
 
@@ -136,6 +140,140 @@ async function checkExperienceBudgets(dir, manifestPath, pkg) {
         draft[EXPERIENCE_BUDGET_FIELD][experience.name] = nextBudgetBytes(gzipBytes);
       }
     });
+  }
+}
+
+async function checkPreparedConsumerBundles() {
+  const prepareEntry = join(root, "packages", "wgsl", "dist", "prepare.js");
+  if (!existsSync(prepareEntry)) throw new Error("Complete prepared-consumer acceptance needs built packages; run `pnpm build` first.");
+  const { prepareShader } = await import(prepareEntry);
+  const prepared = {
+    drawShader: prepareShader(`
+      @vertex fn vs_main(@builtin(vertex_index) vertex: u32) -> @builtin(position) vec4f {
+        let x = f32(vertex & 1u) * 4.0 - 1.0;
+        let y = f32(vertex >> 1u) * 4.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+      }
+      @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1.0); }
+    `, "<bundle-fixture:draw>"),
+    effectShader: prepareShader(`
+      @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+        return vec4f(uv, 0.0, 1.0);
+      }
+    `, "<bundle-fixture:effect>"),
+    computeShader: prepareShader(`
+      @group(0) @binding(0) var<storage, read_write> data: array<u32>;
+      @compute @workgroup_size(1) fn cs_main() { data[0] = 1u; }
+    `, "<bundle-fixture:compute>"),
+  };
+  const preparedModule = Object.entries(prepared)
+    .map(([name, artifact]) => `export const ${name} = ${JSON.stringify(artifact)};`)
+    .join("\n");
+  const fixturePlugin = {
+    name: "prepared-shader-fixture",
+    setup(build) {
+      build.onResolve({ filter: /^fixture:prepared-shaders$/ }, () => ({ path: "prepared-shaders", namespace: "prepared-fixture" }));
+      build.onLoad({ filter: /.*/, namespace: "prepared-fixture" }, () => ({ contents: preparedModule, loader: "js" }));
+    },
+  };
+  const fixtures = [
+    {
+      name: "prepared-renderer",
+      source: `
+        import { bundle, compute, draw, effect, storage, target } from "vgpu";
+        import { computeShader, drawShader, effectShader } from "fixture:prepared-shaders";
+        export function createPreparedRenderer(gpu) {
+          const direct = draw(gpu, { shader: drawShader });
+          const post = effect(gpu, effectShader);
+          const data = storage(gpu, 4);
+          const kernel = compute(gpu, computeShader, { set: { data } });
+          const output = target(gpu, { size: [1, 1] });
+          const recorded = bundle(gpu, { target: output }, (pass) => { pass.draw(direct); pass.draw(post); });
+          return { data, direct, kernel, output, post, recorded };
+        }
+      `,
+    },
+    {
+      name: "dynamic-preparation",
+      source: `
+        import { effect } from "vgpu";
+        import { prepareShader } from "@vgpu/wgsl/prepare";
+        export function createDynamicEffect(gpu, source) { return effect(gpu, prepareShader(source)); }
+      `,
+    },
+    {
+      name: "mixed-preparation",
+      source: `
+        import { compute, effect } from "vgpu";
+        import { prepareShader } from "@vgpu/wgsl/prepare";
+        import { effectShader } from "fixture:prepared-shaders";
+        export function createMixedRenderer(gpu, source) {
+          return { prepared: effect(gpu, effectShader), dynamic: compute(gpu, prepareShader(source)) };
+        }
+      `,
+    },
+    {
+      name: "init-only",
+      source: `import { init } from "vgpu"; export function start() { return init(); }`,
+    },
+  ];
+  const measurements = [];
+  for (const fixture of fixtures) {
+    const result = await build({
+      absWorkingDir: root,
+      stdin: { contents: fixture.source, loader: "js", resolveDir: root, sourcefile: `${fixture.name}.js` },
+      bundle: true,
+      format: "esm",
+      platform: "browser",
+      write: false,
+      minify: true,
+      metafile: true,
+      mainFields: ["browser", "module", "main"],
+      alias: { "@vgpu/wgsl/prepare": prepareEntry },
+      plugins: [fixturePlugin],
+    });
+    const output = Object.values(result.metafile.outputs).find((candidate) => candidate.entryPoint);
+    if (!output) throw new Error(`esbuild returned no metafile entry output for complete consumer ${fixture.name}`);
+    const contents = result.outputFiles[0].contents;
+    measurements.push({ ...fixture, rawBytes: contents.length, gzipBytes: gzipSync(contents).length, modules: retainedMetafileModules(output) });
+  }
+
+  const preparedResult = measurements.find(({ name }) => name === "prepared-renderer");
+  const initOnly = measurements.find(({ name }) => name === "init-only");
+  if (!preparedResult || !initOnly) throw new Error("Complete consumer fixture set is incomplete.");
+  const runtimeModules = ["draw", "effect", "compute", "bundle"];
+  const runtimePattern = (name) => new RegExp(`(?:^|/)packages/vgpu-api/(?:src|dist)/${name}(?:\\.[^/]+)?$`);
+  for (const name of runtimeModules) {
+    if (!preparedResult.modules.some(({ input }) => runtimePattern(name).test(input))) {
+      structuralFailures.push(`complete consumer prepared-renderer: did not retain the ${name} runtime module`);
+    }
+    if (initOnly.modules.some(({ input }) => runtimePattern(name).test(input))) {
+      structuralFailures.push(`complete consumer init-only: retained renderer module ${name}`);
+    }
+  }
+  if (initOnly.gzipBytes >= preparedResult.gzipBytes) {
+    structuralFailures.push(`complete consumer init-only: ${initOnly.gzipBytes} B gzip is not lighter than prepared-renderer at ${preparedResult.gzipBytes} B gzip`);
+  }
+
+  for (const measurement of measurements) {
+    const classified = prohibitedPreparedConsumerModules(measurement.modules);
+    const platformDependencies = classified.filter(({ category }) => category === "node" || category === "cli" || category === "three");
+    for (const retained of platformDependencies) {
+      structuralFailures.push(`complete consumer ${measurement.name}: retained prohibited ${retained.category} input ${retained.input} (${retained.bytesInOutput} B)`);
+    }
+    const analysis = classified.filter(({ category }) => category !== "node" && category !== "cli" && category !== "three");
+    if (measurement.name === "prepared-renderer" || measurement.name === "init-only") {
+      for (const retained of analysis) {
+        structuralFailures.push(`complete consumer ${measurement.name}: retained prohibited ${retained.category} input ${retained.input} (${retained.bytesInOutput} B)`);
+      }
+    } else {
+      const categories = new Set(analysis.map(({ category }) => category));
+      for (const category of ["preparation", "scanner", "parser", "reflection"]) {
+        if (!categories.has(category)) structuralFailures.push(`complete consumer ${measurement.name}: positive control did not retain ${category} implementation bytes`);
+      }
+    }
+    console.log(`complete consumer ${measurement.name}: ${measurement.rawBytes} B raw / ${measurement.gzipBytes} B gzip / ${measurement.modules.length} retained inputs`);
+    for (const retained of analysis) console.log(`  retained ${retained.category}: ${retained.input} (${retained.bytesInOutput} B)`);
   }
 }
 
