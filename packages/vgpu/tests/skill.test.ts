@@ -1,14 +1,58 @@
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve, sep } from "node:path";
 import { expect, test } from "vitest";
 import { buildSkill } from "../lib/docs/generate/skill.js";
+import { generateDocs } from "../lib/docs/generate/generate.js";
 
 const files = buildSkill();
 const skill = files.get("SKILL.md") ?? "";
 
-test("ships only a version-neutral router", () => {
+test("generates only a version-neutral router", () => {
   expect([...files.keys()]).toEqual(["SKILL.md"]);
   expect(skill).not.toContain("references/");
   expect(skill).not.toMatch(/^(?:vgpuVersion|gitSha|generatedAt):/gmu);
   expect(skill).not.toContain("API reference");
+});
+
+test("regeneration preserves authored Blender resources and prunes stale generated files", () => {
+  const root = resolve(import.meta.dirname, "../../..");
+  const scratch = mkdtempSync(join(tmpdir(), "vgpu-blender-skill-"));
+  const skillDir = join(scratch, "skill");
+  try {
+    cpSync(join(root, "skills/vgpu"), skillDir, { recursive: true });
+    const authoredPath = join(skillDir, "blender/references/local-review.md");
+    writeFileSync(authoredPath, "# Authored review notes\n");
+    writeFileSync(join(skillDir, "stale-generated.md"), "obsolete\n");
+    const options = { root, skillDir, manifestOut: join(scratch, "manifest.js") };
+    generateDocs(options);
+    generateDocs(options);
+
+    expect(existsSync(join(skillDir, "stale-generated.md"))).toBe(false);
+    expect(readFileSync(authoredPath, "utf8")).toBe("# Authored review notes\n");
+    expect(readFileSync(join(skillDir, "SKILL.md"), "utf8")).toBe(skill);
+
+    // Follow links from the installable entrypoint, without access to the source repository.
+    // This catches missing references and links that accidentally escape the skill folder.
+    const visited = new Set<string>();
+    const visit = (path: string) => {
+      if (visited.has(path)) return;
+      visited.add(path);
+      const content = readFileSync(path, "utf8");
+      for (const [, target] of content.matchAll(/\[[^\]]*\]\(([^)]+)\)/gu)) {
+        if (/^(?:https?:|#)/u.test(target)) continue;
+        const linkedPath = resolve(dirname(path), target.split("#")[0]);
+        expect(linkedPath.startsWith(`${skillDir}${sep}`)).toBe(true);
+        visit(linkedPath);
+      }
+    };
+    visit(join(skillDir, "SKILL.md"));
+    expect(visited.has(join(skillDir, "blender/index.md"))).toBe(true);
+    expect(visited.has(join(skillDir, "blender/references/shape-and-assembly.md"))).toBe(true);
+    expect(visited.has(join(skillDir, "blender/references/baking-and-diagnostics.md"))).toBe(true);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 });
 
 test("keeps a project pinned to its local CLI and bundled corpus", () => {

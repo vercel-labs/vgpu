@@ -14,7 +14,7 @@ import {
 } from "node:fs";
 import { dirname, relative, resolve, sep } from "node:path";
 import { createManifest, serializeManifest } from "./manifest.js";
-import { buildSkill } from "./skill.js";
+import { buildSkill, isAuthoredSkillPath } from "./skill.js";
 
 // Writes are atomic (temp file in the same directory, then rename) because this generator runs
 // as `prepack` for both packages/vgpu and packages/vgpu-api. `npm pack` and the docs tests can
@@ -35,11 +35,12 @@ function writeAtomic(outPath, content) {
 // manifest no longer produces keeps the "no stale files" guarantee while making concurrent runs
 // idempotent instead of destructive. Depth-first so directories are considered after their
 // contents.
-function prune(dir, expected) {
+function prune(dir, expected, skillDir = dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = resolve(dir, entry.name);
+    if (isAuthoredSkillPath(relative(skillDir, full).split(sep).join("/"))) continue;
     if (entry.isDirectory()) {
-      prune(full, expected);
+      prune(full, expected, skillDir);
       try {
         rmdirSync(full);
       } catch {}
