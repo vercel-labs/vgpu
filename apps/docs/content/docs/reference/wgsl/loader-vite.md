@@ -1,6 +1,6 @@
 ---
 title: "wgslVitePlugin and transformWgsl"
-description: "Vite/Rollup transform that turns `.wgsl` files into JavaScript modules exporting `ShaderSource` v1 objects. Use the plugin in Vite apps and `transformWgsl()` in tests or custom tooling."
+description: "Vite/Rollup transform that turns `.wgsl` files into data-only JavaScript modules exporting prepared `ShaderSource` v2 artifacts. Use the plugin in Vite apps and `transformWgsl()` in tests or custom tooling; both reflect the final shader at build time so the browser never loads the WGSL parser."
 ---
 
 ## Import
@@ -37,17 +37,20 @@ declare function wgslVitePlugin(options?: WgslVitePluginOptions): {
 
 | Param | Type | Required | Default | Notes |
 |---|---|---|---|---|
-| options.minify | `boolean | MinifyOptions` | ✖ | `false` | Shared plugin/transform minify option. `true` means `{ whitespace: true, identifiers: "safe" }`; object form defaults to `{ whitespace: true, identifiers: "none" }`. |
-| source | string | ✔ | — | WGSL contents supplied to the transform. This value is authoritative for the entry module, including exported leaves and import graphs; imported modules still use normal file/package resolution. Ordinary leaves without top-level imports or direct `export fn` declarations are emitted directly, optionally minified. |
-| id | string | ✔ | — | WGSL file id/path. Anchors relative import resolution and dependency reporting; direct `transformWgsl()` calls may use an entry path that does not exist on disk. Plugin transform ignores ids that do not end with `.wgsl`. |
+| options.minify | `boolean | MinifyOptions` | ✖ | `false` | Shared plugin/transform minify option. `true` means `{ whitespace: true, identifiers: "safe" }`; object form defaults to `{ whitespace: true, identifiers: "none" }`. Reflection and the checksum always describe the minified output. |
+| source | string | ✔ | — | WGSL contents supplied to the transform. This value is authoritative for the entry module in every branch — ordinary leaves, direct-export leaves, and import graphs; the entry is never reread from `id`. Imported modules still use normal file/package resolution. |
+| id | string | ✔ | — | WGSL file id/path. Anchors relative import resolution, dependency reporting, and the path named in reflection diagnostics; direct `transformWgsl()` calls may use an entry path that does not exist on disk. Plugin transform ignores ids that do not end with `.wgsl`. |
 | opts.source | string | ✔ | — | Object-overload source field. |
 | opts.id | string | ✔ | — | Object-overload id field. |
-| opts.onDependency | `(absPath: string) => void` | ✖ | no callback | Called for each transitive dependency as soon as its path resolves, before it is loaded. Discovered dependencies are still reported when a later resolution step throws. Leaf files intentionally do not call it. |
+| opts.onDependency | `(absPath: string) => void` | ✖ | no callback | Called for each transitive dependency as soon as its path resolves, before it is loaded. Discovered dependencies are still reported when a later resolution step throws. Leaf files intentionally do not call it. The plugin forwards it to Vite's `addWatchFile`. |
 
-**Returns:** `Promise<ViteLoadResult>` from `transformWgsl()` with JavaScript module `code` and `map: null`; plugin `transform` returns that result for `.wgsl` ids or `null` for other ids.
+**Returns:** `Promise<ViteLoadResult>` from `transformWgsl()` with JavaScript module `code` and `map: null`; plugin `transform` returns that result for `.wgsl` ids or `null` for other ids. The `code` is `export default { version: 2, wgsl, reflection, sourceChecksum, producer: "@vgpu/wgsl/prepare-v2", functionExports }`.
 
-**Throws:** Any `resolveShader()` `VGPU-WGSL-*` or `VGPU-RESOLVE-MODULE-BINDING` error when import graph resolution fails — fix imports, module purity, package resolution, duplicates, or WGSL validation/minification.
-**Throws:** `VGPU-WGSL-MINIFY-IDENTIFIERS` or `VGPU-WGSL-MINIFY-BLOCK` when minification options/source are invalid for a leaf file — pass a valid minify mode or fix unterminated comments.
+**Throws:**
+
+- Any `resolveShader()` `VGPU-WGSL-*` or `VGPU-RESOLVE-MODULE-BINDING` error when import graph resolution fails — fix imports, module purity, package resolution, duplicates, or minification.
+- `VGPU-WGSL-MINIFY-IDENTIFIERS` or `VGPU-WGSL-MINIFY-BLOCK` when minification options/source are invalid for a leaf file — pass a valid minify mode or fix unterminated comments.
+- The `prepareShader()` lexer, parser, and reflection diagnostics (`VGPU-WGSL-LEX-*`, `VGPU-WGSL-REFLECT-*`) when the final WGSL cannot be reflected — fix the WGSL the diagnostic reports. The transform supplies `id` as diagnostic context, although individual layout errors may omit it from their message. For ordinary leaves these now fail the build; see Notes.
 
 ## Examples
 
@@ -61,25 +64,34 @@ const viteConfig = {
 export default viteConfig;
 ```
 
+Call `transformWgsl()` directly to inspect the emitted artifact. The entry path does not need to exist on disk:
+
 ```ts
 import { transformWgsl } from "@vgpu/wgsl/loader-vite";
 
 const result = await transformWgsl(
-  "@compute @workgroup_size(1) fn main() {}",
-  "/shader.wgsl",
+  "@compute @workgroup_size(64) fn main() {}",
+  "/src/shaders/particles.wgsl",
   { minify: { whitespace: true } },
 );
 
-console.log(result.map === null, result.code.includes("version"));
+console.log(result.map); // null
+console.log(result.code.includes('"version":2')); // true
+console.log(result.code.includes('"producer":"@vgpu/wgsl/prepare-v2"')); // true
 ```
+
+The module carries the minified `wgsl`, a `reflection` of that exact text (here one compute entry with workgroup size `[64, 1, 1]`), its `sourceChecksum`, and `functionExports: []`. Nothing in it imports or calls WGSL tooling.
 
 ## Notes
 
-- Transform output default-exports `ShaderSource` v1: `{ version: 1, wgsl: "...", functionExports: [...] }`. Every new artifact includes `functionExports`, including `[]`; property presence is authoritative for integrations that address direct exports.
+- **Output is a prepared `ShaderSource` v2 artifact.** The default export is `{ version: 2, wgsl, reflection, sourceChecksum, producer, functionExports }` — the same shape `prepareShader()` returns, with `producer: "@vgpu/wgsl/prepare-v2"`. It is plain data: the module contains no `prepareShader()` call and no parser, resolver, or reflection import, so `draw`, `effect`, and `compute` consume it without bundling the WGSL parser. Rebuild with matching `@vgpu/wgsl` and `vgpu` versions; the renderer rejects older v1 artifacts.
+- **Reflection describes the final WGSL.** The transform prepares the text it actually emits — after identifier and whitespace minification, import resolution, and dead-code elimination. For import graphs and direct-export leaves it reflects `resolved.wgsl` again instead of reusing `resolved.reflection`, which can describe the source before identifier minification. `sourceChecksum` is computed over that same final string.
+- **`functionExports` is authoritative.** Every artifact includes the property. Ordinary leaves emit `functionExports: []`. Direct-export leaves and import graphs emit one record per surviving `export fn`: `name` is the authored export name, `resolvedName` is the declaration's final name in the emitted WGSL (after minification), and `parameterNames` keeps the authored parameter names.
 - `wgslVitePlugin()` only handles ids ending with `.wgsl`; use `transformWgsl()` directly for tests and non-Vite tooling.
 - For resolver-backed transforms, `source` remains the entry module instead of being reread from `id`. This preserves changes made by earlier Vite plugins and supports virtual entry modules while imports continue to resolve relative to `id`.
-- Leaf shader transforms do not call `onDependency` because Vite already tracks the entry file. Imported graph transforms call it for transitive dependencies before loading them, including on resolution paths that later fail.
+- Leaf shader transforms do not call `onDependency` because Vite already tracks the entry file. Imported graph transforms call it for transitive dependencies before loading them, including on resolution paths that later fail, so a later valid save of the broken import triggers a rebuild.
+- A leaf with a direct `export fn` goes through resolution even without imports: the author-only `export` marker is removed and the surviving function receives authored-to-final identity metadata. Ordinary leaves skip resolution — reserved-identifier diagnostics, optional minification, then preparation — and emit `functionExports: []`.
+- **Reflection-detectable parse and layout errors in ordinary leaves now fail the build.** Ordinary leaves used to be emitted with no parsing beyond optional minification. They are now reflected at build time, so malformed reflected declarations and invalid host-shareable layouts (for example a `bool` in a uniform struct) may throw `VGPU-WGSL-LEX-*` or `VGPU-WGSL-REFLECT-*` during `vite build`/`vite dev` instead of surfacing at runtime. Reflection is not device validation: type errors, undefined identifiers inside function bodies, and other errors only the native WGSL compiler detects still ship.
+- **The plugin never validates WGSL on a device, in any mode.** It calls `resolveShader({ validate: false })` for import graphs and direct-export leaves; that explicit value wins over `VGPU_VALIDATE`, so setting that environment variable never makes the plugin acquire a device. Preparation itself is GPU-free. There is no plugin option to opt into validation. The validation gate is `npx vgpu check --require-validation <file>` — run it in CI or as a pre-commit hook; see `npx vgpu docs cat cli.docs.md`.
 - A leaf WGSL file may declare entry resources. Shared/imported modules must be pure: no `@group/@binding` outside the entry.
-- A leaf with a direct `export fn` goes through resolution even without imports: the author-only `export` marker is removed and the surviving function receives authored-to-final identity metadata. Ordinary leaves keep the byte-preserving fast path and emit `functionExports: []`.
-- **The plugin never validates WGSL, in any mode, for either leaf files or import graphs.** It calls `resolveShader({ validate: false })` for imported graphs and direct-export leaves — parsing, purity checks, DCE, mangling, and optional minification still apply, but the device-backed `createShaderModule` check does not run. Ordinary leaves with no imports or direct exports are emitted directly, so they receive no semantic processing beyond optional minification and reserved-identifier diagnostics. There is no plugin option to opt into validation; a `validate` key in the plugin options is silently ignored. `vite build`/`vite dev` will happily compile and ship invalid WGSL. The validation gate is `npx vgpu check --require-validation <file>` — run it in CI or as a pre-commit hook; see `npx vgpu docs cat cli.docs.md`.
-- **See also:** `ShaderSource`, `resolveShader`, `wgslWebpackLoader`, and the `nextjs` guide (`npx vgpu docs cat nextjs.md`) for the ambient `.d.ts` that types `.wgsl` imports.
+- **See also:** `ShaderSource`, `prepareShader` (`@vgpu/wgsl/prepare`), `resolveShader`, `wgslWebpackLoader`, and the `nextjs` guide (`npx vgpu docs cat nextjs.md`) for the ambient `.d.ts` that types `.wgsl` imports.

@@ -12,44 +12,52 @@ Surfaces and canvases have no depth buffer, and [Draws](concepts-draws.docs.md) 
 
 ## The recipe
 
+Both objects share one shader; `model.color` tells them apart:
+
+```wgsl
+// object.wgsl
+struct Camera { viewProjection: mat4x4f }
+struct Model { model: mat4x4f, color: vec3f }
+@group(0) @binding(0) var<uniform> camera: Camera;
+@group(0) @binding(1) var<uniform> model: Model;
+
+struct VertexOut { @builtin(position) position: vec4f, @location(0) normal: vec3f }
+
+@vertex fn vs_main(@location(0) position: vec3f, @location(1) normal: vec3f) -> VertexOut {
+  var out: VertexOut;
+  out.position = camera.viewProjection * model.model * vec4f(position, 1.0);
+  out.normal = (model.model * vec4f(normal, 0.0)).xyz;
+  return out;
+}
+
+@fragment fn fs_main(@location(0) normal: vec3f) -> @location(0) vec4f {
+  let light = max(dot(normalize(normal), normalize(vec3f(1.0, 1.0, 1.0))), 0.15);
+  return vec4f(model.color * light, 1.0);
+}
+```
+
+Pass 2 reads pass 1's color texture and writes it to the canvas:
+
+```wgsl
+// present.wgsl
+@group(0) @binding(0) var scene: texture_2d<f32>;
+@group(0) @binding(1) var sceneSampler: sampler;
+
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return textureSampleLevel(scene, sceneSampler, uv, 0.0);
+}
+```
+
+Import both through the `@vgpu/wgsl` loader ([Next.js and other bundlers](nextjs.docs.md)), which prepares them at build time, and render:
+
 ```ts
 import { draw, effect, frame, geometry, init, sampler, surface, target } from "vgpu";
 import { box, orbit, perspectiveCamera, sphere } from "vgpu/scene";
+import objectShader from "./object.wgsl";
+import presentShader from "./present.wgsl";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
-
-// Both objects share one shader; `model.color` tells them apart.
-const objectShader = `
-  struct Camera { viewProjection: mat4x4f }
-  struct Model { model: mat4x4f, color: vec3f }
-  @group(0) @binding(0) var<uniform> camera: Camera;
-  @group(0) @binding(1) var<uniform> model: Model;
-
-  struct VertexOut { @builtin(position) position: vec4f, @location(0) normal: vec3f }
-
-  @vertex fn vs_main(@location(0) position: vec3f, @location(1) normal: vec3f) -> VertexOut {
-    var out: VertexOut;
-    out.position = camera.viewProjection * model.model * vec4f(position, 1.0);
-    out.normal = (model.model * vec4f(normal, 0.0)).xyz;
-    return out;
-  }
-
-  @fragment fn fs_main(@location(0) normal: vec3f) -> @location(0) vec4f {
-    let light = max(dot(normalize(normal), normalize(vec3f(1.0, 1.0, 1.0))), 0.15);
-    return vec4f(model.color * light, 1.0);
-  }
-`;
-
-// Pass 2 reads pass 1's color texture and writes it to the canvas.
-const presentShader = `
-  @group(0) @binding(0) var scene: texture_2d<f32>;
-  @group(0) @binding(1) var sceneSampler: sampler;
-
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return textureSampleLevel(scene, sceneSampler, uv, 0.0);
-  }
-`;
 
 // ---cut---
 const width = 960;
@@ -98,18 +106,22 @@ Animating? Move the `frame(gpu, ...)` body into [`frameLoop(gpu, ...)`](concepts
 
 ## Headless / no-bundler variant
 
-Rendering this from Node, a script, or a test instead of a browser? Everything is identical except that the second target is another offscreen target rather than a canvas surface, and you read the pixels back at the end:
+Rendering this from Node, a script, or a test instead of a browser? Everything is identical except that there is no loader, so you wrap each WGSL string in [`prepareShader()`](/reference/wgsl/prepare) once before creating draws; the second target is another offscreen target rather than a canvas surface; and you read the pixels back at the end:
 
 ```ts
 import { draw, effect, frame, geometry, init, sampler, target } from "vgpu/node";
 import { box, orbit, perspectiveCamera } from "vgpu/scene";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
-const objectShader = "/* the same vertex + fragment shader as above */";
-const presentShader = "/* the same present shader as above */";
+const objectWgsl = "/* the contents of object.wgsl above */";
+const presentWgsl = "/* the contents of present.wgsl above */";
 const width = 960;
 const height = 540;
 
 // ---cut---
+const objectShader = prepareShader(objectWgsl, "object.wgsl"); // no loader in Node — prepare once at startup
+const presentShader = prepareShader(presentWgsl, "present.wgsl");
+
 const gpu = await init();
 const scene = target(gpu, { size: [width, height], depth: true });
 const output = target(gpu, { size: [width, height] });   // stands in for the canvas surface
@@ -135,11 +147,11 @@ const pixels = await output.color.read({ mipLevel: 0, region: "all" });   // RGB
 gpu.dispose();
 ```
 
-To load the two shaders from `.wgsl` files instead of inline strings in this setup, resolve them first: [Using vgpu without a bundler](no-bundler.docs.md).
+To read the two shaders from `.wgsl` files in this setup — including files that `import` other modules — resolve them first, then prepare the resolved WGSL: [Using vgpu without a bundler](no-bundler.docs.md).
 
 ## Do you actually need two passes?
 
-- **One full-screen fragment shader, no geometry?** No. `effect(gpu, source).draw(canvasSurface)` renders straight to the canvas — see [Getting started](getting-started.docs.md).
+- **One full-screen fragment shader, no geometry?** No. `effect(gpu, shader).draw(canvasSurface)` renders straight to the canvas — see [Getting started](getting-started.docs.md).
 - **Flat 2D geometry with explicit paint order?** No. Open a single pass on the canvas and draw in order, as [Passes](concepts-passes.docs.md) shows.
 - **Any 3D geometry that can occlude itself or another object?** Yes — you need the depth attachment, and only an offscreen target has one.
 - **Post-processing on top of a 3D scene?** Yes, and the present pass is where it goes: replace `presentShader` with your post effect, which already samples the scene texture.

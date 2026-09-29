@@ -1,6 +1,7 @@
-# prepareShader
-
-Turns one import-free WGSL string into the prepared `ShaderSource` artifact that `draw`, `effect`, and `compute` consume. Use it for WGSL you build or receive at runtime, for resolver output, and to upgrade legacy v1 assets; for static `.wgsl` files, the Vite/webpack loaders already call it at build time.
+---
+title: "prepareShader"
+description: "Turns one import-free WGSL string into the prepared `ShaderSource` artifact that `draw`, `effect`, and `compute` consume. Use it for WGSL you build or receive at runtime, for resolver output, and to upgrade legacy v1 assets; for static `.wgsl` files, the Vite/webpack loaders already call it at build time."
+---
 
 ## Import
 

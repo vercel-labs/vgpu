@@ -3,7 +3,7 @@ title: "Using vgpu with Next.js and other bundlers"
 description: "Wire the WGSL loader into Next.js (Turbopack or webpack) or Vite, type `.wgsl` imports for TypeScript, and render a shader from a client component with a canvas."
 ---
 
-`effect(gpu, source)` takes WGSL as a string, so nothing forces you to use a bundler loader. Reach for the loader when you want shaders in their own `.wgsl` files with `import` between them — the loader resolves that import graph at build time and hands `effect()` one finished shader.
+`effect(gpu, source)`, `draw(gpu, { shader })`, and `compute(gpu, source)` take a prepared `ShaderSource`: the final WGSL plus the reflection the renderer reads instead of parsing WGSL in the browser. The loader is the default way to get one. It prepares every `.wgsl` import at build time — resolving any `import` graph first — so the browser bundle carries data, not the WGSL parser. Without a bundler, see [Use vgpu without a bundler](/guides/no-bundler); for WGSL you generate at runtime, call `prepareShader()` from `@vgpu/wgsl/prepare`.
 
 This guide is the bundler half of [Getting started](getting-started.docs.md): install, loader config, TypeScript types for `.wgsl` imports, and the client component that owns the canvas.
 
@@ -98,7 +98,9 @@ declare module "*.wgsl" {
 }
 ```
 
-Either way the default export is a `ShaderSource` object (`{ version: 1, wgsl: string, functionExports?: [...] }`), **not** a plain string. Pass it straight to `effect(gpu, source)`, which accepts `string | ShaderSource` — do not reach into `.wgsl` yourself. New loader artifacts include `functionExports`, even when the array is empty; integrations such as `vgpu/three` use that metadata to preserve authored function identity through identifier minification.
+Either way the default export is a prepared `ShaderSource` object (`{ version: 2, wgsl, reflection, sourceChecksum, producer, functionExports }`), **not** a plain string. Pass it straight to `effect(gpu, source)` or `draw(gpu, { shader: source })` — do not reach into `.wgsl` yourself: a string throws `VGPU-SHADER-SOURCE-UNPREPARED`. Loader artifacts always include `functionExports`, even when the array is empty; integrations such as `vgpu/three` use that metadata to preserve authored function identity through identifier minification. The emitted module is plain data and imports nothing from the parser.
+
+> Warning: Keep the `@vgpu/wgsl` loader and the `vgpu` runtime on matching releases. An artifact from a different format version throws `VGPU-SHADER-SOURCE-VERSION`, and older `version: 1` output throws `VGPU-SHADER-SOURCE-UNPREPARED` — rebuild the app and regenerate prebuilt shader assets after upgrading either package.
 
 ## Render it from a client component
 
@@ -170,13 +172,16 @@ The cleanup function matters in development: React's strict mode mounts effects 
 
 ## Validate before you run the app
 
-**`next build`/`next dev` never validate WGSL — neither the webpack loader nor the Turbopack path, for
-leaf `.wgsl` files or for import graphs.** The loader/plugin call `resolveShader({ validate: false })`
-for import graphs (parsing, purity checks, DCE, mangling, and minification still run, but the
-device-backed check does not), and a leaf `.wgsl` file with no imports never calls `resolveShader()`
-at all. There is no loader/plugin option to opt into validation — `next build --webpack` and
-`next build` (Turbopack) both exit `0` and ship invalid WGSL unchanged. Do not use `next dev`/
-`next build` as your shader compiler.
+**`next build`/`next dev` reflect every `.wgsl` import but never validate it against a WebGPU
+device — neither the webpack loader nor the Turbopack path.** The loader/plugin parse and reflect
+each module to prepare it: import graphs go through `resolveShader({ validate: false })` (parsing,
+purity checks, DCE, mangling, and minification run, but the device-backed check does not), and
+leaf files without imports are reflected directly. Parse errors and reflection-detectable layout
+errors — for example a `bool` in a uniform struct (`VGPU-WGSL-REFLECT-BOOL-HOST-SHAREABLE`) — fail
+the build, including in leaf files that used to ship without reflection. Errors only the native
+WGSL compiler or the device detects still pass: there is no
+loader/plugin option to opt into device validation, so `next build --webpack` and `next build`
+(Turbopack) exit `0` and ship that WGSL. Do not use `next dev`/`next build` as your shader compiler.
 
 The validation gate is `vgpu check --require-validation`, run in CI or as a pre-commit hook. Check
 every `.wgsl` file — including pure helper modules — with the CLI, which resolves the same import
@@ -196,7 +201,10 @@ Then prove the pixels in Node instead of squinting at a browser tab: [Getting st
 | `VGPU-WGSL-PKG-NOTFOUND: Package <pkg> was not found` | A WGSL package import is not installed in `node_modules` | `npm install <pkg>`, or fix the specifier |
 | `VGPU-WGSL-RUNTIME-IMPORT` | The bundler ran the loader synchronously while the WGSL file has top-level imports or a direct `export fn` | Let the loader use async mode (webpack/Turbopack/Vite all do by default) |
 | `VGPU-RESOLVE-MODULE-BINDING` | An imported `.wgsl` module declares `@group`/`@binding` | Keep resources in the entry shader; modules export only structs and functions |
-| Shader compiles but nothing draws | Passing `source.wgsl` (a string field) where the object was expected, or no `frame.pass` | Pass the imported object to `effect(gpu, source)`; render inside `frame`/`frameLoop` |
+| `VGPU-SHADER-SOURCE-UNPREPARED` | Passing a raw string — often `source.wgsl` instead of the imported object — or a `version: 1` artifact from an older loader | Pass the imported object to `effect(gpu, source)`; rebuild with the current loader, or wrap runtime WGSL in `prepareShader()` |
+| `VGPU-SHADER-SOURCE-VERSION` | The loader or a prebuilt asset comes from a `@vgpu/wgsl` release with a different artifact format than your `vgpu` | Align the two package versions and rebuild |
+| Build fails with a `VGPU-WGSL-*` reflection error in a leaf `.wgsl` | The loader now reflects every module at build time | Fix the WGSL the diagnostic reports, as you would for a runtime error |
+| Shader creates but nothing draws | No `frame.pass`, or the pass targets something that is never presented | Render inside `frame`/`frameLoop` with the surface as the pass target |
 
 ## See also
 

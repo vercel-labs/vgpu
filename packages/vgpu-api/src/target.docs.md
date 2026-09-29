@@ -83,12 +83,13 @@ interface PingPongStorage { readonly read: import("vgpu").StorageBuffer; readonl
 
 ```ts
 import { init, effect, frame, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const scene = target(gpu, { size: [128, 128], format: "rgba16float", depth: true, msaa: true });
-const post = effect(gpu, `
+const post = effect(gpu, prepareShader(`
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f { return vec4f(uv, 0, 1); }
-`);
+`));
 
 frame(gpu, (currentFrame) => {
   currentFrame.pass({ target: scene, clear: [0, 0, 0, 1] }, (pass) => pass.draw(post));
@@ -97,6 +98,7 @@ frame(gpu, (currentFrame) => {
 
 ```ts
 import { init, draw, frame, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 // G-buffer for deferred shading: albedo, normals, material parameters.
@@ -106,7 +108,7 @@ const gbuffer = target(gpu, {
   depth: true,
 });
 const fill = draw(gpu, {
-  shader: `
+  shader: prepareShader(`
     @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
       var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
       return vec4f(p[vi], 0, 1);
@@ -115,7 +117,7 @@ const fill = draw(gpu, {
     @fragment fn fs_main() -> GBuffer {
       return GBuffer(vec4f(0.8, 0.2, 0.2, 1), vec4f(0, 0, 1, 0), vec4f(0.5, 0.1, 0, 0));
     }
-  `,
+  `),
 });
 
 frame(gpu, (currentFrame) => {
@@ -127,16 +129,17 @@ One geometry pass fills every G-buffer attachment; a later lighting effect sampl
 
 ```ts
 import { init, effect, surface, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const canvasSurface = surface(gpu, mockCanvas());
 const bloomSize = (w: number, h: number): [number, number] => [w / 2, h / 2];
 const bloom = target(gpu, { size: bloomSize(canvasSurface.size[0], canvasSurface.size[1]) });
-const bright = effect(gpu, `
+const bright = effect(gpu, prepareShader(`
   struct Params { resolution: vec2f }
   @group(0) @binding(0) var<uniform> params: Params;
   @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }
-`, { set: { params: { resolution: bloom.size } } });
+`), { set: { params: { resolution: bloom.size } } });
 
 canvasSurface.onResize(({ width, height }) => {
   bloom.resize(bloomSize(width, height));
@@ -156,11 +159,12 @@ function mockCanvas(): HTMLCanvasElement {
 
 ```ts
 import { init, effect, frame, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 // HDR target: readFloats() decodes the half-float texels, read() would hand back raw bytes.
 const hdr = target(gpu, { size: [64, 64], format: "rgba16float" });
-const bloom = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(4.0, 2.0, 1.0, 1.0); }`);
+const bloom = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(4.0, 2.0, 1.0, 1.0); }`));
 
 frame(gpu, (currentFrame) => currentFrame.pass(hdr, bloom));
 
@@ -170,10 +174,11 @@ console.log(floats[0]); // 4 — values above 1 survive the readback
 
 ```ts
 import { init, effect, frame, pingPong } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const pair = pingPong(gpu, 32.9, 32.1, { format: "rgba8unorm" });
-const blur = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const blur = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`));
 
 frame(gpu, (currentFrame) => {
   currentFrame.pass({ target: pair.write, clear: false }, (pass) => pass.draw(blur));

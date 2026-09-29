@@ -5,34 +5,23 @@ description: "Pipelines compile lazily on first use; pre-warm them during load s
 
 Pipelines compile lazily: the first `draw()` against a new target pays the pipeline creation cost, and that cost lands inside your frame. WebGPU keys pipelines by shader *and* render signature — the tuple of color formats, depth format, and sample count — so the same WGSL rendering into a canvas and into an MSAA target means two compilations. `compile()` moves that work into load time.
 
+Pipeline compilation is separate from shader preparation. A `.wgsl` import through the `@vgpu/wgsl` loader already carries its reflection, so `draw(gpu)` and `effect(gpu)` validate that metadata synchronously when you create them and never parse WGSL; the native shader module and pipeline are what `compile()` warms.
+
 ## Pre-warming with a target
 
 For an existing offscreen target, `await draw.compile(target)` and `await effect.compile(target)` warm exactly that signature and resolve back to the same object:
 
 ```ts
 import { init, draw, effect, target } from "vgpu";
+import oceanShader from "./ocean.wgsl"; // fragment-only effect
+import triangleShader from "./triangle.wgsl"; // vs_main + fs_main, three hardcoded vertices
 
 const gpu = await init();
 const offscreen = target(gpu, { size: [512, 512] });
 
 // ---cut---
-const ocean = effect(gpu, `
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(uv, 0.8, 1.0);
-  }
-`);
-const tri = draw(gpu, {
-  shader: `
-    struct Out { @builtin(position) position: vec4f }
-    @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> Out {
-      var pts = array<vec2f, 3>(vec2f(-0.5, -0.5), vec2f(0.5, -0.5), vec2f(0.0, 0.5));
-      var out: Out;
-      out.position = vec4f(pts[vi], 0.0, 1.0);
-      return out;
-    }
-    @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1.0, 0.4, 0.2, 1.0); }
-  `,
-});
+const ocean = effect(gpu, oceanShader);
+const tri = draw(gpu, { shader: triangleShader });
 
 await Promise.all([ocean.compile(offscreen), tri.compile(offscreen)]);
 tri.draw(offscreen);
@@ -47,13 +36,10 @@ Sometimes the target doesn't exist yet. Pass a signature object instead: `colors
 
 ```ts
 import { init, effect, frame, surface } from "vgpu";
+import oceanShader from "./ocean.wgsl";
 
 const gpu = await init();
-const ocean = effect(gpu, `
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(uv, 0.8, 1.0);
-  }
-`);
+const ocean = effect(gpu, oceanShader);
 
 // ---cut---
 const format = navigator.gpu.getPreferredCanvasFormat();
@@ -77,20 +63,11 @@ The signature must match the actual target's color formats, depth format, and sa
 
 ```ts
 import { init, draw, target } from "vgpu";
+import gridShader from "./grid.wgsl"; // fullscreen-triangle vs_main + flat fs_main
 
 const gpu = await init();
 const offscreen = target(gpu, { size: [2048, 2048], depth: true });
-const grid = draw(gpu, {
-  shader: `
-    @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
-      var pts = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
-      return vec4f(pts[vi], 0.0, 1.0);
-    }
-    @fragment fn fs_main() -> @location(0) vec4f {
-      return vec4f(0.1, 0.4, 0.7, 1.0);
-    }
-  `,
-});
+const grid = draw(gpu, { shader: gridShader });
 
 grid.compileSync(offscreen);
 ```
@@ -101,12 +78,10 @@ A failed `compile()` rejects its promise — the error belongs to the call site,
 
 ```ts
 import { init, draw } from "vgpu";
+import triangleShader from "./triangle.wgsl";
 
 const gpu = await init();
-const tri = draw(gpu, { shader: `
-  @vertex fn vs_main() -> @builtin(position) vec4f { return vec4f(0, 0, 0, 1); }
-  @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1.0); }
-` });
+const tri = draw(gpu, { shader: triangleShader });
 
 try {
   await tri.compile({ colors: [navigator.gpu.getPreferredCanvasFormat()] });

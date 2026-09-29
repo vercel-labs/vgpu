@@ -1,6 +1,6 @@
 ---
-title: "ResolvedShader and ShaderSource"
-description: "Data shapes returned or consumed by the WGSL helpers. Use `ResolvedShader` for `compile()` output, `ShaderSource` for loader-emitted `.wgsl` modules, and `isShaderFunctionExport()` to check unknown function-export metadata at an integration boundary."
+title: "ResolvedShader, ShaderSource, and ShaderReflection"
+description: "Data shapes returned or consumed by the WGSL helpers. Use `ShaderSource` for the prepared shader artifacts that `draw`, `effect`, and `compute` consume, `ShaderReflection` for the metadata inside them, `ResolvedShader` for `compile()` output, and `isShaderFunctionExport()` to check unknown function-export metadata at an integration boundary."
 ---
 
 ## Import
@@ -10,6 +10,7 @@ import { isShaderFunctionExport } from "@vgpu/wgsl";
 import type {
   ResolvedShader,
   ShaderFunctionExport,
+  ShaderReflection,
   ShaderSource,
   SourceMap,
   WGSLAst,
@@ -17,9 +18,13 @@ import type {
 } from "@vgpu/wgsl";
 ```
 
+`vgpu`, `vgpu/node`, `vgpu/mock`, and `vgpu/client` re-export `ShaderSource`, `ShaderReflection`, and `ShaderFunctionExport` as the same types.
+
 ## Signature
 
 ```ts
+import type { EntryPointInfo, Reflection } from "@vgpu/wgsl/reflect-source";
+
 interface ShaderFunctionExport {
   readonly name: string;
   readonly resolvedName: string;
@@ -30,9 +35,27 @@ declare function isShaderFunctionExport(
   value: unknown,
 ): value is ShaderFunctionExport;
 
+type ShaderReflection = Omit<Reflection, "entryPoints"> & {
+  readonly entryPoints: readonly (Omit<
+    EntryPointInfo,
+    "workgroupSize" | "bindings" | "samplingPairs"
+  > & {
+    readonly workgroupSize?: readonly [
+      number | "unresolved",
+      number | "unresolved",
+      number | "unresolved",
+    ];
+    readonly bindings: NonNullable<EntryPointInfo["bindings"]>;
+    readonly samplingPairs: NonNullable<EntryPointInfo["samplingPairs"]>;
+  })[];
+};
+
 interface ShaderSource {
-  readonly version: 1;
+  readonly version: 2;
   readonly wgsl: string;
+  readonly reflection: ShaderReflection;
+  readonly sourceChecksum: string;
+  readonly producer: string;
   readonly functionExports?: readonly ShaderFunctionExport[];
 }
 
@@ -86,13 +109,53 @@ interface ResolvedShader {
 
 ### ShaderSource
 
+A prepared shader artifact: one final WGSL module plus the reflection that `draw`, `effect`, and `compute` read bindings, entry points, and layouts from, so the renderer never parses WGSL. The `@vgpu/wgsl` Vite/webpack loaders emit one for every `.wgsl` import at build time; `prepareShader()` from `@vgpu/wgsl/prepare` builds one from a string, a `resolveShader()` result, or a legacy v1 asset. It is plain JSON-compatible data.
+
+```ts
+import type { ShaderSource } from "@vgpu/wgsl";
+import postShader from "./post.wgsl"; // the loader emits a ShaderSource
+
+const artifact: ShaderSource = postShader;
+console.log(artifact.version, artifact.producer); // 2 "@vgpu/wgsl/prepare-v2"
+```
+
 Fields:
 
 | Param | Type | Required | Default | Notes |
 |---|---|---|---|---|
-| version | `1` | ✔ | — | Loader artifact version. |
-| wgsl | string | ✔ | — | Plain WGSL emitted by a loader or resolver. |
-| functionExports | `readonly ShaderFunctionExport[]` | ✖ for legacy producers | absent | Authoritative identity for surviving direct `export fn` declarations. New vgpu loaders always emit the property, including `[]`. |
+| version | `2` | ✔ | — | Artifact format version, independent of package versions. The renderer checks compatibility by this field alone. |
+| wgsl | string | ✔ | — | The exact final WGSL — after import resolution, dead-code elimination, and minification when a loader produced it. |
+| reflection | `ShaderReflection` | ✔ | — | Reflection of exactly `wgsl`. Produce it with a supported producer; never hand-write or hand-edit it. |
+| sourceChecksum | string | ✔ | — | `"fnv1a64-utf16le-v1:"` plus 16 lowercase hex digits: FNV-1a 64 over the UTF-16 code units of `wgsl`, with no normalization. |
+| producer | string | ✔ | — | Nonempty name of the implementation and format that built the artifact. The built-in producer is `"@vgpu/wgsl/prepare-v2"`; other nonempty strings are accepted. |
+| functionExports | `readonly ShaderFunctionExport[]` | ✖ | absent | Authoritative identity for surviving direct `export fn` declarations. vgpu loaders always emit the property, including `[]`; `prepareShader()` copies it from object input and omits it for string input. |
+
+### ShaderReflection
+
+The reflection stored in `ShaderSource.reflection`. It is `reflectSource()`'s `Reflection` (`@vgpu/wgsl/reflect-source`) with a serializable entry-point shape, so the artifact survives `JSON.stringify` and `structuredClone` unchanged.
+
+```ts
+import type { ShaderReflection } from "@vgpu/wgsl";
+import { prepareShader } from "@vgpu/wgsl/prepare";
+
+const reflection: ShaderReflection = prepareShader(`
+@group(0) @binding(0) var<storage, read_write> cells: array<u32>;
+@compute @workgroup_size(64) fn main() {}
+`).reflection;
+
+console.log(reflection.bindings[0]?.name); // "cells"
+console.log(reflection.entryPoints[0]?.workgroupSize); // [64, 1, 1]
+```
+
+Fields:
+
+| Param | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| bindings, overrides, featuresRequired, aliases, structs, hostShareableLayouts | as in `Reflection` | ✔ | — | Same shapes and meaning as `reflectSource()` output for the same WGSL. |
+| entryPoints | readonly entry-point records | ✔ | — | Every `@vertex`, `@fragment`, and `@compute` entry, selected or not. Each keeps `name`, `mangledName`, `stage`, and optional `inputs` from `EntryPointInfo`. |
+| entryPoints[].bindings | `readonly BindingRef[]` (`@vgpu/wgsl/reflect-source`) | ✔ | — | Always present, `[]` when the entry uses no resources. Scoped to the entry and its transitive callees. |
+| entryPoints[].samplingPairs | `NonNullable<EntryPointInfo["samplingPairs"]>` | ✔ | — | Always present, `[]` when the entry samples nothing. |
+| entryPoints[].workgroupSize | `readonly [number \| "unresolved", number \| "unresolved", number \| "unresolved"]` | ✖ | absent | Compute entries only. A plain numeric literal stays a number; an axis reflection cannot read as one — a named `const` or `override`, or a suffixed literal such as `64u` — is `"unresolved"` and left to native pipeline validation. |
 
 ### ShaderFunctionExport
 
@@ -165,8 +228,21 @@ The check is structural and syntactic. It does not parse shader text, prove that
 
 ## Examples
 
+A loader import is already a `ShaderSource`; pass it to the renderer unchanged:
+
+```ts
+import { init, effect } from "vgpu";
+import vignetteShader from "./vignette.wgsl";
+
+const gpu = await init();
+const vignette = effect(gpu, vignetteShader); // no parser in the browser bundle
+```
+
+`compile()` returns a `ResolvedShader`, not a renderer input. Prepare its WGSL before passing it to a renderer:
+
 ```ts
 import { compile, type ResolvedShader, type ShaderSource } from "@vgpu/wgsl";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const resolved: ResolvedShader = compile(`
 @fragment
@@ -175,36 +251,31 @@ fn fs_main() -> @location(0) vec4f {
 }
 `);
 
-const source: ShaderSource = {
-  version: 1,
-  wgsl: resolved.wgsl,
-  functionExports: [],
-};
-console.log(source.version, resolved.entryPoints[0]);
+const source: ShaderSource = prepareShader(resolved.wgsl);
+console.log(resolved.entryPoints[0], source.reflection.entryPoints[0]?.stage); // "fs_main" "fragment"
 ```
+
+Accept artifacts at an integration boundary by type, and let the renderer validate them:
 
 ```ts
 import type { ShaderSource } from "@vgpu/wgsl";
 
-function acceptsLoaderOutput(shader: ShaderSource): string {
-  return shader.wgsl;
+function describeShader(shader: ShaderSource): string {
+  const stages = shader.reflection.entryPoints.map((entry) => `${entry.stage}:${entry.name}`);
+  return `${shader.producer} v${shader.version} — ${stages.join(", ")}`;
 }
-
-acceptsLoaderOutput({
-  version: 1,
-  wgsl: "@compute @workgroup_size(1) fn main() {}",
-  functionExports: [],
-});
 ```
 
 ## Notes
 
-- `ShaderSource` v1 keeps its original `version` and `wgsl` fields and may add `functionExports`. The field is optional in TypeScript so legacy producers remain assignable, but every new vgpu loader artifact emits it. Property presence is authoritative: `[]` exposes no callable direct exports, while absence denotes a legacy artifact.
+- `ShaderSource` is `version: 2`. Renderers throw `VGPU-SHADER-SOURCE-UNPREPARED` for raw strings and v1 artifacts, `VGPU-SHADER-SOURCE-VERSION` for other integer versions, and `VGPU-SHADER-SOURCE-INVALID` for malformed fields or checksum mismatches. Rebuild with matching tooling/runtime versions, regenerate prebuilt assets, or call `prepareShader()`; object input keeps `functionExports`.
+- The renderer copies and validates the artifact on every `draw`/`effect`/`compute` call, so mutating the object afterwards does not affect existing handles. Prepared metadata is trusted, not verified: the checksum detects accidental replacement of `wgsl`, but it does not authenticate the artifact, prove that `reflection` matches `wgsl`, or detect a stale artifact whose fields agree with each other. Regenerate artifacts whenever the source or the tooling version changes.
+- `functionExports` is optional in TypeScript so artifacts without direct-export metadata remain assignable, but every vgpu loader artifact emits it. Property presence is authoritative: `[]` exposes no callable direct exports, while absence denotes an artifact without that metadata.
 - `functionExports` contains only direct `export fn` declarations that survive graph emission and DCE. It does not root otherwise-dead declarations, publish import aliases, or include source paths.
 - `isShaderFunctionExport()` validates declaration identifiers, not the stricter set of names a code generator may choose for minification. Predeclared identifiers remain syntactically valid metadata names.
-- `ShaderSource` still has no `bindings`, reflection, layouts, or cache metadata; `bindings` is reserved for a future version bump.
+- `ShaderReflection` is not a different reflection model. Its only differences from `Reflection` are required per-entry `bindings`/`samplingPairs` arrays and the `"unresolved"` workgroup marker; `reflectSource()` and `resolveShader()` keep returning `Reflection`.
 - Treat `ResolvedShader` fields as read-only data. Do not patch placeholder AST internals to represent imports; use `resolveShader()` for import graphs.
 - `compile()` output does not prove WGSL validity. It only packages the string and rejects top-level `import`.
 - Pure-module contract for resolver graphs: imported modules may export structs/functions/constants/aliases, but no imported module may declare `@group/@binding`; declare resources only in the entry module.
 - **`entryPoints` here is not reflection.** `ResolvedShader.entryPoints` (this page, `compile()`'s output) is just a lexical `readonly string[]` of entry-point names. It does not validate stage signatures or expose stage, workgroup size, inputs, bindings, or sampling pairs. The reflection `EntryPointInfo[]` returned by `reflectSource()` and by `resolveShader()`'s `ResolvedShader.reflection.entryPoints` (`@vgpu/wgsl/runtime`) carries that semantic metadata. If you need it, reach for `reflectSource` (`npx vgpu docs cat /@vgpu/wgsl/reflect-source/reflect-source.docs.md`) or `resolveShader`, not `compile()`.
-- **See also:** `compile`, `resolveShader`, `reflectSource`, `wgslVitePlugin`, `wgslWebpackLoader`.
+- **See also:** `prepareShader` (`@vgpu/wgsl/prepare`), `compile`, `resolveShader`, `reflectSource`, `wgslVitePlugin`, `wgslWebpackLoader`.

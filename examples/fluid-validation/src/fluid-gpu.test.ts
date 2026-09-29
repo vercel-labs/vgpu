@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { prepareShader } from '@vgpu/wgsl/prepare';
 import { init, compute, pingPongStorage, storage } from 'vgpu/node';
 
 const W = 16, H = 9, N = W * H;
@@ -20,6 +21,9 @@ struct Sim { size: vec2u }
 @group(0) @binding(0) var<uniform> sim:Sim;@group(0) @binding(1) var<storage,read> src:array<vec2f>;@group(0) @binding(2) var<storage,read> pressure:array<f32>;@group(0) @binding(3) var<storage,read_write> dst:array<vec2f>;
 fn ix(p:vec2i)->u32{let q=clamp(p,vec2i(0),vec2i(sim.size)-1);return u32(q.y)*sim.size.x+u32(q.x);}
 @compute @workgroup_size(8,8) fn main(@builtin(global_invocation_id) id:vec3u){if(any(id.xy>=sim.size)){return;}let p=vec2i(id.xy);let last=vec2i(sim.size)-1;let c=pressure[ix(p)];let l=select(pressure[ix(p-vec2i(1,0))],c,p.x==0);let r=select(pressure[ix(p+vec2i(1,0))],c,p.x==last.x);let b=select(pressure[ix(p-vec2i(0,1))],c,p.y==0);let t=select(pressure[ix(p+vec2i(0,1))],c,p.y==last.y);var u=src[ix(p)]-vec2f((r-l)*.5*f32(sim.size.x),(t-b)*.5*f32(sim.size.y));if(p.x==0&&u.x<0){u.x=0;}if(p.x==last.x&&u.x>0){u.x=0;}if(p.y==0&&u.y<0){u.y=0;}if(p.y==last.y&&u.y>0){u.y=0;}dst[ix(p)]=u;}`;
+const DIVERGENCE_SHADER = prepareShader(DIVERGENCE, 'fluid-divergence.wgsl');
+const PRESSURE_SHADER = prepareShader(PRESSURE, 'fluid-pressure.wgsl');
+const PROJECT_SHADER = prepareShader(PROJECT, 'fluid-project.wgsl');
 
 async function projectionFixture(seed: boolean) {
   const gpu = await init();
@@ -29,7 +33,7 @@ async function projectionFixture(seed: boolean) {
     const initial = new Float32Array(N * 2);
     if (seed) for (let y=0;y<H;y++) for(let x=0;x<W;x++){const i=(y*W+x)*2;initial[i]=Math.sin(x*.71+y*.23)*.7;initial[i+1]=Math.cos(x*.19-y*.83)*.6;}
     velocity.write(initial); projected.write(new Float32Array(N*2)); pressure.read.write(new Float32Array(N)); pressure.write.write(new Float32Array(N));
-    const sim={size:[W,H]}; const div=compute(gpu, DIVERGENCE); const jacobi=compute(gpu, PRESSURE); const project=compute(gpu, PROJECT);
+    const sim={size:[W,H]}; const div=compute(gpu, DIVERGENCE_SHADER); const jacobi=compute(gpu, PRESSURE_SHADER); const project=compute(gpu, PROJECT_SHADER);
     div.set({sim,velocity,divergence:before}).dispatch(2,2);
     for(let i=0;i<8;i++){jacobi.set({sim,src:pressure.read,divergence:before,dst:pressure.write}).dispatch(2,2);pressure.swap();}
     project.set({sim,src:velocity,pressure:pressure.read,dst:projected}).dispatch(2,2);

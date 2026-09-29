@@ -1,4 +1,5 @@
 import * as THREE from "three/webgpu";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { effect, sampler, type Gpu, type Target } from "vgpu";
 
 import { createScene } from "./renderer";
@@ -13,6 +14,7 @@ fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
   return vec4f(pow(linear, vec3f(1.0 / 2.2)), 1.0);
 }
 `;
+const PRESENT_SHADER = prepareShader(PRESENT_WGSL, "tsl-exports-present.wgsl");
 
 function installHeadlessGlobals(): void {
   const globals = globalThis as Record<string, unknown>;
@@ -90,7 +92,7 @@ export async function renderThumbnail(
       get(value: unknown): { texture: GPUTexture };
     };
     const source = backend.get(renderTarget.texture).texture;
-    effect(gpu, PRESENT_WGSL, { label: "tsl-exports-present" })
+    effect(gpu, PRESENT_SHADER, { label: "tsl-exports-present" })
       .set({
         source_texture: source.createView(),
         source_sampler: sampler(gpu, {

@@ -22,23 +22,14 @@ A render loop re-encodes every pipeline, bind group, and draw on every tick — 
 
 ```ts
 import { init, bundle, clock, effect, frameLoop, surface } from "vgpu";
+import oceanShader from "./ocean.wgsl";
+import boatShader from "./boat.wgsl";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
 const canvasTarget = surface(gpu, canvas);
-const ocean = effect(gpu, `
-  struct Params { time: f32 }
-  @group(0) @binding(0) var<uniform> params: Params;
-
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(0.1, 0.3, sin(params.time + uv.y) * 0.2 + 0.6, 1.0);
-  }
-`, { set: { params: { time: 0 } } });
-const boat = effect(gpu, `
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(0.6, 0.4, 0.2, step(distance(uv, vec2f(0.5, 0.6)), 0.1));
-  }
-`);
+const ocean = effect(gpu, oceanShader, { set: { params: { time: 0 } } });
+const boat = effect(gpu, boatShader);
 
 // ---cut---
 const scene = bundle(gpu, { target: { colors: [canvasTarget.format] } }, (b) => {
@@ -67,18 +58,12 @@ The `target` option also takes a plain signature, so you can pre-warm and record
 
 ```ts
 import { init, bundle, effect, frameLoop, surface } from "vgpu";
+import oceanShader from "./ocean.wgsl";
+import boatShader from "./boat.wgsl";
 
 const gpu = await init();
-const ocean = effect(gpu, `
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(0.1, 0.3, 0.6, 1.0);
-  }
-`);
-const boat = effect(gpu, `
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(0.6, 0.4, 0.2, 1.0);
-  }
-`);
+const ocean = effect(gpu, oceanShader);
+const boat = effect(gpu, boatShader);
 
 // ---cut---
 const signature = { colors: [navigator.gpu.getPreferredCanvasFormat()] };
@@ -108,23 +93,14 @@ A pass can replay bundles and encode fresh draws side by side:
 
 ```ts
 import { init, bundle, clock, effect, frameLoop, surface } from "vgpu";
+import oceanShader from "./ocean.wgsl";
+import cursorShader from "./cursor.wgsl";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
 const canvasTarget = surface(gpu, canvas);
-const ocean = effect(gpu, `
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(0.1, 0.3, 0.6, 1.0);
-  }
-`);
-const cursor = effect(gpu, `
-  struct Params { pos: vec2f }
-  @group(0) @binding(0) var<uniform> params: Params;
-
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(1.0, 1.0, 1.0, step(distance(uv, params.pos), 0.02));
-  }
-`, { set: { params: { pos: [0.5, 0.5] } } });
+const ocean = effect(gpu, oceanShader);
+const cursor = effect(gpu, cursorShader, { set: { params: { pos: [0.5, 0.5] } } });
 const scene = bundle(gpu, { target: { colors: [canvasTarget.format] } }, (b) => b.draw(ocean));
 
 // ---cut---
@@ -144,15 +120,12 @@ A bundle matches replay targets by render signature, not size, so drawing onto a
 
 ```ts
 import { init, bundle, clock, effect, frameLoop, surface } from "vgpu";
+import oceanShader from "./ocean.wgsl";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
 const canvasTarget = surface(gpu, canvas);
-const ocean = effect(gpu, `
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(0.1, 0.3, 0.6, 1.0);
-  }
-`);
+const ocean = effect(gpu, oceanShader);
 
 // ---cut---
 function recordScene() {

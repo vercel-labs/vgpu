@@ -347,6 +347,9 @@ importers:
 
   examples/by-example-s02-fullscreen:
     dependencies:
+      '@vgpu/wgsl':
+        specifier: workspace:*
+        version: link:../../packages/wgsl
       vgpu:
         specifier: workspace:*
         version: link:../../packages/vgpu-api
@@ -357,6 +360,9 @@ importers:
 
   examples/by-example-s03-sharing:
     dependencies:
+      '@vgpu/wgsl':
+        specifier: workspace:*
+        version: link:../../packages/wgsl
       vgpu:
         specifier: workspace:*
         version: link:../../packages/vgpu-api
@@ -367,6 +373,9 @@ importers:
 
   examples/by-example-s04-shared-uniforms:
     dependencies:
+      '@vgpu/wgsl':
+        specifier: workspace:*
+        version: link:../../packages/wgsl
       vgpu:
         specifier: workspace:*
         version: link:../../packages/vgpu-api
@@ -377,6 +386,9 @@ importers:
 
   examples/by-example-s05-fixits:
     dependencies:
+      '@vgpu/wgsl':
+        specifier: workspace:*
+        version: link:../../packages/wgsl
       vgpu:
         specifier: workspace:*
         version: link:../../packages/vgpu-api
@@ -387,6 +399,9 @@ importers:
 
   examples/by-example-s06-scene:
     dependencies:
+      '@vgpu/wgsl':
+        specifier: workspace:*
+        version: link:../../packages/wgsl
       vgpu:
         specifier: workspace:*
         version: link:../../packages/vgpu-api
@@ -397,6 +412,9 @@ importers:
 
   examples/by-example-s07-hdr-post:
     dependencies:
+      '@vgpu/wgsl':
+        specifier: workspace:*
+        version: link:../../packages/wgsl
       vgpu:
         specifier: workspace:*
         version: link:../../packages/vgpu-api
@@ -407,6 +425,9 @@ importers:
 
   examples/by-example-s08-ping-pong:
     dependencies:
+      '@vgpu/wgsl':
+        specifier: workspace:*
+        version: link:../../packages/wgsl
       vgpu:
         specifier: workspace:*
         version: link:../../packages/vgpu-api
@@ -417,6 +438,9 @@ importers:
 
   examples/by-example-s09-bundles:
     dependencies:
+      '@vgpu/wgsl':
+        specifier: workspace:*
+        version: link:../../packages/wgsl
       vgpu:
         specifier: workspace:*
         version: link:../../packages/vgpu-api
@@ -427,6 +451,9 @@ importers:
 
   examples/by-example-s10-group-claim:
     dependencies:
+      '@vgpu/wgsl':
+        specifier: workspace:*
+        version: link:../../packages/wgsl
       vgpu:
         specifier: workspace:*
         version: link:../../packages/vgpu-api
@@ -437,6 +464,9 @@ importers:
 
   examples/by-example-s11-compute:
     dependencies:
+      '@vgpu/wgsl':
+        specifier: workspace:*
+        version: link:../../packages/wgsl
       vgpu:
         specifier: workspace:*
         version: link:../../packages/vgpu-api
@@ -447,6 +477,9 @@ importers:
 
   examples/by-example-s12-scheduling-resize:
     dependencies:
+      '@vgpu/wgsl':
+        specifier: workspace:*
+        version: link:../../packages/wgsl
       vgpu:
         specifier: workspace:*
         version: link:../../packages/vgpu-api
@@ -457,6 +490,9 @@ importers:
 
   examples/by-example-s13-headless:
     dependencies:
+      '@vgpu/wgsl':
+        specifier: workspace:*
+        version: link:../../packages/wgsl
       vgpu:
         specifier: workspace:*
         version: link:../../packages/vgpu-api
@@ -7013,7 +7049,7 @@ snapshots:
   '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.278':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk@0.3.278(@anthropic-ai/sdk@0.128.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.30.1(zod@4.6.5))(zod@4.6.5)':
+  '@anthropic-ai/claude-agent-sdk@0.3.278(@anthropic-ai/sdk@0.128.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.30.1(zod@4.4.3))(zod@4.6.5)':
     dependencies:
       '@anthropic-ai/sdk': 0.128.0(zod@4.4.3)
       '@modelcontextprotocol/sdk': 1.30.1(zod@4.6.5)
@@ -13533,7 +13569,7 @@ snapshots:
 
   subharness@0.0.2(@anthropic-ai/sdk@0.128.0(zod@4.4.3)):
     dependencies:
-      '@anthropic-ai/claude-agent-sdk': 0.3.278(@anthropic-ai/sdk@0.128.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.30.1(zod@4.6.5))(zod@4.6.5)
+      '@anthropic-ai/claude-agent-sdk': 0.3.278(@anthropic-ai/sdk@0.128.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.30.1(zod@4.4.3))(zod@4.6.5)
       '@modelcontextprotocol/sdk': 1.30.1(zod@4.6.5)
       string-width: 8.2.1
       tsx: 4.23.15

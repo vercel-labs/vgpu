@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { init, draw, frame, target } from "vgpu/node";
 
 export const CLAIMED = /* wgsl */ `
@@ -14,11 +15,12 @@ struct VertexOut { @builtin(position) position: vec4f, @location(0) uv: vec2f };
 }
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f { return params.color; }
 `;
+const CLAIMED_SHADER = prepareShader(CLAIMED, "by-example-s10-claimed.wgsl");
 
 export async function runGroupClaimExample() {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [8, 8], format: "rgba8unorm" });
-  const drawable = draw(gpu, { shader: CLAIMED, label: "claimed" });
+  const drawable = draw(gpu, { shader: CLAIMED_SHADER, label: "claimed" });
   const layout = drawable.layout(0, { dynamicOffsets: true });
   const buffer = gpu.device.createBuffer({ size: 256, usage: ["uniform", "copy_dst", "copy_src"], label: "claimed-uniform" });
   buffer.write(new Float32Array([0.9, 0.2, 0.1, 1]));

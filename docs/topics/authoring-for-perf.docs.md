@@ -33,7 +33,7 @@ struct Globals {
 
 ```text
 const globals = uniforms(gpu, { time: 0, mouse: [0, 0], enabled: 1 });
-const draw = draw(gpu, { shader: WGSL, set: { globals } });
+const draw = draw(gpu, { shader: sceneShader, set: { globals } }); // sceneShader: a prepared .wgsl import
 await draw.compile(target);
 frameLoop(gpu, (f) => {
   globals.set({ time: clock(gpu).time, mouse });

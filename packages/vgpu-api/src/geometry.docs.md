@@ -204,6 +204,7 @@ const particles = geometry(gpu, {
 
 ```ts
 import { init, draw, geometry } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const vertexData = new Float32Array(3 * 4500);
@@ -214,14 +215,15 @@ const gltfGeometry = geometry(gpu, {
 });
 const hull = gltfGeometry.slice({ firstIndex: 0, indexCount: 3600 });
 const glass = gltfGeometry.slice({ firstIndex: 3600, indexCount: 900, label: "glass" });
-const pbrWgsl = "@vertex fn vs_main(@location(0) position: vec3f) -> @builtin(position) vec4f { return vec4f(position, 1); }";
+const pbrShader = prepareShader("@vertex fn vs_main(@location(0) position: vec3f) -> @builtin(position) vec4f { return vec4f(position, 1); }");
 
-draw(gpu, { shader: pbrWgsl, geometry: hull });
-draw(gpu, { shader: pbrWgsl, geometry: glass, blend: "alpha" });
+draw(gpu, { shader: pbrShader, geometry: hull }); // one prepared shader, reused by both slices
+draw(gpu, { shader: pbrShader, geometry: glass, blend: "alpha" });
 ```
 
 ```ts
 import { init, draw, geometry, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const glyphQuads = new Float32Array(4 * 4);
@@ -230,8 +232,8 @@ const text = geometry(gpu, {
   buffers: [{ data: glyphQuads, attributes: { pos: "float32x2", uv: "float32x2" } }],
   indices: quadIndices,
 });
-const sdfTextWgsl = "@vertex fn vs_main(@location(0) pos: vec2f, @location(1) uv: vec2f) -> @builtin(position) vec4f { return vec4f(pos, 0, 1); }";
-const textDraw = draw(gpu, { shader: sdfTextWgsl, geometry: text });
+const sdfTextShader = prepareShader("@vertex fn vs_main(@location(0) pos: vec2f, @location(1) uv: vec2f) -> @builtin(position) vec4f { return vec4f(pos, 0, 1); }");
+const textDraw = draw(gpu, { shader: sdfTextShader, geometry: text });
 const colorTarget = target(gpu, { size: [640, 480] });
 
 text.write(new Float32Array(4 * 4));

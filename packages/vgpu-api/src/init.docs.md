@@ -49,14 +49,15 @@ interface InitOptions {
 
 ```ts
 import { init, effect, frame, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const colorTarget = target(gpu, { size: [64, 64], format: "rgba8unorm" });
-const shader = effect(gpu, `
+const shader = effect(gpu, prepareShader(`
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     return vec4f(uv, 0.0, 1.0);
   }
-`);
+`));
 
 frame(gpu, (currentFrame) => {
   currentFrame.pass({ target: colorTarget }, (p) => p.draw(shader));
@@ -65,6 +66,7 @@ frame(gpu, (currentFrame) => {
 
 ```ts
 import { init, effect, frame, surface } from "vgpu";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 declare const canvas: HTMLCanvasElement;
 
@@ -73,7 +75,7 @@ const gpu = await init({
   requiredLimits: { maxStorageBuffersInVertexStage: 1 },
 });
 const canvasSurface = surface(gpu, canvas, { dpr: [1, 2] });
-const shader = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const shader = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`));
 
 frame(gpu, (currentFrame) => {
   currentFrame.pass({ target: canvasSurface }, (p) => p.draw(shader));

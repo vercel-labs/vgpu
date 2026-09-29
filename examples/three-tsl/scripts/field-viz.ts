@@ -8,8 +8,9 @@
 // Needs the same Vulkan ICD environment as generate-previews.ts.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { resolveShader } from "@vgpu/wgsl/runtime";
-import { init } from "vgpu/node";
+import { effect, init, target } from "vgpu/node";
 import { PNG } from "pngjs";
 
 const SIZE = 640;
@@ -56,15 +57,16 @@ const center = (args.find((a) => a.startsWith("center="))?.slice(7) ?? "0,0").sp
 mkdirSync(OUT_DIR, { recursive: true });
 writeFileSync(VIZ_ENTRY, VIZ_SOURCE);
 const resolved = await resolveShader({ entry: VIZ_ENTRY });
+const shader = prepareShader(resolved, VIZ_ENTRY);
 
 const gpu = await init();
-const target = gpu.target({ size: [SIZE, SIZE], format: "rgba8unorm" });
+const output = target(gpu, { size: [SIZE, SIZE], format: "rgba8unorm" });
 mkdirSync(OUT_DIR, { recursive: true });
 
 for (const name of selected) {
-  const effect = gpu.effect({ version: 1, wgsl: resolved.wgsl }, { set: { params: { mode: MODES[name]!, t: FRAME_TIME, span, center } } });
-  effect.draw(target);
-  const pixels = new Uint8Array(await target.color.read({ mipLevel: 0, region: "all" }));
+  const visualization = effect(gpu, shader, { set: { params: { mode: MODES[name]!, t: FRAME_TIME, span, center } } });
+  visualization.draw(output);
+  const pixels = new Uint8Array(await output.color.read({ mipLevel: 0, region: "all" }));
   const png = new PNG({ width: SIZE, height: SIZE });
   png.data.set(pixels);
   for (let i = 3; i < png.data.length; i += 4) png.data[i] = 255;

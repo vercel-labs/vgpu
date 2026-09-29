@@ -23,7 +23,7 @@ fn transmission_lod(roughness: f32, levels: f32) -> f32 {
 
 Validate the complete import graph with `npx vgpu check ./apps/docs/examples/transmission/glass.wgsl`.
 
-For a raw `effect(gpu)` debug shader, extract the binding-free prefix from the live entry shader and inline its live helper module:
+For a runtime-built `effect(gpu)` debug shader, extract the binding-free prefix from the live entry shader and inline its live helper module:
 
 ```ts
 import { readFileSync } from "node:fs";
@@ -46,7 +46,7 @@ const helpers = [
   .join("\n");
 ```
 
-`effect(gpu)` reflects one raw WGSL string and rejects remaining imports with `VGPU-WGSL-REFLECT-SOURCE-IMPORT`. The extraction therefore uses the exact shipped math while excluding bindings and entry points.
+`prepareShader()` from `@vgpu/wgsl/prepare` reflects one WGSL string for `effect(gpu)` and rejects remaining imports with `VGPU-WGSL-REFLECT-SOURCE-IMPORT`. The extraction therefore uses the exact shipped math while excluding bindings and entry points.
 
 ## 2. Encode internals as pixels
 
@@ -61,6 +61,7 @@ Render an 8×1 or 1×1 target where each pixel is a slot and each channel carrie
 
 ```ts
 import { init, effect, target } from "vgpu/node";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 // Reuse `helpers` extracted from the shipped shaders in step 1.
 declare const helpers: string;
@@ -68,9 +69,8 @@ declare const helpers: string;
 const gpu = await init();
 const colorTarget = target(gpu, { size: [8, 1] });
 
-effect(
-  gpu,
-  `
+// the debug WGSL is built at runtime, so prepare it once before effect()
+const probeShader = prepareShader(`
   ${helpers}
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     let slot = i32(floor(uv.x * 8.0));
@@ -81,8 +81,8 @@ effect(
     // normalized LOD: divide by levels - 1 so full roughness reaches exactly 1.0
     return vec4f(transmission_lod(0.0, 8.0) / 7.0, transmission_lod(0.5, 8.0) / 7.0, transmission_lod(1.0, 8.0) / 7.0, 1.0);
   }
-`
-).draw(colorTarget);
+`);
+effect(gpu, probeShader).draw(colorTarget);
 
 const pixels = await colorTarget.color.read({ mipLevel: 0, region: "all" });
 const slot0 = [...pixels.slice(0, 3)].map((byte) => byte / 255);
@@ -155,6 +155,7 @@ Float targets can be read directly: `target.color.read({ mipLevel: 0, region: "a
 
 ```typescript
 import { init, effect, sampler, target } from "vgpu/node";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const hdr = target(gpu, { size: [64, 64], format: "rgba16float" });
@@ -162,7 +163,7 @@ const encoded = target(gpu, { size: [64, 64], format: "rgba8unorm" });
 
 const encode = effect(
   gpu,
-  `
+  prepareShader(`
   @group(0) @binding(0) var source: texture_2d<f32>;
   @group(0) @binding(1) var sourceSampler: sampler;
 
@@ -170,7 +171,7 @@ const encode = effect(
     let value = textureSampleLevel(source, sourceSampler, uv, 0.0);
     return vec4f(value.rgb * 0.5 + vec3f(0.5), 1.0); // signed direction -> [0, 1]
   }
-`
+`), // no loader in Node: prepare the WGSL once
 );
 encode
   .set({

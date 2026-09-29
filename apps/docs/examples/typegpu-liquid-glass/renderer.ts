@@ -10,6 +10,7 @@ import {
   type Surface,
   type Target,
 } from "vgpu";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { tgpu, d, std } from "typegpu";
 
 const FIELD_SIZE = 1024;
@@ -307,16 +308,42 @@ const fragmentFn = tgpu.fragmentFn({ in: { uv: d.vec2f }, out: d.vec4f })((input
 
   return d.vec4f(color, 1);
 });
+let cachedShaderSources: ReturnType<typeof prepareShaderSources> | undefined;
+
+function prepareShaderSources() {
+  return {
+    sdfBake: prepareShader(
+      tgpu.resolve([sdfBakeFragment]),
+      "typegpu-liquid-glass/sdf-bake.wgsl",
+    ),
+    gradient: prepareShader(
+      tgpu.resolve([gradientFragment]),
+      "typegpu-liquid-glass/gradient.wgsl",
+    ),
+    horizontalBlur: prepareShader(
+      tgpu.resolve([horizontalBlurFragment]),
+      "typegpu-liquid-glass/horizontal-blur.wgsl",
+    ),
+    verticalBlur: prepareShader(
+      tgpu.resolve([verticalBlurFragment]),
+      "typegpu-liquid-glass/vertical-blur.wgsl",
+    ),
+    main: prepareShader(
+      tgpu.resolve([fragmentFn]),
+      "typegpu-liquid-glass/main.wgsl",
+    ),
+  };
+}
+
+function shaderSources() {
+  cachedShaderSources ??= prepareShaderSources();
+  return cachedShaderSources;
+}
 
 type Output = Surface | Target;
 
 export function createLiquidGlassScene(gpu: Gpu, output: Output) {
-  const sdfBakeSource = tgpu.resolve([sdfBakeFragment]);
-  const gradientSource = tgpu.resolve([gradientFragment]);
-  const horizontalBlurSource = tgpu.resolve([horizontalBlurFragment]);
-  const verticalBlurSource = tgpu.resolve([verticalBlurFragment]);
-  const shaderSource = tgpu.resolve([fragmentFn]);
-
+  const sources = shaderSources();
   let sdfField: Target | undefined;
   let rawGradient: Target | undefined;
   let blurA: Target | undefined;
@@ -350,22 +377,22 @@ export function createLiquidGlassScene(gpu: Gpu, output: Output) {
       addressModeV: "clamp-to-edge",
     });
 
-    const sdfBake = effect(gpu, sdfBakeSource, { label: "typegpu-sdf-bake" });
-    const extractGradient = effect(gpu, gradientSource, {
+    const sdfBake = effect(gpu, sources.sdfBake, { label: "typegpu-sdf-bake" });
+    const extractGradient = effect(gpu, sources.gradient, {
       label: "typegpu-sdf-gradient",
       set: { sourceTexture: sdfField, fieldSampler: linearSampler },
     });
     const blurPasses = 16;
     const blurEffects = Array.from({ length: blurPasses }, (_, i) => {
       return {
-        horizontal: effect(gpu, horizontalBlurSource, {
+        horizontal: effect(gpu, sources.horizontalBlur, {
           label: `typegpu-sdf-blur-horizontal-${i}`,
           set: {
             sourceTexture: i === 0 ? rawGradient : blurB,
             fieldSampler: linearSampler,
           },
         }),
-        vertical: effect(gpu, verticalBlurSource, {
+        vertical: effect(gpu, sources.verticalBlur, {
           label: `typegpu-sdf-blur-vertical-${i}`,
           set: { sourceTexture: blurA, fieldSampler: linearSampler },
         }),
@@ -379,7 +406,7 @@ export function createLiquidGlassScene(gpu: Gpu, output: Output) {
       effect.vertical.draw(blurB);
     }
 
-    const shader = effect(gpu, shaderSource, {
+    const shader = effect(gpu, sources.main, {
       label: "typegpu-liquid-glass",
       set: {
         params: { time: 0, aspect: 1 },

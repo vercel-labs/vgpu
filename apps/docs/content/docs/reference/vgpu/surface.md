@@ -72,12 +72,13 @@ interface Surface extends Target {
 
 ```ts
 import { init, effect, frame, surface } from "vgpu";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 declare const canvas: HTMLCanvasElement;
 
 const gpu = await init();
 const canvasSurface = surface(gpu, canvas, { dpr: [1, 2] });
-const wave = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.2, 0.6, 1, 1); }`);
+const wave = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.2, 0.6, 1, 1); }`));
 
 frame(gpu, (currentFrame) => {
   currentFrame.pass({ target: canvasSurface }, (pass) => pass.draw(wave));
@@ -86,6 +87,7 @@ frame(gpu, (currentFrame) => {
 
 ```ts
 import { init, effect, frame, surface, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 declare const canvas: HTMLCanvasElement;
@@ -93,12 +95,12 @@ const canvasSurface = surface(gpu, canvas);
 
 const bloomSize = (w: number, h: number): [number, number] => [w / 2, h / 2];
 const bloom = target(gpu, { size: bloomSize(canvasSurface.size[0], canvasSurface.size[1]) });
-const brightPass = effect(gpu, `
+const brightPass = effect(gpu, prepareShader(`
   struct Params { resolution: vec2f }
   @group(0) @binding(0) var<uniform> params: Params;
   @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }
-`, { set: { params: { resolution: bloom.size } } });
-const composite = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+`), { set: { params: { resolution: bloom.size } } });
+const composite = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`));
 
 canvasSurface.onResize(({ width, height }) => {
   bloom.resize(bloomSize(width, height));
@@ -113,6 +115,7 @@ frame(gpu, (currentFrame) => {
 
 ```ts
 import { init, effect, frame, surface } from "vgpu";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 declare const canvasA: HTMLCanvasElement;
 declare const canvasB: HTMLCanvasElement;
@@ -120,7 +123,7 @@ declare const canvasB: HTMLCanvasElement;
 const gpu = await init();
 const main = surface(gpu, canvasA);
 const preview = surface(gpu, canvasB, { autoResize: false, size: [320, 180] });
-const shader = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const shader = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`));
 
 frame(gpu, (currentFrame) => {
   currentFrame.pass({ target: main }, (p) => p.draw(shader));
@@ -148,12 +151,13 @@ canvasSurface.resize([640, 360]);
 
 ```ts
 import { init, bundle, effect, frame, surface } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 declare const canvas: HTMLCanvasElement;
 
 const gpu = await init();
 const canvasSurface = surface(gpu, canvas);
-const draw = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const draw = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`));
 let statics = bundle(gpu, { target: canvasSurface }, (recorded) => recorded.draw(draw));
 
 // Drawing onto a resized surface keeps the same bundle valid as long as the render signature matches.

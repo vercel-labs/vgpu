@@ -130,7 +130,7 @@ function rgbaAt(pixels: Uint8Array, width: number, x: number, y: number): readon
 
 async function runWorkerSurfaceScenario(): Promise<{ initial: number[]; resized: number[]; half: number[]; pixel: number[] }> {
   const code = `
-    const { parentPort } = require("node:worker_threads");
+    const { parentPort, workerData } = require("node:worker_threads");
     (async () => {
       const { init, surface: createSurface, target, effect: createEffect, frame } = await import(${JSON.stringify(new URL("../../dist/node.js", import.meta.url).href)});
       const gpu = await init();
@@ -138,7 +138,7 @@ async function runWorkerSurfaceScenario(): Promise<{ initial: number[]; resized:
         const canvas = (${workerCanvasSource()})(16, 8);
         const surface = createSurface(gpu, canvas);
         const half = target(gpu, { size: [Math.max(1, surface.size[0] / 2), Math.max(1, surface.size[1] / 2)] });
-        const effect = createEffect(gpu, ${JSON.stringify(BLUE)});
+        const effect = createEffect(gpu, workerData);
         surface.onResize(({ width, height }) => half.resize([width / 2, height / 2]));
         const initial = [...surface.size];
         surface.resize([20, 10]);
@@ -151,7 +151,10 @@ async function runWorkerSurfaceScenario(): Promise<{ initial: number[]; resized:
       }
     })().catch((error) => parentPort.postMessage({ error: String(error?.stack || error) }));
   `;
-  const worker = new Worker(code, { eval: true });
+  const worker = new Worker(code, {
+    eval: true,
+    workerData: prepareShader(BLUE, "worker-surface-blue.wgsl"),
+  });
   return await new Promise((resolve, reject) => {
     worker.once("message", (message) => {
       if (message?.error) reject(new Error(message.error));
