@@ -6,6 +6,7 @@ test("client export intentionally points to ambient root client.d.ts", async () 
   const clientTypes = await readFile("packages/vgpu-api/client.d.ts", "utf8");
 
   expect(pkg.exports["./client"]?.types).toBe("./client.d.ts");
-  expect(clientTypes).toContain('declare module "*.wgsl"');
+  expect(clientTypes).toContain('reference types="@vgpu/wgsl/wgsl-types"');
+  expect(clientTypes).not.toContain('declare module "*.wgsl"');
   expect(clientTypes).toContain('declare module "vgpu/client"');
 });

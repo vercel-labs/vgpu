@@ -1,9 +1,13 @@
 import shaderSource from "./shader.wgsl";
-import { wgslVitePlugin, type VGPUClientEnvironment } from "vgpu/client";
+import type { ShaderReflection as RootReflection } from "vgpu";
+import type { ShaderReflection as NodeReflection } from "vgpu/node";
+import type { ShaderReflection as MockReflection } from "vgpu/mock";
+import { wgslVitePlugin, type ShaderReflection as ClientReflection, type VGPUClientEnvironment } from "vgpu/client";
 
 const defaultEnv: VGPUClientEnvironment = {};
 const shaderText: string = shaderSource.wgsl;
-const shaderVersion: 1 = shaderSource.version;
+const shaderVersion: 2 = shaderSource.version;
+const reflection: RootReflection & NodeReflection & MockReflection & ClientReflection = shaderSource.reflection;
 const pluginName: string = wgslVitePlugin().name;
 
 export function useShader(env: VGPUClientEnvironment = defaultEnv) {
@@ -11,5 +15,6 @@ export function useShader(env: VGPUClientEnvironment = defaultEnv) {
     env,
     shader: shaderText,
     shaderVersion,
+    reflection,
   };
 }

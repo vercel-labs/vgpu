@@ -1,7 +1,7 @@
 {
   "extends": "../../../../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "src",
+    "rootDir": "../../../../../",
     "outDir": "dist",
     "noEmit": true,
     "composite": false,
@@ -11,6 +11,8 @@
     "baseUrl": ".",
     "paths": {
       "vgpu": ["../../../src/index.ts"],
+      "vgpu/node": ["../../../src/node.ts"],
+      "vgpu/mock": ["../../../src/mock.ts"],
       "vgpu/*": ["../../../src/*"]
     }
   },
