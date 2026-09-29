@@ -38,7 +38,7 @@ export async function transformWgsl(sourceOrOpts: string | TransformWgslOptions,
     // importer resolves a graph through resolveShader().
     assertNoErrorDiagnostics(reservedIdentifierDiagnosticsForSource(opts.id, opts.source), opts.id);
     const wgsl = applyMinifyWgsl(opts.source, opts.minify);
-    return { code: shaderSourceModule(wgsl), map: null };
+    return { code: shaderSourceModule(wgsl, opts.id), map: null };
   }
   const resolved = await resolveShader(withEntrySource({
     entry: opts.id,
@@ -47,7 +47,7 @@ export async function transformWgsl(sourceOrOpts: string | TransformWgslOptions,
     onDependency: opts.onDependency,
   }, opts.source));
   assertNoErrorDiagnostics(resolved.diagnostics, opts.id);
-  return { code: shaderSourceModule(resolved.wgsl, resolved.functionExports), map: null };
+  return { code: shaderSourceModule(resolved.wgsl, opts.id, resolved.functionExports), map: null };
 }
 
 export function wgslVitePlugin(options: WgslVitePluginOptions = {}): { readonly name: string; readonly transform: (this: VitePluginContext, source: string, id: string) => Promise<ViteLoadResult | null> } {

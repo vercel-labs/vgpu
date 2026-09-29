@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import type { ShaderFunctionExport, ShaderSource } from "@vgpu/wgsl";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { transformWgsl } from "@vgpu/wgsl/loader-vite";
 import wgslWebpackLoader from "@vgpu/wgsl/loader-webpack";
 
@@ -25,6 +26,7 @@ test("ordinary leaf artifacts preserve WGSL and authoritatively expose no functi
   for (const emitted of [vite, webpack]) {
     expect(emitted.wgsl).toBe(source);
     expect(emitted.functionExports).toEqual([]);
+    expectPreparedArtifact(emitted);
   }
 });
 
@@ -46,6 +48,7 @@ test("direct-export leaf artifacts resolve their in-memory source before identif
     expect(emitted.wgsl).not.toMatch(/\bexport\b/u);
     expect(emitted.wgsl).not.toContain("authoredValue");
     expect(emitted.wgsl).toMatch(functionDeclaration(emitted.functionExports[0]!.resolvedName));
+    expectPreparedArtifact(emitted);
   }
 });
 
@@ -59,6 +62,7 @@ export @must_use /* attached trivia */ fn dead(value: f32) -> f32 { return value
     expect(emitted.functionExports).toEqual([]);
     expect(emitted.wgsl).not.toContain("@must_use");
     expect(emitted.wgsl).not.toContain("fn dead");
+    expectPreparedArtifact(emitted);
   }
 });
 
@@ -119,6 +123,7 @@ test("minified import-graph artifacts expose authored metadata for final declara
     ]);
     expect(emitted.wgsl).not.toContain("surfaceValue");
     expect(emitted.wgsl).toMatch(functionDeclaration(emitted.functionExports[0]!.resolvedName));
+    expectPreparedArtifact(emitted);
   }
 });
 
@@ -156,8 +161,16 @@ export fn memoryValue(value: f32) -> f32 { return helperValue(value); }`;
       "memoryValue",
       "helperValue",
     ]);
+    expectPreparedArtifact(emitted);
   }
 });
+
+function expectPreparedArtifact(emitted: EmittedShaderSource): void {
+  expect(emitted).toEqual(prepareShader({
+    wgsl: emitted.wgsl,
+    functionExports: emitted.functionExports,
+  }));
+}
 
 function artifact(codeOrResult: string | { readonly code: string }): EmittedShaderSource {
   const code = typeof codeOrResult === "string" ? codeOrResult : codeOrResult.code;
