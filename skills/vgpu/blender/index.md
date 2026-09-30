@@ -8,6 +8,8 @@ Read [shape and assembly](references/shape-and-assembly.md) when designing silho
 
 For long bakes or scripted export pipelines, read [preflight and recovery](references/preflight-and-recovery.md) before running them. It defines executable probes, stage checkpoints and recovery without discarding valid completed work.
 
+For texture format selection, model/download size or slow first-frame loading, read [asset delivery](references/asset-delivery.md). It compares PNG/WebP, KTX2 codecs and native GPU formats, geometry optimizations and end-to-end measurement.
+
 ## 1. Establish a baseline
 
 - Inspect the supplied references, source mesh, materials, rig, collision shapes, and export/import pipeline before editing.

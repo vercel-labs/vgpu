@@ -43,6 +43,8 @@ If the affected receiver set cannot be established, invalidate the dependent ass
 
 ## Texture filtering and runtime conventions
 
+Use the [asset delivery format table](asset-delivery.md#texture-delivery-choices) to choose container, codec and GPU format; keep bake masters separate from delivery conversions.
+
 - Normals and AO are linear data. Disable sRGB conversion and avoid premultiplying data channels by alpha.
 - Design island padding in pixels of the final resolution. Account for downsampling and mipmaps; more resolution cannot fix overlapping UVs.
 - For a downsampled normal master, decode RGB to vectors, average, normalize, and re-encode. Average AO separately as a scalar.
