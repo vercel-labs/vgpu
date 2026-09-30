@@ -32,6 +32,8 @@ Use per-region targets and compare actual output. Do not retain every original U
 
 Finalize LOW topology, applied transforms, shading normals, UVs and deterministic triangulation before projecting. The triangulation used by the baker must be the one exported. Verify the serialized result, including any splits or reorderings made by the exporter; a modifier label alone is not proof.
 
+Use the frozen, serialized frame for checkpoint identity and decoding. Keep per-field hashes so a resume failure identifies whether positions, topology, normals, UVs or tangents changed. Recomputed floating-point tangents can differ slightly between processes; compare that diagnostic against the frozen frame with an explicit precision limit instead of substituting its hash for the asset identity. Reopen independently and require exact equality of the canonical fields; do not round away a real source change.
+
 Check LOW face orientation against the intended HIGH surface before casting rays. A reconstructed profile can match positions while reversing face winding, especially when the original generator corrected orientation in a later stage. Preserve corner/UV correspondence when repairing winding; do not try to compensate with cage distance or a flipped normal-map channel.
 
 A nearest-triangle normal is not sufficient proof of reversed winding on a simplified rock or sculpt. Near creases, folds and thin surfaces, multiple nearby HIGH triangles can face different directions. Inspect shared-edge winding, component orientation and the intended projection correspondence before reversing faces. A coherent closed mesh can still have projection problems; diagnose those with the actual cage and covered-texel oracle rather than forcing every nearest-normal dot product positive.

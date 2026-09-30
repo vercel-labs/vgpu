@@ -47,6 +47,8 @@ WebGPU compressed formats require supported, enabled `texture-compression-bc`, `
 
 Inspect GLB chunks and classify geometry, embedded images, unused data and metadata before calling the entire file “the mesh”. Count exported vertices after UV/normal/material splits, not just Blender's edit-mode vertices or triangles.
 
+After replacing exported attributes or externalizing images, check for abandoned accessors and buffer views before measuring the final download. Compression can preserve these unused intermediate arrays. Prune only after accounting for all references, including animation, skins and extensions; then decode the packaged file and verify the retained attributes and triangle-corner correspondence. Keep this packaging cleanup separate from topology reduction.
+
 | Change | Potential saving | What to preserve or revalidate |
 | --- | --- | --- |
 | Externalize shared textures; stop fetching overridden fallback images | Download bytes, LOD-switch cache reuse | Keep portable references valid and sampling/UV bindings unchanged. A fallback is not removed if its bytes still ship inside the eagerly fetched GLB. Use content identity for sharing. External image dependencies make the GLB non-self-contained; retain a self-contained interchange copy when needed. |
