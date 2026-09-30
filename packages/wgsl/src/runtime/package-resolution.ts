@@ -8,9 +8,11 @@ import type { Diagnostic } from "./diagnostic-types.ts";
 export interface PackageResolveOptions { readonly entry: string; readonly rootDir?: string; readonly packageMap?: Record<string, string>; readonly modules?: Record<string, string>; readonly readPackageManifest?: (path: string) => string }
 
 const entrySourceKey = Symbol("@vgpu/wgsl entry source");
+const missingDependencyReporterKey = Symbol("@vgpu/wgsl missing dependency reporter");
 interface EntrySourceOverride { readonly path: string; readonly source: string }
 type InternalPackageResolveOptions = PackageResolveOptions & {
   readonly [entrySourceKey]?: EntrySourceOverride;
+  readonly [missingDependencyReporterKey]?: (path: string) => void;
 };
 
 /** Internal loader bridge: overlay only the bundler-provided entry while imports keep normal resolution. */
@@ -22,6 +24,15 @@ export function withEntrySource<Options extends PackageResolveOptions>(
     ...options,
     [entrySourceKey]: { path: resolve(options.entry), source },
   };
+}
+
+/** Internal resolver bridge: report deterministic missing file candidates before resolution fails. */
+export function withMissingDependencyReporter<Options extends PackageResolveOptions>(
+  options: Options,
+  reporter: ((path: string) => void) | undefined,
+): Options {
+  if (!reporter) return options;
+  return { ...options, [missingDependencyReporterKey]: reporter };
 }
 
 /** Fix-it for a bare package specifier that is not installed. WGSL packages are npm packages: `@vgpu/wgsl-std` ships with `vgpu`, anything else has to be installed. */
@@ -41,12 +52,13 @@ function packageNotFound(pkg: string, fixit: string): ReturnType<typeof wgslErro
 
 export function resolveImport(spec: string, from: string, opts: PackageResolveOptions, diagnostics: Diagnostic[]): string {
   if (spec.startsWith("/")) throw wgslError("VGPU-WGSL-RES-ABS", "Absolute WGSL imports are not portable");
-  if (spec.startsWith("@/") && opts.rootDir) return opts.modules ? defaultVirtual(join(opts.rootDir, spec.slice(2)), opts.modules) : defaultFile(join(opts.rootDir, spec.slice(2)));
-  for (const [prefix, target] of Object.entries(opts.packageMap ?? {})) if (spec.startsWith(prefix)) return opts.modules ? defaultVirtual(join(target, spec.slice(prefix.length)), opts.modules) : defaultFile(join(target, spec.slice(prefix.length)));
+  const reportMissing = missingDependencyReporter(opts);
+  if (spec.startsWith("@/") && opts.rootDir) return opts.modules ? defaultVirtual(join(opts.rootDir, spec.slice(2)), opts.modules) : defaultFile(join(opts.rootDir, spec.slice(2)), reportMissing);
+  for (const [prefix, target] of Object.entries(opts.packageMap ?? {})) if (spec.startsWith(prefix)) return opts.modules ? defaultVirtual(join(target, spec.slice(prefix.length)), opts.modules) : defaultFile(join(target, spec.slice(prefix.length)), reportMissing);
   if (opts.modules && (spec.startsWith("./") || spec.startsWith("../"))) return defaultVirtual(join(dirname(from), spec), opts.modules);
   if (opts.modules) throw packageNotFound(packageNameOf(spec), PKG_NOTFOUND_VIRTUAL_FIXIT);
-  if (spec.startsWith("./") || spec.startsWith("../")) return defaultFile(resolve(dirname(from), spec));
-  return packageImport(spec, from, diagnostics, opts.readPackageManifest);
+  if (spec.startsWith("./") || spec.startsWith("../")) return defaultFile(resolve(dirname(from), spec), reportMissing);
+  return packageImport(spec, from, diagnostics, opts.readPackageManifest, reportMissing);
 }
 
 export async function readModule(path: string, opts: PackageResolveOptions): Promise<string> {
@@ -64,7 +76,7 @@ export function canonicalEntry(entry: string, opts: PackageResolveOptions): stri
   return opts.modules ? defaultVirtual(entry, opts.modules) : defaultFile(resolve(entry));
 }
 
-function packageImport(spec: string, from: string, diagnostics: Diagnostic[], readManifest?: (path: string) => string): string {
+function packageImport(spec: string, from: string, diagnostics: Diagnostic[], readManifest?: (path: string) => string, reportMissing?: (path: string) => void): string {
   const pkg = packageNameOf(spec);
   const sub = `.${spec.slice(pkg.length) || ""}`;
   // Project-local first: the importing project's own node_modules always wins, so a project can
@@ -73,14 +85,14 @@ function packageImport(spec: string, from: string, diagnostics: Diagnostic[], re
   // never at another project.
   const start = dirname(from);
   const boundary = workspaceBoundary(start);
-  const local = walkForPackage(start, boundary, pkg, sub, diagnostics, readManifest);
+  const local = walkForPackage(start, boundary, pkg, sub, diagnostics, readManifest, reportMissing);
   if (local) return local;
   // Same walk from the importer's real path, which is what rescues a WGSL package that imports
   // another WGSL package under pnpm (see walkForPackage).
   const real = realPathOf(start);
   const realBoundary = realPathOf(boundary);
   if (real !== start && isInside(real, realBoundary)) {
-    const stored = walkForPackage(real, realBoundary, pkg, sub, diagnostics, readManifest);
+    const stored = walkForPackage(real, realBoundary, pkg, sub, diagnostics, readManifest, reportMissing);
     if (stored) return stored;
   }
   // Yarn PnP installs packages inside zip archives with no node_modules directories at all, so the
@@ -118,10 +130,10 @@ function packageImport(spec: string, from: string, diagnostics: Diagnostic[], re
  * path as written and skips the second pass entirely when the real path escapes it, leaving a linked
  * package's own imports to fail with PKG-NOTFOUND rather than resolve to something arbitrary.
  */
-function walkForPackage(start: string, stopAt: string, pkg: string, sub: string, diagnostics: Diagnostic[], readManifest?: (path: string) => string): string | undefined {
+function walkForPackage(start: string, stopAt: string, pkg: string, sub: string, diagnostics: Diagnostic[], readManifest?: (path: string) => string, reportMissing?: (path: string) => void): string | undefined {
   for (let dir = start;;) {
     const pkgJson = join(dir, "node_modules", pkg, "package.json");
-    if (existsSync(pkgJson)) return packageExport(pkgJson, sub, diagnostics, readManifest);
+    if (existsSync(pkgJson)) return packageExport(pkgJson, sub, diagnostics, readManifest, reportMissing);
     if (dir === stopAt) return undefined;
     const next = dirname(dir); if (next === dir) return undefined; dir = next;
   }
@@ -173,23 +185,24 @@ function resolveAlongsideResolver(spec: string): string | undefined {
   }
 }
 
-function packageExport(pkgJson: string, sub: string, diagnostics: Diagnostic[], readManifest?: (path: string) => string): string {
+function packageExport(pkgJson: string, sub: string, diagnostics: Diagnostic[], readManifest?: (path: string) => string, reportMissing?: (path: string) => void): string {
   const root = dirname(pkgJson);
   const parsed = JSON.parse(readManifest ? readManifest(pkgJson) : readFileSync(pkgJson, "utf8")) as { name?: string; exports?: Record<string, string | Record<string, string>> };
   const value = parsed.exports?.[sub];
-  if (typeof value === "string") return defaultFile(join(root, value));
+  if (typeof value === "string") return defaultFile(join(root, value), reportMissing);
   if (value && typeof value.default === "string") {
     warnOnce(diagnostics, "VGPU-WGSL-PKG-CONDITIONAL", `Package export ${sub} uses conditional exports; selecting default`);
-    return defaultFile(join(root, value.default));
+    return defaultFile(join(root, value.default), reportMissing);
   }
   for (const [key, target] of Object.entries(parsed.exports ?? {})) if (key.includes("*") && typeof target === "string") {
     const [before, after] = key.split("*") as [string, string];
-    if (sub.startsWith(before) && sub.endsWith(after)) return defaultFile(join(root, target.replace("*", sub.slice(before.length, sub.length - after.length))));
+    if (sub.startsWith(before) && sub.endsWith(after)) return defaultFile(join(root, target.replace("*", sub.slice(before.length, sub.length - after.length))), reportMissing);
   }
   throw wgslError("VGPU-WGSL-PKG-NOTFOUND", `Package export ${sub} was not found in ${parsed.name ?? root}. Check the package's exports map or fix the import subpath`);
 }
 
 function warnOnce(diagnostics: Diagnostic[], code: string, message: string): void { if (!diagnostics.some((item) => item.code === code && item.message === message)) diagnostics.push(wgslWarning(code, message)); }
 function defaultVirtual(path: string, modules: Record<string, string>): string { const clean = normalize(path).replace(/\\/g, "/"); if (modules[clean] !== undefined) return clean; if (modules[`${clean}.wgsl`] !== undefined) return `${clean}.wgsl`; if (modules[`${clean}/index.wgsl`] !== undefined) return `${clean}/index.wgsl`; throw wgslError("VGPU-WGSL-RES-NOTFOUND", `WGSL module ${clean} was not found`); }
-function defaultFile(path: string): string { if (existsSync(path) && statSync(path).isDirectory()) path = join(path, "index.wgsl"); for (const choice of extname(path) ? [path] : [`${path}.wgsl`, join(path, "index.wgsl")]) if (existsSync(choice)) return choice; throw wgslError("VGPU-WGSL-RES-NOTFOUND", `WGSL module ${path} was not found`); }
+function defaultFile(path: string, reportMissing?: (path: string) => void): string { if (existsSync(path) && statSync(path).isDirectory()) path = join(path, "index.wgsl"); const choices = extname(path) ? [path] : [`${path}.wgsl`, join(path, "index.wgsl")]; for (const choice of choices) if (existsSync(choice)) return choice; for (const choice of choices) reportMissing?.(choice); throw wgslError("VGPU-WGSL-RES-NOTFOUND", `WGSL module ${path} was not found`); }
+function missingDependencyReporter(opts: PackageResolveOptions): ((path: string) => void) | undefined { return (opts as InternalPackageResolveOptions)[missingDependencyReporterKey]; }
 function isWorkspaceRoot(dir: string): boolean { return existsSync(join(dir, "pnpm-workspace.yaml")) || existsSync(join(dir, ".git")) || dirname(dir) === dir; }
