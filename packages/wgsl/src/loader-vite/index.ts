@@ -1,5 +1,6 @@
 import { assertNoErrorDiagnostics } from "../loader-shared/diagnostics.ts";
 import { shaderSourceModule } from "../loader-shared/emit.ts";
+import { packedQueryModule } from "../loader-shared/packed-query.ts";
 import { hasDirectFunctionExport } from "../loader-shared/source.ts";
 import { applyMinifyWgsl, type MinifyOption } from "../runtime/minify.ts";
 import { withEntrySource } from "../runtime/package-resolution.ts";
@@ -30,6 +31,9 @@ export function transformWgsl(source: string, id: string, options?: WgslVitePlug
 export function transformWgsl(opts: TransformWgslOptions): Promise<ViteLoadResult>;
 export async function transformWgsl(sourceOrOpts: string | TransformWgslOptions, id?: string, options: WgslVitePluginOptions = {}): Promise<ViteLoadResult> {
   const opts = typeof sourceOrOpts === "string" ? { ...options, source: sourceOrOpts, id: id ?? "<vite>" } : sourceOrOpts;
+  const request = splitRequest(opts.id);
+  const packedModule = packedQueryModule(request.resourcePath, request.resourceQuery);
+  if (packedModule !== null) return { code: packedModule, map: null };
   const hasImports = hasTopLevelImport(opts.source);
   const exportedLeaf = !hasImports && hasDirectFunctionExport(opts.source, opts.id);
   if (!hasImports && !exportedLeaf) {
@@ -54,6 +58,9 @@ export function wgslVitePlugin(options: WgslVitePluginOptions = {}): { readonly 
   return {
     name: "@vgpu/wgsl",
     async transform(source, id) {
+      const request = splitRequest(id);
+      const packedModule = packedQueryModule(request.resourcePath, request.resourceQuery);
+      if (packedModule !== null) return { code: packedModule, map: null };
       if (!id.endsWith(".wgsl")) return null;
       return transformWgsl({
         source,
@@ -63,6 +70,13 @@ export function wgslVitePlugin(options: WgslVitePluginOptions = {}): { readonly 
       });
     },
   };
+}
+
+function splitRequest(id: string): { readonly resourcePath: string; readonly resourceQuery: string } {
+  const query = id.search(/[?#]/u);
+  return query < 0
+    ? { resourcePath: id, resourceQuery: "" }
+    : { resourcePath: id.slice(0, query), resourceQuery: id.slice(query) };
 }
 
 export default wgslVitePlugin;

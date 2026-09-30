@@ -7,6 +7,7 @@ import { prepareShader } from "@vgpu/wgsl/prepare";
 import { resolveShader } from "@vgpu/wgsl/runtime";
 import wgslVitePlugin, { transformWgsl } from "@vgpu/wgsl/loader-vite";
 import wgslWebpackLoader from "@vgpu/wgsl/loader-webpack";
+import { evaluateShaderModule } from "./helpers/evaluate-shader-module.ts";
 
 test("package exports pattern resolves", async () => {
   const dir = await pkgFixture({ exports: { "./shaders/*": "./dist/*.wgsl" }, files: { "dist/foo.wgsl": "export fn x(){}" } });
@@ -102,15 +103,15 @@ test("conditional exports select default", async () => {
 });
 test("leaf loader path is byte-for-byte unchanged when minify is false", async () => {
   const source = "// import { x } from 'y'\n@compute @workgroup_size(1) fn main() {\n  var value = 1u;\n}\n";
-  expect(defaultExport(await transformWgsl(source, "/x.wgsl"))).toBe(source);
-  expect(defaultExport(wgslWebpackLoader.call({ resourcePath: "/x.wgsl" }, source) ?? "")).toBe(source);
+  expect(await defaultExport(await transformWgsl(source, "/x.wgsl"))).toBe(source);
+  expect(await defaultExport(wgslWebpackLoader.call({ resourcePath: "/x.wgsl" }, source) ?? "")).toBe(source);
 });
 
 test("leaf loader path compacts comments whitespace and safe locals when minify is true", async () => {
   const source = "// leading comment\n@compute @workgroup_size(1) fn main() {\n  /* keep names stable */ var value = 1u;\n}\n";
   const expected = "@compute @workgroup_size(1) fn main(){var a=1u;}";
-  const vite = shaderSource(await transformWgsl(source, "/x.wgsl", { minify: true }));
-  const webpack = shaderSource(wgslWebpackLoader.call({ resourcePath: "/x.wgsl", getOptions: () => ({ minify: true }) }, source) ?? "");
+  const vite = await shaderSource(await transformWgsl(source, "/x.wgsl", { minify: true }));
+  const webpack = await shaderSource(wgslWebpackLoader.call({ resourcePath: "/x.wgsl", getOptions: () => ({ minify: true }) }, source) ?? "");
   for (const emitted of [vite, webpack]) {
     expect(emitted.wgsl).toBe(expected);
     expect(emitted).toEqual(prepareShader({ wgsl: expected, functionExports: [] }));
@@ -121,13 +122,13 @@ test("leaf loader path supports object-form whitespace-only minify", async () =>
   const source = "// leading comment\n@compute @workgroup_size(1) fn main() {\n  /* keep names stable */ var value = 1u;\n}\n";
   const expected = "@compute @workgroup_size(1) fn main(){var value=1u;}";
   const minify = { identifiers: "none" } as const;
-  expect(defaultExport(await transformWgsl(source, "/x.wgsl", { minify }))).toBe(expected);
-  expect(defaultExport(wgslWebpackLoader.call({ resourcePath: "/x.wgsl", getOptions: () => ({ minify }) }, source) ?? "")).toBe(expected);
+  expect(await defaultExport(await transformWgsl(source, "/x.wgsl", { minify }))).toBe(expected);
+  expect(await defaultExport(wgslWebpackLoader.call({ resourcePath: "/x.wgsl", getOptions: () => ({ minify }) }, source) ?? "")).toBe(expected);
 });
 
 test("loader comment-only import passes through", async () => {
   const code = (await transformWgsl("// import { x } from 'y'", "/x.wgsl")).code;
-  expect(shaderSource(code).version).toBe(2);
+  expect((await shaderSource(code)).version).toBe(2);
   expect(code).toContain("// import");
 });
 test("loaders emit data-only prepared modules", async () => {
@@ -139,7 +140,7 @@ test("loaders emit data-only prepared modules", async () => {
     expect(code).toMatch(/^export default \{/u);
     expect(code).not.toContain("prepareShader");
     expect(code).not.toContain("reflectSource");
-    expect(shaderSource(code)).toMatchObject({
+    expect(await shaderSource(code)).toMatchObject({
       version: 2,
       producer: "@vgpu/wgsl/prepare-v2",
       reflection: { entryPoints: [expect.objectContaining({ name: "main", stage: "compute" })] },
@@ -217,8 +218,8 @@ test("loaders disable device validation for every branch despite VGPU_VALIDATE",
 
   try {
     for (const [entry, source] of cases) {
-      expect(shaderSource(await transformWgsl(source, entry)).version).toBe(2);
-      expect(shaderSource(await webpack(entry, source)).version).toBe(2);
+      expect((await shaderSource(await transformWgsl(source, entry))).version).toBe(2);
+      expect((await shaderSource(await webpack(entry, source))).version).toBe(2);
     }
   } finally {
     if (previousValidate === undefined) delete process.env.VGPU_VALIDATE;
@@ -231,8 +232,8 @@ test("loaders resolve imports after top-level diagnostic directives", async () =
   const entry = join(dir, "main.wgsl");
   await writeFile(entry, "diagnostic(off, derivative_uniformity);\nimport { x } from './x.wgsl';\nfn main(){x();}");
   await writeFile(join(dir, "x.wgsl"), "export fn x(){}");
-  expect(defaultExport(await transformWgsl(await readFile(entry, "utf8"), entry))).toContain("_vgsl_");
-  expect(defaultExport(await webpack(entry, await readFile(entry, "utf8")))).toContain("_vgsl_");
+  expect(await defaultExport(await transformWgsl(await readFile(entry, "utf8"), entry))).toContain("_vgsl_");
+  expect(await defaultExport(await webpack(entry, await readFile(entry, "utf8")))).toContain("_vgsl_");
 });
 
 test("loaders compact resolved import graphs when minify is true", async () => {
@@ -240,11 +241,11 @@ test("loaders compact resolved import graphs when minify is true", async () => {
   const entry = join(dir, "main.wgsl");
   await writeFile(entry, "import { helper } from './helper.wgsl';\n// entry comment\nfn main(){ helper(); }\n");
   await writeFile(join(dir, "helper.wgsl"), "// helper comment\nexport fn helper(){ }\n");
-  const viteWgsl = defaultExport(await transformWgsl(await readFile(entry, "utf8"), entry, { minify: true }));
+  const viteWgsl = await defaultExport(await transformWgsl(await readFile(entry, "utf8"), entry, { minify: true }));
   expect(viteWgsl).toBe("fn a(){b();}fn b(){}");
   expect(viteWgsl).not.toContain("//");
   expect(viteWgsl).not.toContain("\n");
-  const webpackWgsl = defaultExport(await webpack(entry, await readFile(entry, "utf8"), { minify: true }));
+  const webpackWgsl = await defaultExport(await webpack(entry, await readFile(entry, "utf8"), { minify: true }));
   expect(webpackWgsl).toBe(viteWgsl);
 });
 
@@ -254,12 +255,12 @@ test("loaders compact resolved import graphs with object-form minify", async () 
   await writeFile(entry, "import { helper } from './helper.wgsl';\n// entry comment\nfn main(){ helper(); }\n");
   await writeFile(join(dir, "helper.wgsl"), "// helper comment\nexport fn helper(){ }\n");
   const minify = { whitespace: true, identifiers: "none" } as const;
-  const viteWgsl = defaultExport(await transformWgsl(await readFile(entry, "utf8"), entry, { minify }));
+  const viteWgsl = await defaultExport(await transformWgsl(await readFile(entry, "utf8"), entry, { minify }));
   expect(viteWgsl).toContain("fn _vgsl_");
   expect(viteWgsl).toContain("__main(){_vgsl_");
   expect(viteWgsl).not.toContain("//");
   expect(viteWgsl).not.toContain("\n");
-  const webpackWgsl = defaultExport(await webpack(entry, await readFile(entry, "utf8"), { minify }));
+  const webpackWgsl = await defaultExport(await webpack(entry, await readFile(entry, "utf8"), { minify }));
   expect(webpackWgsl).toBe(viteWgsl);
 });
 
@@ -275,13 +276,13 @@ async function pkgFixture(opts: { exports: unknown; files: Record<string, string
   return dir;
 }
 
-function defaultExport(codeOrResult: string | { readonly code: string }): string {
-  return shaderSource(codeOrResult).wgsl;
+async function defaultExport(codeOrResult: string | { readonly code: string }): Promise<string> {
+  return (await shaderSource(codeOrResult)).wgsl;
 }
 
-function shaderSource(codeOrResult: string | { readonly code: string }): ShaderSource {
+async function shaderSource(codeOrResult: string | { readonly code: string }): Promise<ShaderSource> {
   const code = typeof codeOrResult === "string" ? codeOrResult : codeOrResult.code;
-  return Function(code.replace(/^export default /, "return ").replace(/;$/, ";"))() as ShaderSource;
+  return evaluateShaderModule(code);
 }
 
 async function webpack(resourcePath: string, source: string, options: { readonly minify?: boolean | { readonly whitespace?: boolean; readonly identifiers?: "none" | "safe" } } = {}) {

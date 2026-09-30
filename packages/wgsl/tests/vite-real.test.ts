@@ -6,7 +6,7 @@ import { build, type InlineConfig } from "vite";
 import { describe, expect, it, vi } from "vitest";
 import type { ShaderSource } from "@vgpu/wgsl";
 
-describe("wgslVitePlugin (real vite 5)", () => {
+describe("wgslVitePlugin (real installed Vite)", () => {
   it("transforms .wgsl imports through wgslVitePlugin", async () => {
     const { root, entryJs } = await writeFixture();
     const config: InlineConfig = {
@@ -99,6 +99,30 @@ describe("wgslVitePlugin (real vite 5)", () => {
     expect(secondCode).toContain("0.9, 0.8, 0.7, 1.0");
     expectPreparedShaderSource(await importBuiltShaderSource(secondCode));
   });
+
+  it("bundles packed reflection through the packaged decoder and metadata anchor", async () => {
+    const { root, entryJs } = await writePackedFixture();
+    const result = await build({
+      root,
+      logLevel: "silent",
+      plugins: [wgslVitePlugin()],
+      build: {
+        write: false,
+        minify: false,
+        lib: { entry: entryJs, formats: ["es"], fileName: "out" },
+      },
+    });
+    const code = entryChunkCode(result);
+    const shader = await importBuiltShaderSource(code);
+    const modules = entryChunkModules(result);
+
+    expect(shader.reflection.bindings).toHaveLength(4);
+    expect(shader.reflection.hostShareableLayouts[0]?.members).toHaveLength(8);
+    expect(code).not.toContain("prepareShader");
+    expect(code).not.toContain("reflectSource");
+    expect(modules).toContain("metadata.wgsl?__vgpu_packed_v1=");
+    expectPreparedShaderSource(shader);
+  });
 });
 
 async function writeFixture(): Promise<{ root: string; entryJs: string; entryWgsl: string; helperWgsl: string }> {
@@ -114,12 +138,36 @@ export default shader;`);
   return { root, entryJs: join(root, "entry.js"), entryWgsl, helperWgsl };
 }
 
+async function writePackedFixture(): Promise<{ root: string; entryJs: string }> {
+  const root = await mkdtemp(join(tmpdir(), "vgsl-vite-packed-"));
+  const members = Array.from({ length: 8 }, (_, index) => {
+    const type = index % 3 === 0 ? "mat4x4f" : index % 3 === 1 ? "array<vec4f, 4>" : "vec4f";
+    return `m${index}: ${type},`;
+  }).join("\n");
+  const bindings = Array.from({ length: 4 }, (_, index) =>
+    `@group(0) @binding(${index}) var<uniform> params${index}: Params;`
+  ).join("\n");
+  await writeFile(join(root, "entry.wgsl"), `struct Params {\n${members}\n}
+${bindings}
+@compute @workgroup_size(1) fn main() { let value = params0.m0; }`);
+  await writeFile(join(root, "entry.js"), `import shader from "./entry.wgsl";\nexport default shader;`);
+  return { root, entryJs: join(root, "entry.js") };
+}
+
 function entryChunkCode(result: Awaited<ReturnType<typeof build>>): string {
   const outputs = Array.isArray(result) ? result : [result];
   const entryChunk = outputs.flatMap((output) => output.output)
     .find((chunk) => chunk.type === "chunk" && chunk.isEntry);
   if (!entryChunk || entryChunk.type !== "chunk") throw new Error("Vite build emitted no entry chunk");
   return entryChunk.code;
+}
+
+function entryChunkModules(result: Awaited<ReturnType<typeof build>>): string {
+  const outputs = Array.isArray(result) ? result : [result];
+  const entryChunk = outputs.flatMap((output) => output.output)
+    .find((chunk) => chunk.type === "chunk" && chunk.isEntry);
+  if (!entryChunk || entryChunk.type !== "chunk") throw new Error("Vite build emitted no entry chunk");
+  return Object.keys(entryChunk.modules).join("\n");
 }
 
 async function importBuiltShaderSource(code: string): Promise<ShaderSource> {

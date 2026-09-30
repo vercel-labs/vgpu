@@ -1,5 +1,7 @@
+import { dirname, isAbsolute, relative } from "node:path";
 import { assertNoErrorDiagnostics } from "../loader-shared/diagnostics.ts";
-import { shaderSourceModule } from "../loader-shared/emit.ts";
+import { shaderSourceModuleWithPackedImports, type PackedImportMode } from "../loader-shared/emit.ts";
+import { packedModuleAssets, packedQueryModule } from "../loader-shared/packed-query.ts";
 import { hasDirectFunctionExport } from "../loader-shared/source.ts";
 import { wgslError } from "../runtime/errors.ts";
 import { applyMinifyWgsl, type MinifyOption } from "../runtime/minify.ts";
@@ -14,14 +16,26 @@ export interface WgslWebpackLoaderOptions {
 }
 type LoaderContext = {
   resourcePath?: string;
+  resourceQuery?: string;
+  resourceFragment?: string;
   async?: () => (error: Error | null, result?: string) => void;
   addDependency?: (file: string) => void;
   getOptions?: () => unknown;
+  _compiler?: object;
+  _module?: { readonly __reserved?: unknown };
+  loaders?: readonly { readonly path?: string }[];
+  loaderIndex?: number;
 };
 
 export default function wgslWebpackLoader(this: LoaderContext, source: string): string | void {
+  const packedModule = packedQueryModule(
+    this.resourcePath ?? "<webpack>",
+    `${this.resourceQuery ?? ""}${this.resourceFragment ?? ""}`,
+  );
+  if (packedModule !== null) return packedModule;
   const options = readOptions(this);
   const path = this.resourcePath ?? "<webpack>";
+  const packedImports = packedImportMode(this, path);
   const hasImports = hasTopLevelImport(source);
   const exportedLeaf = !hasImports && hasDirectFunctionExport(source, path);
   if (!hasImports && !exportedLeaf) {
@@ -30,7 +44,7 @@ export default function wgslWebpackLoader(this: LoaderContext, source: string): 
     // importer resolves a graph through resolveShader().
     assertNoErrorDiagnostics(reservedIdentifierDiagnosticsForSource(path, source), path);
     const wgsl = applyMinifyWgsl(source, options.minify);
-    return shaderSourceModule(wgsl, path);
+    return shaderSourceModuleWithPackedImports(wgsl, path, [], packedImports);
   }
   const done = this.async?.();
   const run = async () => {
@@ -42,10 +56,42 @@ export default function wgslWebpackLoader(this: LoaderContext, source: string): 
       onDependency: (dep) => this.addDependency?.(dep),
     }, source));
     assertNoErrorDiagnostics(resolved.diagnostics, path);
-    return shaderSourceModule(resolved.wgsl, path, resolved.functionExports);
+    return shaderSourceModuleWithPackedImports(resolved.wgsl, path, resolved.functionExports, packedImports);
   };
   if (!done) throw wgslError("VGPU-WGSL-RUNTIME-IMPORT", "@vgpu/wgsl webpack loader requires asynchronous mode for imports or direct exports.");
   run().then((code) => done(null, code), (error: unknown) => done(error instanceof Error ? error : new Error(String(error))));
+}
+
+function packedImportMode(context: LoaderContext, resourcePath: string): PackedImportMode {
+  if (context._compiler !== undefined && context._compiler !== null) {
+    const index = context.loaderIndex;
+    const loader = typeof index === "number" ? context.loaders?.[index]?.path : undefined;
+    return loader && !/[!?#]/u.test(loader)
+      ? { kind: "webpack", webpackLoader: loader }
+      : { kind: "inline" };
+  }
+  if (isTurbopackContext(context._module?.__reserved)) {
+    const decoder = relativeAssetRequest(resourcePath, packedModuleAssets().decoder);
+    return decoder === null ? { kind: "plain" } : { kind: "inline", decoder };
+  }
+  return { kind: "inline" };
+}
+
+function isTurbopackContext(value: unknown): boolean {
+  return value === "TurbopackContext"
+    || (typeof value === "symbol" && value.description === "TurbopackContext")
+    || (typeof value === "function" && value.name === "TurbopackContext")
+    || (typeof value === "object" && value !== null && (
+      value.constructor?.name === "TurbopackContext"
+      || ("name" in value && value.name === "TurbopackContext")
+    ));
+}
+
+function relativeAssetRequest(importer: string, asset: string): string | null {
+  if (!isAbsolute(importer) || !isAbsolute(asset)) return null;
+  const request = relative(dirname(importer), asset).replace(/\\/gu, "/");
+  if (request === "" || isAbsolute(request) || /^[A-Za-z]:\//u.test(request)) return null;
+  return request.startsWith("./") || request.startsWith("../") ? request : `./${request}`;
 }
 
 function readOptions(context: LoaderContext): WgslWebpackLoaderOptions {
