@@ -92,6 +92,8 @@ Keep coverage diagnostics undilated: filled padding can turn a miss into an appa
 
 Before dropping normal Z to deliver two channels, verify that the intended samples lie in the positive-Z hemisphere. Negative Z may reveal opposite-side projection on a thin part, an unsuitable receiving surface, or a legitimate encoding requirement. Fix the projection/LOW where appropriate, or use an encoding that preserves the required hemisphere; reconstructing positive Z silently changes those normals.
 
+A double-sided material does not make opposite-side projection harmless. Opposite winding and opposite vertex normals can produce the same unperturbed surface normal while changing a derivative-based material normal layer. Compare front and back views with tiled and projected layers independently enabled through the actual shader before treating the two orientations as equivalent. A synthetic plane establishes shader behavior; it does not prove a correspondence or repair on the asset.
+
 ## 5. Bake occlusion and illumination deliberately
 
 Do not automatically use the isolated/exploded normal-bake scene for AO. Restore permanent neighbors and use the intended assembled occluder set and distance. For a transfer bake, record whether occlusion is evaluated on the HIGH surface and projected to LOW, or evaluated directly on LOW; those produce different detail. Avoid duplicate LOW/HIGH proxy surfaces unintentionally self-occluding.
