@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { afterEach, expect, test, vi } from "vitest";
 import { bundle, compute, effect, frame, getMockGPUDeviceInstrumentation, init, target, uniforms } from "../../src/mock.ts";
 import { createSharedUniforms } from "../../src/uniforms.ts";
@@ -9,8 +10,8 @@ afterEach(() => vi.restoreAllMocks());
 
 function setup(gpu: Awaited<ReturnType<typeof init>>, ownership: "owned" | "shared") {
   const shared = ownership === "shared" ? uniforms(gpu, { value: 1 }) : undefined;
-  const fx = effect(gpu, FRAGMENT, { set: { params: shared ?? { value: 1 } } });
-  const sim = compute(gpu, COMPUTE, { set: { params: shared ?? { value: 1 } } });
+  const fx = effect(gpu, prepareShader(FRAGMENT), { set: { params: shared ?? { value: 1 } } });
+  const sim = compute(gpu, prepareShader(COMPUTE), { set: { params: shared ?? { value: 1 } } });
   const set = (value: number) => {
     if (shared) shared.set({ value });
     else { fx.set({ params: { value } }); sim.set({ params: { value } }); }
@@ -105,7 +106,7 @@ test.each(["buffer", "gpu"] as const)("exposing shared .%s flushes pending value
     const writes = vi.spyOn(gpu.gpu.queue, "writeBuffer");
     const params = createSharedUniforms(gpu.device, { value: 1 });
     expect(params[key]).toBeUndefined();
-    effect(gpu, FRAGMENT, { set: { params } });
+    effect(gpu, prepareShader(FRAGMENT), { set: { params } });
     params.set({ value: 2 });
     expect(writes).not.toHaveBeenCalled();
     const handle = params[key];
@@ -125,7 +126,7 @@ test("shared storage stays eager and binding never restores CPU bytes over GPU s
   try {
     const writes = vi.spyOn(gpu.gpu.queue, "writeBuffer");
     const params = createSharedUniforms(gpu.device, { value: 1 });
-    const sim = compute(gpu, COMPUTE.replace("var<uniform>", "var<storage, read>"), { set: { params } });
+    const sim = compute(gpu, prepareShader(COMPUTE.replace("var<uniform>", "var<storage, read>")), { set: { params } });
     expect(writes).toHaveBeenCalledTimes(1);
     params.set({ value: 2 });
     expect(writes).toHaveBeenCalledTimes(2);

@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { expect, test, vi } from "vitest";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
 import { init, bundle, draw, effect, frame, target } from "../src/mock.ts";
@@ -43,8 +44,8 @@ test("occlusion() wraps single-draw, callback, and effect bodies with contiguous
   const gpu = await init();
   const vis = visibility(gpu);
   const scene = target(gpu, { size: [4, 4], depth: true });
-  const proxy = draw(gpu, { shader: SOLID, label: "proxy" });
-  const shader1 = effect(gpu, SOLID);
+  const proxy = draw(gpu, { shader: prepareShader(SOLID), label: "proxy" });
+  const shader1 = effect(gpu, prepareShader(SOLID));
   const qA = vis.query("a");
   const qB = vis.query("b");
   const qC = vis.query("c");
@@ -251,7 +252,7 @@ test("bundles executed inside an occlusion scope encode between begin and end (t
   const gpu = await init();
   const vis = visibility(gpu);
   const scene = target(gpu, { size: [4, 4], depth: true });
-  const drawable = draw(gpu, { shader: SOLID, label: "bundled" });
+  const drawable = draw(gpu, { shader: prepareShader(SOLID), label: "bundled" });
   const recorded = bundle(gpu, { target: scene, label: "proxyBundle" }, (b) => b.draw(drawable));
   const q = vis.query("statue");
   const ops: string[] = [];
@@ -271,7 +272,7 @@ test("a depthReadOnly pass supports visibility and occlusion scopes", async () =
   const gpu = await init();
   const vis = visibility(gpu);
   const scene = target(gpu, { size: [4, 4], depth: true });
-  const proxy = draw(gpu, { shader: SOLID, label: "roProxy", depth: { write: false } });
+  const proxy = draw(gpu, { shader: prepareShader(SOLID), label: "roProxy", depth: { write: false } });
   const q = vis.query("statue");
 
   frame(gpu, (currentFrame) => {
@@ -493,10 +494,10 @@ test("invalid query labels fail at query()", async () => {
 test("canonical usage: stable handles created once, proxies always drawn, real draws conditioned on q.hidden", async () => {
   const gpu = await init();
   const scene = target(gpu, { size: [8, 8], depth: true });
-  const world = effect(gpu, SOLID);
-  const statue = draw(gpu, { shader: SOLID, label: "statue" });
-  const statueProxy = draw(gpu, { shader: SOLID, label: "statueProxy" });
-  const towerProxy = draw(gpu, { shader: SOLID, label: "towerProxy" });
+  const world = effect(gpu, prepareShader(SOLID));
+  const statue = draw(gpu, { shader: prepareShader(SOLID), label: "statue" });
+  const statueProxy = draw(gpu, { shader: prepareShader(SOLID), label: "statueProxy" });
+  const towerProxy = draw(gpu, { shader: prepareShader(SOLID), label: "towerProxy" });
 
   const vis = visibility(gpu, { capacity: 8 });
   const qStatue = vis.query("statue");

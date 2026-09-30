@@ -18,14 +18,34 @@ import { NoiseConfig, noise } from "./noise.wgsl";
 @group(0) @binding(0) var<uniform> cfg: NoiseConfig;
 ```
 
-## `VGPU-SHADER-SOURCE-INVALID`
+## Unprepared shader input: `VGPU-SHADER-SOURCE-UNPREPARED`
 
-main API (vgpu) shader arguments are either a WGSL string or a loader `ShaderSource { version: 1, wgsl, functionExports? }`. If importing `.wgsl` returns a URL/object without `version` and `wgsl`, configure `@vgpu/wgsl/loader-vite`, `@vgpu/wgsl/loader-webpack`, or pass a raw WGSL string.
+`draw`, `effect`, and `compute` take only a prepared `ShaderSource` (`version: 2`), which carries the reflection they read instead of parsing WGSL. They throw this code synchronously for a raw WGSL string or a legacy `{ version: 1, wgsl, functionExports? }` artifact. A `.wgsl` import that arrives as a string — no loader configured, or a raw/URL import — lands here too.
 
-```text
-import shader from "./shader.wgsl";
-const draw = draw(gpu, { shader });
+Import static shaders through `@vgpu/wgsl/loader-vite` or `@vgpu/wgsl/loader-webpack` (see [Next.js and other bundlers](/guides/nextjs)); prepare runtime WGSL once per source change with `prepareShader()`:
+
+```ts
+import { init, effect } from "vgpu";
+import { prepareShader } from "@vgpu/wgsl/prepare";
+
+const gpu = await init();
+const tintSource = `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.9, 0.3, 0.2, 1.0); }`;
+
+// Before: effect(gpu, tintSource) threw VGPU-SHADER-SOURCE-UNPREPARED
+const tint = effect(gpu, prepareShader(tintSource)); // prepare once, outside the frame loop
 ```
+
+Upgrade a stored v1 asset with `prepareShader(legacyAsset, path)`; the object form keeps its `functionExports`.
+
+## Artifact version mismatch: `VGPU-SHADER-SOURCE-VERSION`
+
+The artifact's `version` is an integer vgpu does not support — usually a loader, prebuilt asset, or package from a different `@vgpu/wgsl` release than the `vgpu` runtime. The message names the received version, the supported version (`2`), and — when the artifact has one — its `producer`. Align the `@vgpu/wgsl` and `vgpu` versions, then rebuild the loader output and regenerate prebuilt assets.
+
+## Malformed artifact: `VGPU-SHADER-SOURCE-INVALID`
+
+The shader argument is not a string but is not a valid prepared artifact either: it is not an object, `version` is missing or not an integer, a required field (`wgsl`, `reflection`, `sourceChecksum`, `producer`) is missing, accessor-backed, or malformed, the reflection metadata is inconsistent, or `sourceChecksum` does not match `wgsl`. The structured detail gives the field `path` and the `reason`. `prepareShader()` throws the same code for input it cannot prepare.
+
+Regenerate the artifact with a supported producer — the `@vgpu/wgsl` loaders or `prepareShader()` — and do not hand-write or edit `reflection`, `sourceChecksum`, or `wgsl` after preparation. An import that returns an object without `version` and `wgsl` means the bundler is not running a vgpu loader for `.wgsl`.
 
 ## Stage storage limits: `VGPU-LIMIT-STORAGE-VERTEX` / `VGPU-LIMIT-STORAGE-FRAGMENT`
 
@@ -40,7 +60,7 @@ const draw = draw(gpu, { shader });
 Every reflected binding must be set by name or covered by a claimed group. Do not rely on globals or implicit buffers.
 
 ```text
-const effect = effect(gpu, WGSL);
+const effect = effect(gpu, postShader); // a prepared .wgsl import
 effect.set({ params: { time: clock(gpu).time }, tex: target.color, samp: sampler(gpu) });
 ```
 

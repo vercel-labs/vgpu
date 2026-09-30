@@ -48,16 +48,17 @@ interface Bundle {
 
 ```ts
 import { init, bundle, draw, frame, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const colorTarget = target(gpu, { size: [64, 64] });
-const drawable = draw(gpu, { shader: `
+const drawable = draw(gpu, { shader: prepareShader(`
   @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
     var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
     return vec4f(p[vi], 0, 1);
   }
   @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1, 1, 0, 1); }
-` });
+`) });
 
 const statics = bundle(gpu, { target: colorTarget, label: "static" }, (recorded) => {
   recorded.draw(drawable);
@@ -70,10 +71,11 @@ frame(gpu, (currentFrame) => {
 
 ```ts
 import { init, bundle, effect, frame, surface } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const canvasSurface = surface(gpu, mockCanvas());
-const shader = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const shader = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`));
 let statics = bundle(gpu, { target: canvasSurface, label: "surfaceStatics" }, (recorded) => recorded.draw(shader));
 
 canvasSurface.onResize(() => {
@@ -97,10 +99,11 @@ function mockCanvas(): HTMLCanvasElement {
 
 ```ts
 import { init, bundle, clock, effect, frame, pingPong } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const ping = pingPong(gpu, 32, 32);
-const shader = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const shader = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`));
 const even = bundle(gpu, { target: ping.write }, (b) => b.draw(shader));
 ping.swap();
 const odd = bundle(gpu, { target: ping.write }, (b) => b.draw(shader));

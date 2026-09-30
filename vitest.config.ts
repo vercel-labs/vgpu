@@ -31,6 +31,7 @@ export default defineConfig({
       { find: "vgpu/core", replacement: resolve("packages/vgpu-api/src/core.ts") },
       { find: "vgpu/three", replacement: resolve("packages/vgpu-api/src/three.ts") },
       { find: "vgpu", replacement: resolve("packages/vgpu-api/src/index.ts") },
+      { find: "@vgpu/wgsl/prepare", replacement: resolve("packages/wgsl/src/prepare.ts") },
       { find: "@vgpu/wgsl/loader-webpack", replacement: resolve("packages/wgsl/src/loader-webpack/index.ts") },
       { find: "@vgpu/wgsl/loader-vite", replacement: resolve("packages/wgsl/src/loader-vite/index.ts") },
       { find: "@vgpu/wgsl/runtime", replacement: resolve("packages/wgsl/src/runtime/resolve-shader.ts") },

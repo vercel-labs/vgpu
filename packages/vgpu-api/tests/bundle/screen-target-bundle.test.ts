@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { expect, test } from "vitest";
 import { init as initBrowser, bundle, effect, frame, surface } from "../../src/index.ts";
 import { createMockAdapter } from "../../src/mock.ts";
@@ -11,7 +12,7 @@ const SOLID = `
 test("surface bundles do not stale just because getCurrentTexture returns a fresh wrapper", async () => {
   const gpu = await initBrowser({ adapter: createMockAdapter() });
   const canvasSurface = surface(gpu, mockCanvas(), { size: [4, 4] });
-  const draw = effect(gpu, SOLID, { label: "surfaceStatic" });
+  const draw = effect(gpu, prepareShader(SOLID), { label: "surfaceStatic" });
 
   const recorded = bundle(gpu, { target: { colors: [canvasSurface.format] }, label: "surfaceBundle" }, (b) => b.draw(draw));
 

@@ -323,14 +323,19 @@ const EXPERIENCE_EXCLUSIONS = {
   ],
 };
 
+/** Modules actually retained in an esbuild output, with the byte evidence used for the decision. */
+export function retainedMetafileModules(output) {
+  return Object.entries(output.inputs ?? {})
+    .filter(([, details]) => details.bytesInOutput > 0)
+    .map(([input, details]) => ({ input: input.replaceAll("\\", "/"), bytesInOutput: details.bytesInOutput }));
+}
+
 /**
  * Inputs actually retained in an esbuild output. `metafile.inputs` alone lists every scanned
  * module, including dead branches of a barrel, so it cannot support tree-shaking assertions.
  */
 export function retainedMetafileInputs(output) {
-  return Object.entries(output.inputs ?? {})
-    .filter(([, details]) => details.bytesInOutput > 0)
-    .map(([input]) => input);
+  return retainedMetafileModules(output).map(({ input }) => input);
 }
 
 /** Returns retained forbidden modules as `{ category, input }`, suitable for CI diagnostics. */
@@ -340,4 +345,24 @@ export function prohibitedExperienceInputs(experience, inputs) {
     const normalized = input.replaceAll("\\", "/");
     return exclusions.filter(([, pattern]) => pattern.test(normalized)).map(([category]) => ({ category, input: normalized }));
   });
+}
+
+const PREPARED_CONSUMER_EXCLUSIONS = [
+  ["preparation", /(?:^|\/)packages\/wgsl\/(?:src|dist)\/(?:prepare(?:\.[^/]+)?|preparation\/)/],
+  ["scanner", /(?:^|\/)packages\/wgsl\/(?:src|dist)\/runtime\/scanner(?:\.[^/]+)?$/],
+  ["parser", /(?:^|\/)packages\/wgsl\/(?:src|dist)\/runtime\/parser(?:\.[^/]+)?$/],
+  ["resolver", /(?:^|\/)packages\/wgsl\/(?:src|dist)\/runtime\/(?:resolve-shader|module-graph|package-resolution|shader-graph-[^/]+)(?:\.[^/]+)?$/],
+  ["reflection", /(?:^|\/)packages\/wgsl\/(?:src|dist)\/runtime\/reflect(?:-[^/]+)?(?:\.[^/]+)?$/],
+  ["node", /(?:^|\/)(?:packages\/adapter-node\/|packages\/vgpu-api\/(?:src|dist)\/node(?:\.[^/]+)?$|node_modules\/webgpu\/)/],
+  ["cli", /(?:^|\/)(?:packages\/vgpu\/|packages\/vgpu-api\/(?:src|dist)\/cli\/)/],
+  ["three", /(?:^|\/)(?:packages\/vgpu-api\/(?:src|dist)\/three(?:\/|\.[^/]+)?|node_modules\/three\/)/],
+];
+
+/** Retained prepared-consumer dependencies forbidden by the B1 browser boundary. */
+export function prohibitedPreparedConsumerModules(modules) {
+  return modules.flatMap(({ input, bytesInOutput }) =>
+    PREPARED_CONSUMER_EXCLUSIONS
+      .filter(([, pattern]) => pattern.test(input.replaceAll("\\", "/")))
+      .map(([category]) => ({ category, input: input.replaceAll("\\", "/"), bytesInOutput })),
+  );
 }

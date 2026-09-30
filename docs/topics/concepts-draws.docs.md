@@ -23,6 +23,28 @@ A [`Draw`](/reference/vgpu/draw#draw) renders geometry with custom vertex buffer
 
 `geometry(gpu, geometry)` turns geometry from `vgpu/scene` into vertex and index buffers. Your vertex shader declares the attributes it consumes — `@location(0) position`, `@location(1) normal` — and the geometry feeds them.
 
+```wgsl
+// cube.wgsl
+struct Camera { viewProjection: mat4x4f }
+struct Model { model: mat4x4f }
+@group(0) @binding(0) var<uniform> camera: Camera;
+@group(0) @binding(1) var<uniform> model: Model;
+
+struct VertexOut { @builtin(position) position: vec4f, @location(0) normal: vec3f }
+
+@vertex fn vs_main(@location(0) position: vec3f, @location(1) normal: vec3f) -> VertexOut {
+  var out: VertexOut;
+  out.position = camera.viewProjection * model.model * vec4f(position, 1.0);
+  out.normal = normal;
+  return out;
+}
+
+@fragment fn fs_main(@location(0) normal: vec3f) -> @location(0) vec4f {
+  let light = max(dot(normalize(normal), normalize(vec3f(1.0, 1.0, 1.0))), 0.15);
+  return vec4f(vec3f(0.2, 0.5, 1.0) * light, 1.0);
+}
+```
+
 ```ts
 import { init, draw, geometry, target } from "vgpu";
 
@@ -30,32 +52,12 @@ const gpu = await init();
 
 // ---cut---
 import { box, orbit, perspectiveCamera } from "vgpu/scene";
-
-const shader = `
-  struct Camera { viewProjection: mat4x4f }
-  struct Model { model: mat4x4f }
-  @group(0) @binding(0) var<uniform> camera: Camera;
-  @group(0) @binding(1) var<uniform> model: Model;
-
-  struct VertexOut { @builtin(position) position: vec4f, @location(0) normal: vec3f }
-
-  @vertex fn vs_main(@location(0) position: vec3f, @location(1) normal: vec3f) -> VertexOut {
-    var out: VertexOut;
-    out.position = camera.viewProjection * model.model * vec4f(position, 1.0);
-    out.normal = normal;
-    return out;
-  }
-
-  @fragment fn fs_main(@location(0) normal: vec3f) -> @location(0) vec4f {
-    let light = max(dot(normalize(normal), normalize(vec3f(1.0, 1.0, 1.0))), 0.15);
-    return vec4f(vec3f(0.2, 0.5, 1.0) * light, 1.0);
-  }
-`;
+import cubeShader from "./cube.wgsl";
 
 const colorTarget = target(gpu, { size: [1280, 720], depth: true });
 const camera = perspectiveCamera({ fov: 45, aspect: 16 / 9, position: [2, 2, 3], target: [0, 0, 0] });
 
-const cube = draw(gpu, { shader, geometry: geometry(gpu, box({ size: 1 })) });
+const cube = draw(gpu, { shader: cubeShader, geometry: geometry(gpu, box({ size: 1 })) });
 cube.set({
   camera: { viewProjection: camera.viewProjection },
   model: { model: orbit(0) },
@@ -64,7 +66,7 @@ cube.set({
 cube.draw(colorTarget);
 ```
 
-Everything works like the rest of vgpu: bindings are reflected from the WGSL, `set()` writes uniforms by name, and the draw renders one-shot into any target. Pipelines are compiled per target format and cached, so the same `Draw` can render into different targets. See [Compilation](/concepts/compilation) to pre-warm each signature before the first draw.
+Everything works like the rest of vgpu: bindings come from the reflection the `@vgpu/wgsl` loader prepared for `cube.wgsl` at build time, `set()` writes uniforms by name, and the draw renders one-shot into any target. Pipelines are compiled per target format and cached, so the same `Draw` can render into different targets. See [Compilation](/concepts/compilation) to pre-warm each signature before the first draw.
 
 Three details specific to geometry:
 
@@ -76,6 +78,31 @@ Three details specific to geometry:
 
 Leave `geometry` out and the draw runs with no buffers at all: `vertices` defaults to `3`, so every instance is one triangle whose corners you position from `@builtin(vertex_index)`. Combined with `instances`, that spawns a particle system from nothing:
 
+```wgsl
+// smoke.wgsl
+struct Params { time: f32 }
+@group(0) @binding(0) var<uniform> params: Params;
+
+struct Out { @builtin(position) position: vec4f, @location(0) fade: f32 }
+
+@vertex fn vs_main(@builtin(vertex_index) v: u32, @builtin(instance_index) i: u32) -> Out {
+  var corners = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(1.0, -1.0), vec2f(0.0, 1.5));
+  let seed = fract(sin(f32(i) * 12.9898) * 43758.5453);
+  let life = fract(seed + params.time * 0.05);          // 0 -> 1, then respawn
+  let center = vec2f(seed * 2.0 - 1.0, life * 2.2 - 1.1); // drifts upward
+  let size = 0.01 + life * 0.04;                          // grows as it rises
+
+  var out: Out;
+  out.position = vec4f(center + corners[v] * size, 0.0, 1.0);
+  out.fade = 1.0 - life;
+  return out;
+}
+
+@fragment fn fs_main(@location(0) fade: f32) -> @location(0) vec4f {
+  return vec4f(vec3f(0.35) * fade, 1.0); // dims into the dark background
+}
+```
+
 ```ts
 import { init, draw, surface } from "vgpu";
 
@@ -84,29 +111,7 @@ const canvas = document.querySelector("canvas")!;
 const canvasSurface = surface(gpu, canvas);
 
 // ---cut---
-const smokeShader = `
-  struct Params { time: f32 }
-  @group(0) @binding(0) var<uniform> params: Params;
-
-  struct Out { @builtin(position) position: vec4f, @location(0) fade: f32 }
-
-  @vertex fn vs_main(@builtin(vertex_index) v: u32, @builtin(instance_index) i: u32) -> Out {
-    var corners = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(1.0, -1.0), vec2f(0.0, 1.5));
-    let seed = fract(sin(f32(i) * 12.9898) * 43758.5453);
-    let life = fract(seed + params.time * 0.05);          // 0 -> 1, then respawn
-    let center = vec2f(seed * 2.0 - 1.0, life * 2.2 - 1.1); // drifts upward
-    let size = 0.01 + life * 0.04;                          // grows as it rises
-
-    var out: Out;
-    out.position = vec4f(center + corners[v] * size, 0.0, 1.0);
-    out.fade = 1.0 - life;
-    return out;
-  }
-
-  @fragment fn fs_main(@location(0) fade: f32) -> @location(0) vec4f {
-    return vec4f(vec3f(0.35) * fade, 1.0); // dims into the dark background
-  }
-`;
+import smokeShader from "./smoke.wgsl";
 
 const smoke = draw(gpu, { shader: smokeShader, instances: 10_000 });
 

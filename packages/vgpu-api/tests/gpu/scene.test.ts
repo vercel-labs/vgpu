@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -38,7 +39,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu/scene Docker GPU acc
 
 async function renderCube(gpu: Awaited<ReturnType<typeof init>>, shader: string, geo: ReturnType<Awaited<ReturnType<typeof init>>["geometry"]>, direction: readonly [number, number, number]): Promise<Uint8Array> {
   const colorTarget = target(gpu, { size: [48, 48], format: "rgba8unorm", depth: true, label: "litCube" });
-  const cube = draw(gpu, { shader, geometry: geo, targets: [colorTarget] });
+  const cube = draw(gpu, { shader: prepareShader(shader), geometry: geo, targets: [colorTarget] });
   const cam = perspectiveCamera({ fov: 45, aspect: 1, position: [2, 2, 3], target: [0, 0, 0] });
 
   const camera = bindingName(cube, 0);

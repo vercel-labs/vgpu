@@ -88,6 +88,7 @@ try {
         "@vgpu/render/utils": ["packages/render/src/utils/index.ts"],
         "@vgpu/render/perf": ["packages/render/src/perf/index.ts"],
         "@vgpu/render/edit": ["packages/render/src/edit/index.ts"],
+        "@vgpu/wgsl/prepare": ["packages/wgsl/src/prepare.ts"],
         "@vgpu/wgsl": ["packages/wgsl/src/index.ts"],
         "@vgpu/wgsl/runtime": ["packages/wgsl/src/runtime/resolve-shader.ts"],
         "@vgpu/wgsl/reflect-source": ["packages/wgsl/src/runtime/reflect-source.ts"],

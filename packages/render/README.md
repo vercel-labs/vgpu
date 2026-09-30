@@ -15,10 +15,11 @@ New applications should use the public `vgpu` package. `@vgpu/render` remains as
 
 ```ts
 import { init, draw, frameLoop, surface } from "vgpu";
+import shader from "./scene.wgsl";
 
 const gpu = await init();
 const canvasSurface = surface(gpu, canvas);
-const drawable = draw(gpu, { shader: WGSL, targets: [canvasSurface] });
+const drawable = draw(gpu, { shader, targets: [canvasSurface] });
 frameLoop(gpu, (f) => f.pass({ target: canvasSurface }, (p) => p.draw(drawable)));
 ```
 

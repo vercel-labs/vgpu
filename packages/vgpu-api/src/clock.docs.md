@@ -44,18 +44,19 @@ declare function clock(gpu: Gpu): Clock;
 
 ```ts
 import { init, clock, effect, frameLoop, surface } from "vgpu";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 declare const canvas: HTMLCanvasElement;
 
 const gpu = await init();
 const canvasSurface = surface(gpu, canvas);
-const wave = effect(gpu, `
+const wave = effect(gpu, prepareShader(`
   struct Params { time: f32 }
   @group(0) @binding(0) var<uniform> params: Params;
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     return vec4f(uv, sin(params.time) * 0.5 + 0.5, 1.0);
   }
-`, { set: { params: { time: 0 } } });
+`), { set: { params: { time: 0 } } });
 
 // Automatic: every frame advances the clock with the wall-clock delta.
 const time = clock(gpu);
@@ -67,10 +68,11 @@ frameLoop(gpu, (frame) => {
 
 ```ts
 import { init, clock, effect, frame, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const scene = target(gpu, { size: [64, 64] });
-const shader = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const shader = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`));
 
 // Manual: a fixed timestep makes the render deterministic, run after run.
 const time = clock(gpu);

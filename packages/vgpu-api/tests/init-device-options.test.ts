@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { afterEach, expect, test, vi } from "vitest";
 import { createMockGPUDevice, Device, type CreateDeviceOptions, type VGPUAdapter } from "@vgpu/core";
 import { init as initBrowser, draw, effect, frame } from "../src/index.ts";
@@ -87,13 +88,13 @@ test("init builds only the core gpu: no caches, frame runner, surfaces or query 
   expect(kernel.peekService(frameStateToken)).toBeUndefined();
   expect(gpu.disposed).toBe(false);
 
-  const shader1 = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+  const shader1 = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`));
   const render = kernel.peekService(renderServiceToken);
   expect(render).toBeDefined();
   expect(kernel.peekService(frameStateToken)).toBeUndefined();
 
   // Render family shares one service instance, so draw/effect share pipeline and bind caches.
-  draw(gpu, { shader: `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }` });
+  draw(gpu, { shader: prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`) });
   expect(kernel.peekService(renderServiceToken)).toBe(render);
 
   // Frame state appears with the first frame: the runner itself is the kernel service that

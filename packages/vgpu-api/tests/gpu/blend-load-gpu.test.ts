@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { expect, test } from "vitest";
 import { init, effect, frame, target } from "../../src/node.ts";
 
@@ -20,7 +21,7 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("additive blend accumulates re
   const gpu = await init();
   try {
     const colorTarget = target(gpu, { size: [2, 2], format: "rgba8unorm" });
-    const additive = effect(gpu, FULLSCREEN_RED, { label: "additive", blend: "additive" });
+    const additive = effect(gpu, prepareShader(FULLSCREEN_RED), { label: "additive", blend: "additive" });
 
     frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, clear: [0, 0, 0, 1] }, (pass) => {
       pass.draw(additive);
@@ -41,7 +42,7 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("writeMask can preserve alpha 
   const gpu = await init();
   try {
     const colorTarget = target(gpu, { size: [2, 2], format: "rgba8unorm" });
-    const rgbOnly = effect(gpu, FULLSCREEN_ALPHA, { label: "rgb-only", writeMask: ["r", "g", "b"] });
+    const rgbOnly = effect(gpu, prepareShader(FULLSCREEN_ALPHA), { label: "rgb-only", writeMask: ["r", "g", "b"] });
 
     frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, clear: [0, 0, 0, 0.5] }, (pass) => pass.draw(rgbOnly)));
 
@@ -60,7 +61,7 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("MSAA target resolves additive
   const gpu = await init();
   try {
     const colorTarget = target(gpu, { size: [2, 2], format: "rgba8unorm", msaa: true });
-    const additive = effect(gpu, FULLSCREEN_RED, { label: "msaa-additive", blend: "additive" });
+    const additive = effect(gpu, prepareShader(FULLSCREEN_RED), { label: "msaa-additive", blend: "additive" });
 
     frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, clear: [0, 0, 0, 1] }, (pass) => {
       pass.draw(additive);
@@ -81,7 +82,7 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("clear false preserves offscre
   const gpu = await init();
   try {
     const colorTarget = target(gpu, { size: [4, 2], format: "rgba8unorm" });
-    const halfGreen = effect(gpu, HALF_GREEN, { label: "half-green" });
+    const halfGreen = effect(gpu, prepareShader(HALF_GREEN), { label: "half-green" });
 
     frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, clear: [1, 0, 0, 1] }, () => undefined));
     frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, clear: false }, (pass) => pass.draw(halfGreen)));

@@ -1,3 +1,8 @@
+import type {
+  EntryPointInfo,
+  Reflection,
+} from "./runtime/reflect-source.ts";
+
 /** Authored identity for one direct `export fn` that survives shader resolution. */
 export interface ShaderFunctionExport {
   readonly name: string;
@@ -5,10 +10,31 @@ export interface ShaderFunctionExport {
   readonly parameterNames: readonly string[];
 }
 
-/** V1 loader artifact. Extra metadata is additive; bindings remain reserved for a future version bump. */
+export type WorkgroupAxis = number | "unresolved";
+
+export type ShaderEntryPoint = Omit<
+  EntryPointInfo,
+  "workgroupSize" | "bindings" | "samplingPairs"
+> & {
+  readonly workgroupSize?: readonly [
+    WorkgroupAxis,
+    WorkgroupAxis,
+    WorkgroupAxis,
+  ];
+  readonly bindings: NonNullable<EntryPointInfo["bindings"]>;
+  readonly samplingPairs: NonNullable<EntryPointInfo["samplingPairs"]>;
+};
+
+export type ShaderReflection = Omit<Reflection, "entryPoints"> & {
+  readonly entryPoints: readonly ShaderEntryPoint[];
+};
+
 export interface ShaderSource {
-  readonly version: 1;
+  readonly version: 2;
   readonly wgsl: string;
+  readonly reflection: ShaderReflection;
+  readonly sourceChecksum: string;
+  readonly producer: string;
   readonly functionExports?: readonly ShaderFunctionExport[];
 }
 

@@ -30,7 +30,7 @@ export default function wgslWebpackLoader(this: LoaderContext, source: string): 
     // importer resolves a graph through resolveShader().
     assertNoErrorDiagnostics(reservedIdentifierDiagnosticsForSource(path, source), path);
     const wgsl = applyMinifyWgsl(source, options.minify);
-    return shaderSourceModule(wgsl);
+    return shaderSourceModule(wgsl, path);
   }
   const done = this.async?.();
   const run = async () => {
@@ -42,7 +42,7 @@ export default function wgslWebpackLoader(this: LoaderContext, source: string): 
       onDependency: (dep) => this.addDependency?.(dep),
     }, source));
     assertNoErrorDiagnostics(resolved.diagnostics, path);
-    return shaderSourceModule(resolved.wgsl, resolved.functionExports);
+    return shaderSourceModule(resolved.wgsl, path, resolved.functionExports);
   };
   if (!done) throw wgslError("VGPU-WGSL-RUNTIME-IMPORT", "@vgpu/wgsl webpack loader requires asynchronous mode for imports or direct exports.");
   run().then((code) => done(null, code), (error: unknown) => done(error instanceof Error ? error : new Error(String(error))));

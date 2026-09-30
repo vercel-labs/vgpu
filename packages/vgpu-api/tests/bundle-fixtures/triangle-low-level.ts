@@ -3,6 +3,7 @@
  * `geometry(gpu, descriptor)` does not retain the scene recipe factory or its primitive meshes.
  * It uses the canonical gpu-first names of the 0.2.0 API.
  */
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { draw, frame, geometry, init, surface } from "vgpu";
 
 const TRIANGLE = `
@@ -10,6 +11,10 @@ const TRIANGLE = `
   return vec4f(position, 0.0, 1.0);
 }
 @fragment fn fragment() -> @location(0) vec4f { return vec4f(1.0); }`;
+const TRIANGLE_SHADER = prepareShader(
+  TRIANGLE,
+  "bundle-fixture-triangle-low-level.wgsl"
+);
 
 export async function renderTriangle(canvas: HTMLCanvasElement) {
   const gpu = await init();
@@ -22,7 +27,7 @@ export async function renderTriangle(canvas: HTMLCanvasElement) {
       attributes: { position: "float32x2" },
     }],
   });
-  const triangle = draw(gpu, { geometry: mesh, shader: TRIANGLE });
+  const triangle = draw(gpu, { geometry: mesh, shader: TRIANGLE_SHADER });
   frame(gpu, (next) => next.pass({ target }, (pass) => pass.draw(triangle)));
   return gpu;
 }

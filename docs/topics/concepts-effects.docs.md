@@ -16,17 +16,37 @@ order: 40
 
 # Effects
 
-An [`Effect`](/reference/vgpu/effect#effect) is a full-screen fragment shader created with `effect(gpu, source)`. Its pipeline compiles lazily on first use; call `await effect.compile(target)` during load if you want to pre-warm it. See [Compilation](/concepts/compilation) for the full pre-warm flow. Every draw fills the whole target — you only write the fragment.
+An [`Effect`](/reference/vgpu/effect#effect) is a full-screen fragment shader created with `effect(gpu, shader)`. Its pipeline compiles lazily on first use; call `await effect.compile(target)` during load if you want to pre-warm it. See [Compilation](/concepts/compilation) for the full pre-warm flow. Every draw fills the whole target — you only write the fragment.
+
+`shader` is a prepared [`ShaderSource`](/reference/wgsl/resolved-shader) — WGSL plus the reflection vgpu reads bindings from. Keep static shaders in `.wgsl` files and import them through the `@vgpu/wgsl` loader ([Next.js and other bundlers](/guides/nextjs)), which prepares them at build time so the browser never loads the WGSL parser. A raw WGSL string throws `VGPU-SHADER-SOURCE-UNPREPARED`; wrap WGSL you build at runtime in `prepareShader()` from `@vgpu/wgsl/prepare` once per source change.
 
 Effects chain through targets: render one effect into an offscreen [`Target`](/reference/vgpu/target#target), then bind that target as a texture input of the next effect with `set()`.
 
-The `uv` varying that `effect(gpu)` injects is top-origin: `(0, 0)` is the
+The `uv` varying comes from the fullscreen vertex stage `effect(gpu)` supplies when your shader declares no `@vertex` entry. It is top-origin: `(0, 0)` is the
 top-left corner and `v` grows downward — the same convention as WebGPU texture
 coordinates, `@builtin(position)`, and `target.color.read({ mipLevel: 0, region: "all" })`. Sampling any texture
 with this `uv` needs no flip: a pass that samples `src` at `uv` reproduces the
 image exactly. If you are porting a WebGL or Shadertoy shader that assumes
 `v` grows upward, invert once at the boundary (`1.0 - uv.y`) and keep
 everything else flip-free.
+
+```wgsl
+// scene.wgsl
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return vec4f(uv, 1.0, 1.0);
+}
+```
+
+```wgsl
+// post.wgsl — reads the scene texture and inverts its colors
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  let base = textureSampleLevel(src, samp, uv, 0.0);
+  return vec4f(1.0 - base.rgb, 1.0);
+}
+```
 
 ```ts
 import { init, effect, sampler, surface, target } from "vgpu";
@@ -36,27 +56,13 @@ const canvas = document.querySelector("canvas")!;
 const canvasSurface = surface(gpu, canvas);
 
 // ---cut---
-const sceneSource = `
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(uv, 1.0, 1.0);
-  }
-`;
-
-// Post-processing: reads the scene texture and inverts its colors.
-const postSource = `
-  @group(0) @binding(0) var src: texture_2d<f32>;
-  @group(0) @binding(1) var samp: sampler;
-
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    let base = textureSampleLevel(src, samp, uv, 0.0);
-    return vec4f(1.0 - base.rgb, 1.0);
-  }
-`;
+import sceneShader from "./scene.wgsl";
+import postShader from "./post.wgsl";
 
 const scene = target(gpu, { size: [1280, 720] });
 
-const sceneEffect = effect(gpu, sceneSource);
-const post = effect(gpu, postSource);
+const sceneEffect = effect(gpu, sceneShader);
+const post = effect(gpu, postShader);
 post.set({
   src: scene,
   samp: sampler(gpu, { minFilter: 'linear', magFilter: 'linear' }),
@@ -89,6 +95,17 @@ final values. When two passes need different values (a horizontal and a
 vertical blur, say), create two effects; they are cheap, and each owns its
 uniforms.
 
+```wgsl
+// pulse.wgsl
+struct Params { time: f32, width: f32, height: f32 }
+@group(0) @binding(0) var<uniform> params: Params;
+
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  let glow = sin(params.time) * 0.5 + 0.5;
+  return vec4f(uv.x, uv.y, glow, 1.0);
+}
+```
+
 ```ts
 import { clock, init, effect, surface } from "vgpu";
 
@@ -97,17 +114,9 @@ const canvas = document.querySelector("canvas")!;
 const canvasSurface = surface(gpu, canvas);
 
 // ---cut---
-const pulseSource = `
-  struct Params { time: f32, width: f32, height: f32 }
-  @group(0) @binding(0) var<uniform> params: Params;
+import pulseShader from "./pulse.wgsl";
 
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    let glow = sin(params.time) * 0.5 + 0.5;
-    return vec4f(uv.x, uv.y, glow, 1.0);
-  }
-`;
-
-const pulse = effect(gpu, pulseSource, {
+const pulse = effect(gpu, pulseShader, {
   // initial uniform defaults
   set: {
     params: {
@@ -132,18 +141,12 @@ You should also only update uniforms when they need to change, for example, reac
 
 ```ts
 import { clock, init, effect, surface } from "vgpu";
+import pulseShader from "./pulse.wgsl";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
 const canvasSurface = surface(gpu, canvas);
-const pulse = effect(gpu, `
-  struct Params { time: f32, width: f32, height: f32 }
-  @group(0) @binding(0) var<uniform> params: Params;
-
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(uv, sin(params.time) * 0.5 + 0.5, 1.0);
-  }
-`, { set: { params: { time: 0, width: canvasSurface.size[0], height: canvasSurface.size[1] } } });
+const pulse = effect(gpu, pulseShader, { set: { params: { time: 0, width: canvasSurface.size[0], height: canvasSurface.size[1] } } });
 
 // ---cut---
 const unsubscribe = canvasSurface.onResize(({ width, height }) => {

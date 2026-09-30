@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import webpack, { type Configuration, type Stats } from "webpack";
 import { describe, expect, it } from "vitest";
+import type { ShaderSource } from "@vgpu/wgsl";
 
 const require = createRequire(import.meta.url);
 
@@ -23,6 +24,9 @@ describe("wgslWebpackLoader (real webpack 5)", () => {
 
     const bundle = await readFile(join(outDir, bundleName), "utf8");
     expectBundleContainsResolvedWgsl(bundle);
+    expectPreparedShaderSource(requireShaderSource(join(outDir, bundleName)));
+    expect(bundle).not.toContain("prepareShader");
+    expect(bundle).not.toContain("reflectSource");
   });
 
   it("resolves the loader via bare string 'package-name/loader-path'", async () => {
@@ -125,13 +129,23 @@ function resolveWebpackLoader(): string {
   return require.resolve("@vgpu/wgsl/loader-webpack");
 }
 
-function requireShaderSource(path: string): { readonly wgsl: string } {
+function requireShaderSource(path: string): ShaderSource {
   const loaded = require(path) as { readonly default?: unknown };
   const value = loaded.default ?? loaded;
   if (!value || typeof value !== "object" || !("wgsl" in value) || typeof value.wgsl !== "string") {
     throw new Error("webpack bundle did not export a ShaderSource");
   }
-  return value as { readonly wgsl: string };
+  return value as ShaderSource;
+}
+
+function expectPreparedShaderSource(shader: ShaderSource): void {
+  expect(shader).toMatchObject({
+    version: 2,
+    producer: "@vgpu/wgsl/prepare-v2",
+    reflection: expect.objectContaining({ entryPoints: expect.any(Array) }),
+    sourceChecksum: expect.stringMatching(/^fnv1a64-utf16le-v1:[0-9a-f]{16}$/u),
+    functionExports: expect.any(Array),
+  });
 }
 
 function expectBundleContainsResolvedWgsl(bundle: string): void {

@@ -1,9 +1,11 @@
 import { readFile, mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
+import type { ShaderSource } from "@vgpu/wgsl";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { resolveShader } from "@vgpu/wgsl/runtime";
-import { transformWgsl } from "@vgpu/wgsl/loader-vite";
+import wgslVitePlugin, { transformWgsl } from "@vgpu/wgsl/loader-vite";
 import wgslWebpackLoader from "@vgpu/wgsl/loader-webpack";
 
 test("package exports pattern resolves", async () => {
@@ -107,8 +109,12 @@ test("leaf loader path is byte-for-byte unchanged when minify is false", async (
 test("leaf loader path compacts comments whitespace and safe locals when minify is true", async () => {
   const source = "// leading comment\n@compute @workgroup_size(1) fn main() {\n  /* keep names stable */ var value = 1u;\n}\n";
   const expected = "@compute @workgroup_size(1) fn main(){var a=1u;}";
-  expect(defaultExport(await transformWgsl(source, "/x.wgsl", { minify: true }))).toBe(expected);
-  expect(defaultExport(wgslWebpackLoader.call({ resourcePath: "/x.wgsl", getOptions: () => ({ minify: true }) }, source) ?? "")).toBe(expected);
+  const vite = shaderSource(await transformWgsl(source, "/x.wgsl", { minify: true }));
+  const webpack = shaderSource(wgslWebpackLoader.call({ resourcePath: "/x.wgsl", getOptions: () => ({ minify: true }) }, source) ?? "");
+  for (const emitted of [vite, webpack]) {
+    expect(emitted.wgsl).toBe(expected);
+    expect(emitted).toEqual(prepareShader({ wgsl: expected, functionExports: [] }));
+  }
 });
 
 test("leaf loader path supports object-form whitespace-only minify", async () => {
@@ -121,8 +127,39 @@ test("leaf loader path supports object-form whitespace-only minify", async () =>
 
 test("loader comment-only import passes through", async () => {
   const code = (await transformWgsl("// import { x } from 'y'", "/x.wgsl")).code;
-  expect(code).toContain("version: 1");
+  expect(shaderSource(code).version).toBe(2);
   expect(code).toContain("// import");
+});
+test("loaders emit data-only prepared modules", async () => {
+  const source = "@compute @workgroup_size(1) fn main() {}";
+  const viteCode = (await transformWgsl(source, "/data-vite.wgsl")).code;
+  const webpackCode = wgslWebpackLoader.call({ resourcePath: "/data-webpack.wgsl" }, source) ?? "";
+
+  for (const code of [viteCode, webpackCode]) {
+    expect(code).toMatch(/^export default \{/u);
+    expect(code).not.toContain("prepareShader");
+    expect(code).not.toContain("reflectSource");
+    expect(shaderSource(code)).toMatchObject({
+      version: 2,
+      producer: "@vgpu/wgsl/prepare-v2",
+      reflection: { entryPoints: [expect.objectContaining({ name: "main", stage: "compute" })] },
+      sourceChecksum: expect.stringMatching(/^fnv1a64-utf16le-v1:[0-9a-f]{16}$/u),
+      functionExports: [],
+    });
+  }
+});
+
+test("ordinary leaves report reflection failures during the build", async () => {
+  const source = "struct Params { value: Missing } @group(0) @binding(0) var<uniform> params: Params;";
+
+  await expect(transformWgsl(source, "/early-vite.wgsl")).rejects.toMatchObject({
+    code: "VGPU-WGSL-REFLECT-UNKNOWN-TYPE",
+    message: expect.stringContaining("/early-vite.wgsl"),
+  });
+  expect(() => wgslWebpackLoader.call({ resourcePath: "/early-webpack.wgsl" }, source)).toThrow(expect.objectContaining({
+    code: "VGPU-WGSL-REFLECT-UNKNOWN-TYPE",
+    message: expect.stringContaining("/early-webpack.wgsl"),
+  }));
 });
 test("loaders resolve top-level import", async () => {
   const dir = await mkdtemp(join(tmpdir(), "vgsl-"));
@@ -149,6 +186,44 @@ test("webpack loader tracks an imported shader when resolution fails", async () 
   }, source))).rejects.toMatchObject({ code: "VGPU-WGSL-SYM-NOEXPORT" });
 
   expect(dependencies).toContain(dependency);
+});
+
+test("vite plugin watches an imported shader when resolution fails", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vgsl-"));
+  const entry = join(dir, "main.wgsl");
+  const dependency = join(dir, "dependency.wgsl");
+  const source = "import { expectedExport } from './dependency.wgsl'; fn main(){expectedExport();}";
+  await writeFile(dependency, "export fn differentExport(){}");
+  const addWatchFile = vi.fn();
+
+  await expect(wgslVitePlugin().transform.call({ addWatchFile }, source, entry)).rejects.toMatchObject({
+    code: "VGPU-WGSL-SYM-NOEXPORT",
+  });
+
+  expect(addWatchFile).toHaveBeenCalledWith(dependency);
+});
+
+test("loaders disable device validation for every branch despite VGPU_VALIDATE", async () => {
+  const previousValidate = process.env.VGPU_VALIDATE;
+  const dir = await mkdtemp(join(tmpdir(), "vgsl-no-loader-validation-"));
+  const helper = join(dir, "helper.wgsl");
+  await writeFile(helper, "export fn helper() {} ");
+  const cases = [
+    [join(dir, "ordinary.wgsl"), "@compute @workgroup_size(1) fn main() { let broken: i32 = 1.0; }"],
+    [join(dir, "direct-export.wgsl"), "export fn exposed() -> i32 { return 1.0; }"],
+    [join(dir, "graph.wgsl"), "import { helper } from './helper.wgsl'; @compute @workgroup_size(1) fn main() { let broken: i32 = 1.0; helper(); }"],
+  ] as const;
+  process.env.VGPU_VALIDATE = "require";
+
+  try {
+    for (const [entry, source] of cases) {
+      expect(shaderSource(await transformWgsl(source, entry)).version).toBe(2);
+      expect(shaderSource(await webpack(entry, source)).version).toBe(2);
+    }
+  } finally {
+    if (previousValidate === undefined) delete process.env.VGPU_VALIDATE;
+    else process.env.VGPU_VALIDATE = previousValidate;
+  }
 });
 
 test("loaders resolve imports after top-level diagnostic directives", async () => {
@@ -204,11 +279,14 @@ function defaultExport(codeOrResult: string | { readonly code: string }): string
   return shaderSource(codeOrResult).wgsl;
 }
 
-function shaderSource(codeOrResult: string | { readonly code: string }): { readonly version: 1; readonly wgsl: string } {
+function shaderSource(codeOrResult: string | { readonly code: string }): ShaderSource {
   const code = typeof codeOrResult === "string" ? codeOrResult : codeOrResult.code;
-  return Function(code.replace(/^export default /, "return ").replace(/;$/, ";"))() as { readonly version: 1; readonly wgsl: string };
+  return Function(code.replace(/^export default /, "return ").replace(/;$/, ";"))() as ShaderSource;
 }
 
 async function webpack(resourcePath: string, source: string, options: { readonly minify?: boolean | { readonly whitespace?: boolean; readonly identifiers?: "none" | "safe" } } = {}) {
-  return new Promise<string>((resolve, reject) => wgslWebpackLoader.call({ resourcePath, getOptions: () => options, async: () => (error, result) => error ? reject(error) : resolve(result ?? "") }, source));
+  return new Promise<string>((resolve, reject) => {
+    const returned = wgslWebpackLoader.call({ resourcePath, getOptions: () => options, async: () => (error, result) => error ? reject(error) : resolve(result ?? "") }, source);
+    if (typeof returned === "string") resolve(returned);
+  });
 }

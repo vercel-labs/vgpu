@@ -29,7 +29,7 @@ interface Gpu {
 
 // The creation API: named exports of `vgpu`, `vgpu/node` and `vgpu/mock`, all gpu-first.
 declare function surface(gpu: Gpu, canvas: HTMLCanvasElement | OffscreenCanvas, opts?: SurfaceOptions): Surface;
-declare function effect(gpu: Gpu, source: string | ShaderSource, opts?: EffectOptions): Effect;
+declare function effect(gpu: Gpu, source: ShaderSource, opts?: EffectOptions): Effect;
 declare function draw(gpu: Gpu, opts: DrawOptions): Draw;
 declare function target(gpu: Gpu, opts: TargetOptions): Target;
 declare function texture(gpu: Gpu, opts: TextureOptions): Texture;
@@ -37,7 +37,7 @@ declare function frame(gpu: Gpu, cb?: (frame: Frame) => void): Frame;
 declare function frameLoop(gpu: Gpu, cb: (frame: Frame) => void, opts?: FrameLoopOptions): FrameLoopHandle;
 declare function sampler(gpu: Gpu, desc?: GPUSamplerDescriptor): GPUSampler;
 declare function geometry(gpu: Gpu, input: GeometryOptions | GeometryRecipe): Geometry;
-declare function compute(gpu: Gpu, source: string | ShaderSource, opts?: ComputeOptions): Compute;
+declare function compute(gpu: Gpu, source: ShaderSource, opts?: ComputeOptions): Compute;
 declare function storage(gpu: Gpu, bytes: number, access?: StorageAccess | StorageOptions): StorageBuffer;
 declare function timer(gpu: Gpu): Timer;
 declare function visibility(gpu: Gpu, options?: VisibilityOptions): Visibility;
@@ -56,15 +56,15 @@ declare function clock(gpu: Gpu): Clock;
 |---|---|---:|---|---|
 | surface.canvas | `HTMLCanvasElement \| OffscreenCanvas` | ✔ | — | Canvas-like object with a `webgpu` context. A canvas may have one live `Surface`. |
 | surface.opts | `SurfaceOptions` | ✖ | `{}` | Per-surface canvas format, size, DPR, and auto-resize behavior. |
-| effect.source | `string \| ShaderSource` | ✔ | — | WGSL string or loader-produced `ShaderSource { version: 1, wgsl }`. |
+| effect.source | `ShaderSource` | ✔ | — | Prepared `version: 2` artifact: a `.wgsl` import through the `@vgpu/wgsl` loader, a prebuilt artifact, or `prepareShader(wgsl)` from `@vgpu/wgsl/prepare` for runtime WGSL. Raw strings are rejected. |
 | effect.opts | `EffectOptions` | ✖ | `{}` | `label` defaults to `"effect"`; `set` defaults to no initial bindings. |
-| draw.opts | `DrawOptions` | ✔ | — | Includes required `shader`; see `DrawOptions`. |
+| draw.opts | `DrawOptions` | ✔ | — | Includes required `shader`, a prepared `ShaderSource` like `effect.source`; see `DrawOptions`. |
 | target.opts | `TargetOptions` | ✔ | — | Offscreen target options. `size` is required. |
 | texture.opts | `TextureOptions` | ✔ | — | Standalone sampled/storage texture. `size` and `format` are required; usage defaults to sampled, storage, and copy usage. |
 | frame.cb | `(frame: Frame) => void` | ✖ | `undefined` | If provided, submits when the callback returns and cancels (submits nothing) when it throws; if omitted, caller must call `frame.submit()` or `frame.cancel()`. |
 | sampler.desc | `GPUSamplerDescriptor` | ✖ | `undefined` | Cached by descriptor. `sampler(gpu)` is the canonical default sampler. |
 | geometry.input | `GeometryOptions \\| GeometryRecipe` | ✔ | — | A raw buffer descriptor, or a `vgpu/scene` recipe such as `box()` or `plane()`. |
-| compute.source | `string \| ShaderSource` | ✔ | — | WGSL string or `ShaderSource`. Must contain a `@compute` entry point. |
+| compute.source | `ShaderSource` | ✔ | — | Prepared artifact, as for `effect.source`. Must contain a `@compute` entry point. |
 | compute.opts | `ComputeOptions` | ✖ | `{}` | `label` defaults to `"compute"`; `set` defaults to no initial bindings. |
 | storage.bytes | `number` | ✔ | — | Byte size for a main API (`vgpu`) storage buffer. |
 | storage.access | `StorageAccess \| StorageOptions` | ✖ | `"read-write"` | Access string, or a `StorageOptions` bag `{ access?, indirect? }`. See `Compute` for storage buffer semantics, including `{ indirect: true }` for GPU-driven draw/dispatch arguments. |
@@ -82,23 +82,24 @@ declare function clock(gpu: Gpu): Clock;
 
 **Returns:** each factory returns the resource named in its signature. `dispose()` and frame/pass callbacks return `void`.
 
-**Throws:** `VGPU-GPU-DISPOSED` when any factory (or `clock(gpu)`) runs after `gpu.dispose()` — the device and everything it owned are gone, so the handle it would return could only fail later; create resources before disposing, or `init()` a new gpu; `VGPU-GPU-FOREIGN` when the first argument was not created by `init()` (a plain object, a `GPUDevice`, a gpu from another library): it carries no vgpu kernel, so pass the object returned by `init()` from `vgpu`, `vgpu/node` or `vgpu/mock`; `VGPU-LIMIT-STORAGE-VERTEX` / `VGPU-LIMIT-STORAGE-FRAGMENT` when a selected render entry exceeds its granted storage-buffer limit. The structured detail reports `stage`, `entryPoint`, `count`, `limit`, and each counted binding's `name`, `group`, and `binding`; request a supported limit or reduce/move the data; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`; `VGPU-SET-VALUE-INVALID` when a JS-owned buffer value does not exactly match its reflected WGSL shape, integer range, or runtime extent; `VGPU-SET-TEXTURE-FILTERABILITY` when a known facade texture format cannot satisfy an ordinarily sampled float binding (detail reports format, texture binding/name/label, and paired sampler identity); `VGPU-RING1-UNSUPPORTED` for unsupported effect/compute/target cases; `VGPU-TARGET-REQUIRED` when one-shot drawing needs an explicit target; `VGPU-TARGET-SIZE-REQUIRED` for runtime JS calls to `target(gpu)` without `size`; `VGPU-SURFACE-*` errors from `surface()`, surface resize, surface readback, or using disposed surfaces; plus method-specific `VGPU-R1-*`, `VGPU-R3-*`, and `VGPU-R4-*` errors documented on `Effect`, `Draw`, `Compute`, `Frame`, `Bundle`, `Target`, and `SharedUniforms`.
+**Throws:** `VGPU-GPU-DISPOSED` when any factory (or `clock(gpu)`) runs after `gpu.dispose()` — the device and everything it owned are gone, so the handle it would return could only fail later; create resources before disposing, or `init()` a new gpu; `VGPU-GPU-FOREIGN` when the first argument was not created by `init()` (a plain object, a `GPUDevice`, a gpu from another library): it carries no vgpu kernel, so pass the object returned by `init()` from `vgpu`, `vgpu/node` or `vgpu/mock`; `VGPU-LIMIT-STORAGE-VERTEX` / `VGPU-LIMIT-STORAGE-FRAGMENT` when a selected render entry exceeds its granted storage-buffer limit. The structured detail reports `stage`, `entryPoint`, `count`, `limit`, and each counted binding's `name`, `group`, and `binding`; request a supported limit or reduce/move the data; `VGPU-SHADER-SOURCE-UNPREPARED` when `effect`, `draw`, or `compute` receives a raw WGSL string or a `version: 1` artifact — import the `.wgsl` file through a compatible `@vgpu/wgsl` loader, rebuild prebuilt assets, or pass `prepareShader(wgsl)` from `@vgpu/wgsl/prepare`; `VGPU-SHADER-SOURCE-VERSION` when the artifact's `version` is an integer other than `2` — the message names the received version, the supported version, and the artifact's `producer`; align the `@vgpu/wgsl` tooling and `vgpu` runtime versions, then regenerate; `VGPU-SHADER-SOURCE-INVALID` when the artifact is not an object, a required field is missing, accessor-backed, or malformed, the reflection metadata is inconsistent, or `sourceChecksum` does not match `wgsl` — the structured detail gives the field `path` and the `reason`; regenerate with a supported producer. All three throw synchronously from the factory; `VGPU-SET-VALUE-INVALID` when a JS-owned buffer value does not exactly match its reflected WGSL shape, integer range, or runtime extent; `VGPU-SET-TEXTURE-FILTERABILITY` when a known facade texture format cannot satisfy an ordinarily sampled float binding (detail reports format, texture binding/name/label, and paired sampler identity); `VGPU-RING1-UNSUPPORTED` for unsupported effect/compute/target cases; `VGPU-TARGET-REQUIRED` when one-shot drawing needs an explicit target; `VGPU-TARGET-SIZE-REQUIRED` for runtime JS calls to `target(gpu)` without `size`; `VGPU-SURFACE-*` errors from `surface()`, surface resize, surface readback, or using disposed surfaces; plus method-specific `VGPU-R1-*`, `VGPU-R3-*`, and `VGPU-R4-*` errors documented on `Effect`, `Draw`, `Compute`, `Frame`, `Bundle`, `Target`, and `SharedUniforms`.
 
 ## Examples
 
 ```ts
 import { init, draw, frame, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const colorTarget = target(gpu, { size: [128, 128], depth: true });
 const drawable = draw(gpu, {
-  shader: `
+  shader: prepareShader(`
     @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
       var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
       return vec4f(p[vi], 0, 1);
     }
     @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1, 0, 1, 1); }
-  `,
+  `), // no loader in tests: prepare the runtime WGSL once
   // optional sync pre-warm; `await draw.compile(target)` is preferred during browser load
   targets: [colorTarget],
 });
@@ -110,12 +111,13 @@ frame(gpu, (currentFrame) => {
 
 ```ts
 import { init, effect, frameLoop, surface } from "vgpu";
+import waveShader from "./wave.wgsl"; // prepared at build time by the @vgpu/wgsl loader
 
 declare const canvas: HTMLCanvasElement;
 
 const gpu = await init();
 const canvasSurface = surface(gpu, canvas, { dpr: [1, 2] });
-const wave = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.2, 0.4, 1.0, 1.0); }`);
+const wave = effect(gpu, waveShader);
 
 frameLoop(gpu, (frame) => {
   frame.pass({ target: canvasSurface }, (pass) => pass.draw(wave));

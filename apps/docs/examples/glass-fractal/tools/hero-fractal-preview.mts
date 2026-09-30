@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import type { ShaderSource } from "@vgpu/wgsl";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { resolveShader } from "@vgpu/wgsl/runtime";
 import { PNG } from "pngjs";
 import { effect, frame, init, sampler, target } from "vgpu/node";
@@ -36,13 +38,14 @@ const FRACTAL_MATERIAL = {
 } as const;
 const FLOOR_BAKE_SIZE = 512;
 
-async function resolveHeroShader(file: string): Promise<string> {
+async function resolveHeroShader(file: string): Promise<ShaderSource> {
+  const entry = resolve(EXAMPLE_DIR, file);
   const resolved = await resolveShader({
-    entry: resolve(EXAMPLE_DIR, file),
+    entry,
     rootDir: EXAMPLE_DIR,
     validate: false,
   });
-  return resolved.wgsl;
+  return prepareShader(resolved, entry);
 }
 
 function parseArgs(argv: readonly string[]): PreviewOptions {
@@ -190,7 +193,11 @@ try {
       await gpu.settled();
 
       const path = join(options.outDir, `${shape}.png`);
-      await writePng(path, options.size, await output.read());
+      await writePng(
+        path,
+        options.size,
+        await output.color.read({ mipLevel: 0, region: "all" }),
+      );
       console.log(path);
     } finally {
       output.color.destroy();

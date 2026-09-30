@@ -1,7 +1,7 @@
 import type { Node } from "three/webgpu";
 import { positionLocal } from "three/tsl";
 import { isShaderFunctionExport, type ShaderFunctionExport } from "vgpu";
-import type { ShaderSource } from "vgpu/client";
+import type { ShaderReflection, ShaderSource } from "vgpu/client";
 import { tslExports, type TslExportsErrorCode } from "vgpu/three";
 import surfaceModule from "./surface.wgsl";
 
@@ -91,9 +91,13 @@ const surfaceColorExport: ShaderFunctionExport = {
   resolvedName: "surfaceColor",
   parameterNames: ["position", "timeSeconds"],
 };
+declare const reflection: ShaderReflection;
 const publicArtifact: ShaderSource = {
-  version: 1,
+  version: 2,
   wgsl: source,
+  reflection,
+  sourceChecksum: "fnv1a64-utf16le-v1:0000000000000000",
+  producer: "typing-fixture",
   functionExports: [surfaceColorExport],
 };
 const importedExports: readonly ShaderFunctionExport[] | undefined =

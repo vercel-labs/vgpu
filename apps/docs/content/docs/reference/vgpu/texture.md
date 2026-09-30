@@ -66,27 +66,28 @@ interface TextureReadOptions {
 
 ```ts
 import { compute, effect, init, sampler, texture } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 // 32x32x32 rgba16float lookup table written by compute and sampled by a fragment shader.
 const lut = texture(gpu, { kind: "3d", size: [32, 32, 32], format: "rgba16float", usage: ["storage_binding", "texture_binding"], label: "lut" });
 
-const fill = compute(gpu, `
+const fill = compute(gpu, prepareShader(`
   @group(0) @binding(0) var lut: texture_storage_3d<rgba16float, write>;
   @compute @workgroup_size(4, 4, 4)
   fn main(@builtin(global_invocation_id) id: vec3u) {
     textureStore(lut, id, vec4f(vec3f(id) / 31.0, 1.0));
   }
-`, { label: "fill-lut", set: { lut } });
+`), { label: "fill-lut", set: { lut } });
 fill.dispatch(8, 8, 8);
 
-const view = effect(gpu, `
+const view = effect(gpu, prepareShader(`
   @group(0) @binding(0) var lut: texture_3d<f32>;
   @group(0) @binding(1) var linear: sampler;
   @fragment fn main(@location(0) uv: vec2f) -> @location(0) vec4f {
     return textureSample(lut, linear, vec3f(uv, 0.5));
   }
-`, { label: "view-lut", set: { lut, linear: sampler(gpu) } });
+`), { label: "view-lut", set: { lut, linear: sampler(gpu) } });
 ```
 
 ```ts
@@ -105,19 +106,20 @@ bind a native view that selects exactly one level:
 
 ```ts
 import { compute, init, texture } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const image = texture(gpu, {
   kind: "2d", size: [8, 8], format: "rgba16float", mipLevelCount: 2,
   usage: ["storage_binding", "copy_src"],
 });
-const fill = compute(gpu, `
+const fill = compute(gpu, prepareShader(`
   @group(0) @binding(0) var dst: texture_storage_2d<rgba16float, write>;
   @compute @workgroup_size(1)
   fn main(@builtin(global_invocation_id) id: vec3u) {
     textureStore(dst, id.xy, vec4f(1.0));
   }
-`, { set: { dst: image.createView({ baseMipLevel: 1, mipLevelCount: 1 }) } });
+`), { set: { dst: image.createView({ baseMipLevel: 1, mipLevelCount: 1 }) } });
 fill.dispatch(4, 4); // Mip 1 of an 8x8 texture is 4x4.
 const pixels = await image.readFloats({ mipLevel: 1, region: "all" });
 gpu.dispose();
