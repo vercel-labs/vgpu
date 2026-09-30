@@ -28,6 +28,8 @@ A small feature's approximate projected extent near the view center is `pixels â
 
 Use per-region targets and compare actual output. Do not retain every original UV split merely to reuse an atlas if that defeats the reduction; allow a new LOW layout and rebake. Conversely, do not regenerate unaffected material tiles when their dependencies remain identical.
 
+Protect the shading neighborhood as well as the feature's triangles when exact source shading must survive reduction. Collapsing adjacent faces can change a preserved corner's custom-normal basis even when its position and winding stay identical. Preserve the necessary incident faces, then compare decoded normals and consumed attributes after simplification and a fresh reopen. Reassigning the old normal vectors can introduce quantization error in the changed basis; verify the result instead of assuming the setter preserves them exactly.
+
 ## 3. Freeze the receiving surface and its frames
 
 Finalize LOW topology, applied transforms, shading normals, UVs and deterministic triangulation before projecting. The triangulation used by the baker must be the one exported. Verify the serialized result, including any splits or reorderings made by the exporter; a modifier label alone is not proof.
