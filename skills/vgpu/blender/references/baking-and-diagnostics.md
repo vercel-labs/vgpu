@@ -6,6 +6,8 @@ The final LOW defines the bake: transforms resolved without breaking rig pivots,
 
 Inspect hard, smooth, or weighted normals across flat panels and bevel transitions. Smoothing every face does not repair unsuitable topology. HIGH and LOW need corresponding intended surfaces, not matching vertex counts.
 
+Before raytracing, check finite UVs, collapsed triangles, unintended overlap, padding and actual texel coverage at the final resolution. Positive chart area or a large bounding box does not guarantee coverage of a narrow exposed strip. Repeat fragile checks after export or LOD simplification. Compare whole-view AO-on/off images as well as repaired crops; a new atlas can fix one seam while making another face black.
+
 Use stable names or groups to pair parts. An explicit cage must match LOW topology and transforms; an automatic extrusion still needs inspection. Choose projection distances for local thickness, curvature, and nearby surfaces rather than copying a universal offset.
 
 For selected-to-active normal baking, verify the source selection, active LOW, source visibility, active image target in each receiving material, tangent space, and Y convention. Initialize unused normal texels to neutral (0.5, 0.5, 1) and AO to 1. Disable clearing between passes that accumulate into one atlas.
@@ -24,12 +26,28 @@ Decide which surfaces can occlude one another throughout the expected motion. Pr
 
 Use runtime occlusion for changing environmental contacts. Smooth, low-frequency self-occlusion can use vertex data when mesh density supports it; finer variation may require a texture. Keep emissive or intentionally unshaded features from being darkened unintentionally.
 
+## Reuse bakes by their dependencies
+
+Keep reusable tile reflectance/normal detail separate from unique assembly AO and lightmaps. Select tile scale and lighting texel density from the closest required camera rather than increasing a single unique atlas for all detail. A tile bake must not depend on assembled-object attributes absent from its bake plane; verify representative pixels and the restored final material as well as successful image creation.
+
+Record pass-specific cache inputs, including source identity, evaluated geometry and transforms, receiver normals/UVs, resolution, settings, seed and relevant tool versions. Include HIGH and cage inputs for projected normals, occluders for AO, and participating materials, lights and environment for illumination. Use these dependencies to invalidate only affected passes:
+
+| Change | Recheck or invalidate |
+| --- | --- |
+| Receiver geometry, normals, UVs or triangulation | Dependent projected normals, AO and illumination, including LOD bindings |
+| Occluder placement or shape | AO and illumination for affected receivers, including neighboring objects |
+| Material reflectance, lights or environment | Illumination passes that depend on them; independent AO need not change |
+| Compression, channels or mip generation only | Delivery textures and runtime validation; preserve unchanged lossless bake masters |
+
+If the affected receiver set cannot be established, invalidate the dependent assembly pass conservatively. Reuse an entry only when its real dependency identity and validated outputs match. Never relabel stale lighting with a new key. Byte identity can justify reuse of those exact outputs, but does not prove visual equivalence of a changed scene. A packaging failure does not invalidate completed bakes whose inputs remain unchanged.
+
 ## Texture filtering and runtime conventions
 
 - Normals and AO are linear data. Disable sRGB conversion and avoid premultiplying data channels by alpha.
 - Design island padding in pixels of the final resolution. Account for downsampling and mipmaps; more resolution cannot fix overlapping UVs.
 - For a downsampled normal master, decode RGB to vectors, average, normalize, and re-encode. Average AO separately as a scalar.
 - Choose channels for the actual data and shader. A single AO channel need not occupy an RGBA atlas; packing AO with normals is useful only when sampling and compression requirements are compatible.
+- Preserve lossless masters and choose delivery formats per map. Measure decoded normal angular error and AO value error, including mip levels, against those masters. Verify the actual uploaded format and decoder; KTX2 is a container, not a guarantee of GPU compression or importer support. Two-channel normals need a matching reconstruction convention. Record format support and error tolerances for the target platform instead of prescribing one format for every asset.
 - Estimate uncompressed residency as `width × height × bytesPerTexel`, summed over mip levels. A complete square mip chain is approximately 4/3 of its base: RGBA8 2048² is about 21.33 MiB, while R8 1024² is about 1.33 MiB. Account for the actual target format when compressed textures are used.
 - Verify texture orientation, axis conversion, and the tangent frame through import. Nonuniform scales need correct normal transforms; mirrored transforms affect handedness and winding.
 - Averaged normals can lose length in mipmaps. When specular highlights shimmer, consider filtering and roughness adjustment based on normal variance instead of globally blurring the intended material response.
@@ -55,7 +73,7 @@ Use runtime occlusion for changing environmental contacts. Smooth, low-frequency
 1. Match old and new assets at the actual gameplay camera.
 2. Compare HIGH, unbaked LOW, and baked LOW under lighting that exposes surface errors.
 3. Inspect edges, seams, openings, and nearby surfaces at close range.
-4. Toggle normals and AO independently; use image differences where helpful.
+4. Toggle normals, AO and baked lightmaps independently when present; use image differences where helpful. Keep the direct/indirect lighting contract explicit to detect missing terms or double application.
 5. Exercise relevant motion, articulation, scales, mirrored transforms, and both sides of LOD thresholds.
 6. Check a representative runtime scene with the target renderer; verify resource lifetime when integration changes it.
 

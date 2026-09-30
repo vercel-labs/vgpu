@@ -37,3 +37,8 @@ are defined in `.subharness/agents/` and run through the `subharness` CLI. The l
 research, API design, human-validated decisions, planning, parallel implementation, integration —
 is in `.claude/skills/vgpu-agent-flow/SKILL.md`. Pipeline artifacts live in the gitignored
 `.context/work/<topic>/`.
+
+For Blender assets, `asset-author` (Astra) delegates runtime integration and visual critique to
+`asset-runtime` and `asset-critic` (Opus 5.5). Follow the
+[asset iteration lane](.claude/skills/vgpu-agent-flow/references/asset-iteration.md) for concept
+handoffs, actual render comparisons, measured budgets, and evidence-based workflow improvements.

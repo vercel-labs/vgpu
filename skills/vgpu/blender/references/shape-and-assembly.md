@@ -16,6 +16,14 @@ An outer panel need not inherit every curve of the body underneath. For example,
 - Include wall thickness when interpreting an exterior gap. Where appropriate, allow a small controlled overlap in buried areas; avoid coplanar surfaces that cause z-fighting. Choose tolerances for the asset's scale and silhouette.
 - For a fragile attachment, check rays or distances against the actual export at several positions, alongside visual review. A test that merely repeats the generator formula does not validate the exported assembly. Rebake when the LOW's geometric basis changes.
 
+## Build architectural relationships together
+
+For repeated architecture, derive openings, piers, trim and roof supports from shared bay boundaries and named attachment surfaces. Check the active constructor branch and evaluated mesh, not just a parameter whose code path may be unused. Resolve stairs and landings as a continuous route: verify tread/riser consistency, endpoint heights, usable landing depth and their actual connections at the intended scale before adding wear or decoration.
+
+When clearing an opening, identify which faces may move and which outer corners, wall junctions and silhouette edges must stay fixed. Shrinking a support symmetrically can expose buried ornaments, open a corner slot or hide its cap inside the roof. Inspect both adjoining walls, cap projection and the support beneath attached decorations after the repair.
+
+Survey all nearby parallel faces before choosing a clearance. An arbitrary small offset can fix one coplanar pair while landing on another. Measure gaps and obstruction against evaluated and serialized LOW meshes at every delivered LOD, with scale-appropriate tolerances. A closed individual solid or a few clear rays do not prove a clean assembled exterior; inspect the whole affected joint and matched grazing views. Keep pre-existing unresolved intersections explicit instead of treating a local repair as proof that the entire asset is clean.
+
 ## Preserve identity and proportions
 
 When resizing a group of facial features, scale both their dimensions and their center-to-center distances about a common center. Shrinking each feature about its own origin preserves absolute spacing and can change the expression. Compare normalized proportions and spacing against the approved reference.

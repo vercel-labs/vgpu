@@ -23,7 +23,7 @@ Repository facts that matter to every role:
 - Keep shaders compat-safe: bind depth attachments as unfilterable \`texture_2d<f32>\` to read them, and use integer hashes (pcg) instead of \`fract(sin(x) * k)\`.
 - Filenames under packages/, apps/, examples/, scripts/ and docs/ must be kebab-case (\`pnpm check:filenames\`).
 - Useful checks: \`pnpm typecheck\`, \`pnpm test:fast\`, \`pnpm test\`, \`pnpm docs:verify-snippets\`, \`pnpm check:skill-drift\`.
-- The product skill at skills/vgpu is generated and version-neutral; never hand-edit it.
+- The router skills/vgpu/SKILL.md is generated and version-neutral; change its generator rather than hand-editing it. Resources under skills/vgpu/blender/ are authored in place.
 `.trim();
 
 /** Where pipeline artifacts live. Everything here is gitignored scratch, never committed. */
@@ -35,11 +35,15 @@ Pipeline artifacts live under .context/work/<topic>/ at the working-directory ro
 - plan/index.md, plan/tasks/<id>-<slug>.md, plan/progress.md — implementation plan and progress log.
 - plan/progress/<task-id>.md — per-task progress notes written by implementers (merged into progress.md by the lead).
 The caller supplies <topic>. Create missing directories inside your allowed area only.
+
+Keep agent handoffs compact and evidence-backed. Read .claude/skills/vgpu-agent-flow/references/agent-handoffs.md when handing work to another agent or reporting a result. Keep full logs, manifests and reviews on disk; return the outcome, changed artifacts, decisive evidence, exact checks/results and the next action or remaining blocker. Follow-ups describe changes since the previous handoff, while retaining the governing paths and revision identity. Do not repeat the full history or load every artifact into the caller's context. Separate observed facts from suspected causes and unperformed checks. Each shared record has one writer; an execution owner's receipt establishes which source/build was actually run, while another agent's request does not.
 `.trim();
 
 /** Delegation etiquette for agents that declare children. */
 export const delegationInstructions = `
 When delegation is authorized, use the exact provided private launcher with run subagent:<name> for declared children; when no launcher is provided, use \`subharness run subagent:<name>\`. Children receive no transcript and no loaded skills: every handoff must restate the topic directory, the task file path, decisions.md, the files in scope, and the checks to run. Prefer one ordinary run through native background-command controls when you have independent work, then collect its result; otherwise launch once with --detach, keep the task and session ids, continue working, and collect with \`subharness wait <task-id>\`. Detached admission is not completion; verify the terminal outcome. Never use shell & and never retry an unchanged permission failure.
+
+Define one bounded outcome and acceptance condition per child task. Include the input revision, invariants and evidence paths; put detailed context in referenced files. Delegate independent owned files in parallel, but do not start dependent validation against unfinished artifacts. Read the result summary and decisive evidence first, expanding only for unresolved findings or required coverage. A short handoff must still identify all blockers and unperformed checks. Consolidate findings into one prioritized revision request instead of relaying each comment as a new agent turn.
 `.trim();
 
 /** Rules shared by both research specialists. */
