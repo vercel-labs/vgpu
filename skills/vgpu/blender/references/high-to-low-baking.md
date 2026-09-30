@@ -24,6 +24,8 @@ Record matched target views and a baseline wireframe. Wireframe brightness is a 
 
 Normal maps change shading inside the remaining surface. They cannot restore a removed opening, displaced silhouette, geometric parallax or cast-shadow contour. AO describes occlusion; it does not restore that geometry either. Avoid using darker AO to hide an overly aggressive reduction.
 
+Inventory spatial material variation stored in vertex or corner attributes before reducing them. Interpolating those attributes through simplification can erase fine color, weathering or roughness patterns even when the remaining geometry and projected normals are valid. Compare HIGH and LOW with an unlit attribute visualization; bake required fields into a supported texture domain or retain enough geometry to carry them. Include those extra maps, channels and sampling costs in the optimization budget.
+
 A small feature's approximate projected extent near the view center is `pixels ≈ length × viewportHeight / (2 × cameraDepth × tan(verticalFov / 2))`. Use consistent units and the feature's projected length, not an ambiguous radius. This is a prioritization heuristic, not a universal deletion threshold: highlights, motion, antialiasing, oblique views and other cameras can make a small feature important.
 
 Use per-region targets and compare actual output. Do not retain every original UV split merely to reuse an atlas if that defeats the reduction; allow a new LOW layout and rebake. Conversely, do not regenerate unaffected material tiles when their dependencies remain identical.
