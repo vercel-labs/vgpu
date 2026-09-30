@@ -100,6 +100,10 @@ Keep AO separate from the normal vector and from baked directional illumination.
 
 Changing receiver geometry, normals, UVs or triangulation invalidates dependent unique AO and lightmaps. Recompute affected passes or prove their dependencies unchanged. Preserve an accepted HIGH delivery's own maps and hashes. Do not attach old lightmaps to new UVs or relabel them with a new identity.
 
+When transferring freshly baked HIGH fields through a surface correspondence, validate the source sampling footprint, not only the projected UV coordinate. A chart can have positive area but no rasterized texels, or too few same-chart taps for bilinear filtering. Padding from a neighboring chart is not valid source lighting. Keep these misses explicit; increasing projection distance cannot repair missing source samples.
+
+For an exactly corresponding preserved part, one recovery is an additional HIGH bake UV layer mapped to the LOW receiver domain. Keep original UVs, material coordinate inputs and the assembled occluder geometry intact; select the additional layer explicitly for baking. Before AO or indirect passes, run an undilated coverage/face-ID witness to prove every required receiver sample shades the intended HIGH polygon, unrelated faces cannot write the target, and implicit material UVs still equal the original render UVs. Blender 5.0 exposes the explicit `uv_layer` bake override ([implementation](https://github.com/blender/blender/blob/v5.0.0/source/blender/editors/object/object_bake_api.cc)); verify that behavior in the executed version. Record the auxiliary domain separately from original HIGH UVs. Coverage success alone does not validate lighting, delivery gutters or mips.
+
 ## 6. Scale, review and deliver
 
 Checkpoint LOW preparation, geometry/UV validation, projection, AO/illumination, export, packaging and runtime acceptance independently. Record actual inputs, evaluated geometry, cage parameters, render engine/device, samples, resolution, margins, seed and output hashes. Recover a packaging failure without repeating valid bakes.
