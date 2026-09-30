@@ -76,6 +76,8 @@ For joined batches, a bounding box is only a candidate search: neighboring ornam
 
 Compare HIGH, LOW with projected normals disabled, and baked LOW under the same grazing light/camera. The bake should recover a visible, known removed feature. Also test a neutral map and directional +X/+Y witnesses through the real shader; a loaded texture or a CPU vector test alone cannot prove the frame/sign convention.
 
+For focused VGPU checks, use `vgpu/node` in project-owned scripts to render isolated components or shader fixtures into offscreen targets and read back PNGs or numeric results. Reuse the production WGSL, asset decoding and material bindings; a separate approximate shader does not validate the application. Keep diagnostic fixtures and probe entry points outside the shipped application. Record the actual adapter, inputs and errors, then use browser captures for the complete scene, interaction and browser-specific behavior.
+
 For a difficult frame mismatch, bake an object-space normal reference and an explicit source-hit mask with the same projection settings. Compare decoded tangent normals against that reference on covered texels, separating chart-boundary filtering from interior errors. Include a smooth curved receiver; flat charts alone cannot test interpolation parity. Inspect error outliers rather than hiding them in a mean or relaxing the threshold.
 
 Keep coverage diagnostics undilated: filled padding can turn a miss into an apparent hit or mix border values from a different frame. Produce delivery gutters as a separate verified step and compare covered samples before/after padding. A diagnostic with zero margin is not a finished, mip-safe delivery texture.
