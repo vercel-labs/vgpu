@@ -32,6 +32,8 @@ Use per-region targets and compare actual output. Do not retain every original U
 
 Finalize LOW topology, applied transforms, shading normals, UVs and deterministic triangulation before projecting. The triangulation used by the baker must be the one exported. Verify the serialized result, including any splits or reorderings made by the exporter; a modifier label alone is not proof.
 
+Check LOW face orientation against the intended HIGH surface before casting rays. A reconstructed profile can match positions while reversing face winding, especially when the original generator corrected orientation in a later stage. Preserve corner/UV correspondence when repairing winding; do not try to compensate with cage distance or a flipped normal-map channel.
+
 Allocate unique nonoverlapping UVs for the projected detail and baked occlusion. Pick texel density from the closest required view, with space for seams and mip gutters. Reusable surface detail may retain a separate tiled UV set. Check exposed narrow regions at raster resolution rather than accepting positive UV area alone.
 
 Hard shading boundaries often need separate padded bake charts so filtering does not blend unrelated tangent-space vectors. Treat hard edges, UV seams and cage connectivity as separate decisions. Do not make all normals smooth just to avoid seams, or assume every seam needs a hard edge.
@@ -44,6 +46,8 @@ For each normal layer record:
 - whether it contains geometric transfer, tiled material detail, or both.
 
 For glTF, the primary normal texture identifies its UV set; when tangents are absent the specification recommends MikkTSpace generation from that texture's coordinates. An exported `TANGENT` must match the baked map's frame. A per-fragment derivative frame is not automatically equivalent to the baker's interpolated MikkTSpace frame.
+
+Interpolation and normalization order are part of that contract. An otherwise plausible orthonormalized decoder can disagree with the actual bake on a curved receiver. Use the object-space oracle below to establish the required decoder rather than assuming that a synthetic frame test proves baker parity.
 
 ### Two UV sets need an explicit layering contract
 
@@ -70,6 +74,12 @@ For joined batches, a bounding box is only a candidate search: neighboring ornam
 
 Compare HIGH, LOW with projected normals disabled, and baked LOW under the same grazing light/camera. The bake should recover a visible, known removed feature. Also test a neutral map and directional +X/+Y witnesses through the real shader; a loaded texture or a CPU vector test alone cannot prove the frame/sign convention.
 
+For a difficult frame mismatch, bake an object-space normal reference and an explicit source-hit mask with the same projection settings. Compare decoded tangent normals against that reference on covered texels, separating chart-boundary filtering from interior errors. Include a smooth curved receiver; flat charts alone cannot test interpolation parity. Inspect error outliers rather than hiding them in a mean or relaxing the threshold.
+
+Keep coverage diagnostics undilated: filled padding can turn a miss into an apparent hit or mix border values from a different frame. Produce delivery gutters as a separate verified step and compare covered samples before/after padding. A diagnostic with zero margin is not a finished, mip-safe delivery texture.
+
+Before dropping normal Z to deliver two channels, verify that the intended samples lie in the positive-Z hemisphere. Negative Z may reveal opposite-side projection on a thin part, an unsuitable receiving surface, or a legitimate encoding requirement. Fix the projection/LOW where appropriate, or use an encoding that preserves the required hemisphere; reconstructing positive Z silently changes those normals.
+
 ## 5. Bake occlusion and illumination deliberately
 
 Do not automatically use the isolated/exploded normal-bake scene for AO. Restore permanent neighbors and use the intended assembled occluder set and distance. For a transfer bake, record whether occlusion is evaluated on the HIGH surface and projected to LOW, or evaluated directly on LOW; those produce different detail. Avoid duplicate LOW/HIGH proxy surfaces unintentionally self-occluding.
@@ -81,6 +91,8 @@ Changing receiver geometry, normals, UVs or triangulation invalidates dependent 
 ## 6. Scale, review and deliver
 
 Checkpoint LOW preparation, geometry/UV validation, projection, AO/illumination, export, packaging and runtime acceptance independently. Record actual inputs, evaluated geometry, cage parameters, render engine/device, samples, resolution, margins, seed and output hashes. Recover a packaging failure without repeating valid bakes.
+
+A saved `.blend` alone does not prove the baked pixels survived. Save lossless masters, then pack the required images or bind explicit saved files with the correct color space and retained users. Setting `filepath_raw` on a generated image is not a persistence check. Reopen the checkpoint in a fresh process and compare its loaded pixels and bindings against the saved masters; unused images can disappear and generated buffers can reset.
 
 Review full matched hero/rear/close views as well as defect crops. Inspect grazing angles, stairs/openings, contacts and silhouettes, then move the camera and cross LOD thresholds. Toggle projected normals, tiled normals, AO and lightmaps independently when those are separate terms. Inspect lower mips and compressed output too.
 
