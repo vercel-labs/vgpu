@@ -32,17 +32,17 @@ function packedWgslPlugin(): Plugin {
     name: "vgpu-packed-wgsl-test",
     setup(build) {
       build.onResolve({ filter: /\.wgsl\?/ }, (args) => {
-        const queryStart = args.path.indexOf("?");
         return {
-          path: args.path.slice(0, queryStart),
+          path: args.path,
           namespace: "vgpu-packed-wgsl",
-          pluginData: { resourceQuery: args.path.slice(queryStart) },
         };
       });
       build.onLoad({ filter: /.*/, namespace: "vgpu-packed-wgsl" }, (args) => {
-        const resourceQuery = (args.pluginData as { readonly resourceQuery: string }).resourceQuery;
+        const queryStart = args.path.indexOf("?");
+        const resourcePath = args.path.slice(0, queryStart);
+        const resourceQuery = args.path.slice(queryStart);
         const contents = wgslWebpackLoader.call({
-          resourcePath: args.path,
+          resourcePath,
           resourceQuery,
         }, "");
         if (typeof contents !== "string") throw new Error("packed metadata loader became asynchronous");
