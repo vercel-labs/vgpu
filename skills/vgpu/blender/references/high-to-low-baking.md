@@ -34,6 +34,8 @@ Finalize LOW topology, applied transforms, shading normals, UVs and deterministi
 
 Check LOW face orientation against the intended HIGH surface before casting rays. A reconstructed profile can match positions while reversing face winding, especially when the original generator corrected orientation in a later stage. Preserve corner/UV correspondence when repairing winding; do not try to compensate with cage distance or a flipped normal-map channel.
 
+A nearest-triangle normal is not sufficient proof of reversed winding on a simplified rock or sculpt. Near creases, folds and thin surfaces, multiple nearby HIGH triangles can face different directions. Inspect shared-edge winding, component orientation and the intended projection correspondence before reversing faces. A coherent closed mesh can still have projection problems; diagnose those with the actual cage and covered-texel oracle rather than forcing every nearest-normal dot product positive.
+
 Allocate unique nonoverlapping UVs for the projected detail and baked occlusion. Pick texel density from the closest required view, with space for seams and mip gutters. Reusable surface detail may retain a separate tiled UV set. Check exposed narrow regions at raster resolution rather than accepting positive UV area alone.
 
 Hard shading boundaries often need separate padded bake charts so filtering does not blend unrelated tangent-space vectors. Treat hard edges, UV seams and cage connectivity as separate decisions. Do not make all normals smooth just to avoid seams, or assume every seam needs a hard edge.
