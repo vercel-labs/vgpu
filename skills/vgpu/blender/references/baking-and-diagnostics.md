@@ -1,5 +1,7 @@
 # Baking and Diagnostics
 
+For an end-to-end reduction and transfer procedure, start with [high-to-low baking](high-to-low-baking.md).
+
 ## Prepare the final low-poly mesh
 
 The final LOW defines the bake: transforms resolved without breaking rig pivots, clean topology, stable normals, UV seams, and triangulation. Export its tangents or verify equivalent tangent generation in the importer. Revisit affected bakes when this base changes.
