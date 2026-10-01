@@ -277,7 +277,13 @@ jobs:
   # same reason the app directory is named `apps/docs`: it is the docs app, and the required status
   # check kept reporting across the cutover without a branch-protection edit.
   docs-app-build:
-    runs-on: ubuntu-24.04-arm
+    # The production browser smoke below needs the Chrome bundled on GitHub's x64 image. The ARM
+    # image used previously has no browser capable of exercising WebGPU.
+    runs-on: ubuntu-24.04
+    env:
+      # 32 zero bytes in base64: valid flags-sdk key material, visibly synthetic, and never reused
+      # outside this build. It must match for `next build` and the `next start` spawned by the smoke.
+      FLAGS_SECRET: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
     steps:
       - uses: actions/checkout@v4
       - name: Install pnpm
@@ -343,6 +349,22 @@ jobs:
       # against `content/docs/**` once TGEIST-04 lands the real corpus.
       - name: Unit-test the docs remark plugins (M1-M9)
         run: pnpm --filter docs test:remark
+      - name: Unit-test the production browser smoke contract
+        run: pnpm --filter docs test:browser-render-smoke
+      # A compiled docs tree can contain stale loader output even when every source-level and
+      # bundle-isolation check above is green. Exercise the exact production build in raw-CDP
+      # Chrome and require GPU canvas texture acquisitions plus queue submissions to continue for
+      # both signed homepage hero themes and Particle Orbit. Caught renderer errors remain fatal.
+      - name: Smoke production WebGPU rendering in Chrome
+        run: pnpm --filter docs check:browser-render-smoke
+      - name: Upload production WebGPU smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-browser-render-smoke
+          path: artifacts/docs-browser-smoke
+          if-no-files-found: warn
+          retention-days: 7
       # TGEIST-12 moved `check:mdast-parity` out of this job: it is gate (c) of Decision 4 and now
       # runs inside `docs-parity` below, next to gates (a), (b) and (d), so the four of them report
       # as one suite (that suite is the evidence F5 is approved on, per risk #9 — "PR de cutover

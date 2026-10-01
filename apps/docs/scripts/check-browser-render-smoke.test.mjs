@@ -1,0 +1,268 @@
+import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import test from "node:test";
+
+import * as browserSmoke from "./check-browser-render-smoke.mjs";
+
+import {
+  SCENARIOS,
+  SYNTHETIC_FLAGS_SECRET,
+  browserInstrumentation,
+  isRenderingConsoleError,
+  parseArgs,
+  scenarioFailures,
+} from "./check-browser-render-smoke.mjs";
+
+function healthyObservation(scenario = SCENARIOS[0]) {
+  return {
+    url: `https://example.test${scenario.path}`,
+    readyState: "complete",
+    theme: scenario.theme,
+    previewError: null,
+    consoleErrors: [],
+    logErrors: [],
+    pageExceptions: [],
+    smoke: {
+      webgpu: true,
+      adapterRequests: 1,
+      deviceRequests: 1,
+      submissions: 3,
+      canvases: [
+        {
+          id: 1,
+          kind: scenario.kind,
+          configures: 1,
+          currentTextures: 3,
+          width: 1280,
+          height: 720,
+        },
+      ],
+      gpuErrors: [],
+      deviceLosses: [],
+      pageErrors: [],
+      unhandledRejections: [],
+      instrumentationErrors: [],
+    },
+  };
+}
+
+function fakeScenarioPage(scenario, { onCapture, onObservation } = {}) {
+  const state = {
+    closed: false,
+    observation: healthyObservation(scenario),
+    observationCount: 0,
+  };
+  let emit = () => {};
+  return {
+    state,
+    page: {
+      async send(method, params = {}) {
+        if (method === "Runtime.evaluate") {
+          if (state.closed) throw new Error("cannot inspect a closed page");
+          const value =
+            params.expression === "location.href"
+              ? state.observation.url
+              : (() => {
+                  state.observationCount += 1;
+                  onObservation?.(state);
+                  return structuredClone(state.observation);
+                })();
+          return { result: { value } };
+        }
+        if (method === "Page.captureScreenshot") {
+          onCapture?.({ emit, state });
+          return { data: Buffer.from("screenshot").toString("base64") };
+        }
+        return {};
+      },
+      onEvent(handler) {
+        emit = handler;
+      },
+      async close() {
+        state.closed = true;
+      },
+    },
+  };
+}
+
+test("synthetic flags secret has the required 32 decoded bytes", () => {
+  assert.equal(Buffer.from(SYNTHETIC_FLAGS_SECRET, "base64").byteLength, 32);
+  assert.doesNotThrow(() => new Function(browserInstrumentation("dark")));
+});
+
+test("default browser smoke requires every production scenario", () => {
+  const options = parseArgs(["--"]);
+  assert.equal(options.scenario, null);
+  assert.deepEqual(
+    SCENARIOS.map(({ id }) => id),
+    ["hero-dark", "hero-light", "particle-orbit"]
+  );
+  assert.throws(() => parseArgs(["--scenario=unknown"]), /unknown scenario/u);
+  assert.throws(
+    () => parseArgs(["--base-url=https://user:password@example.test"]),
+    /must not contain credentials/u
+  );
+});
+
+test("healthy texture acquisition counts pass while analytics console noise is ignored", () => {
+  const scenario = SCENARIOS[0];
+  const observation = healthyObservation(scenario);
+  observation.consoleErrors.push(
+    "Failed to load resource: net::ERR_BLOCKED_BY_CLIENT https://va.vercel-scripts.com/v1/speed-insights/script.js"
+  );
+  assert.deepEqual(scenarioFailures(scenario, observation), []);
+  assert.equal(isRenderingConsoleError(observation.consoleErrors[0]), false);
+});
+
+test("chromeless Particle Orbit does not need a document theme marker", () => {
+  const scenario = SCENARIOS[2];
+  const observation = healthyObservation(scenario);
+  observation.theme = "normal";
+  assert.deepEqual(scenarioFailures(scenario, observation), []);
+});
+
+test("caught v1 shader errors fail even without an uncaught page exception", () => {
+  const scenario = SCENARIOS[0];
+  const observation = healthyObservation(scenario);
+  observation.consoleErrors.push(
+    "Prism background failed to render. VGPU-SHADER-SOURCE-UNPREPARED: received raw WGSL or a v1 artifact"
+  );
+  assert.match(
+    scenarioFailures(scenario, observation).join("\n"),
+    /render console error.*VGPU-SHADER-SOURCE-UNPREPARED/u
+  );
+});
+
+test("missing WebGPU, validation errors, and single-acquisition output cannot pass", () => {
+  const scenario = SCENARIOS[2];
+  const observation = healthyObservation(scenario);
+  observation.smoke.webgpu = false;
+  observation.smoke.gpuErrors.push("captured: incompatible bind group layout");
+  observation.smoke.submissions = 1;
+  observation.smoke.canvases[0].currentTextures = 1;
+  const failures = scenarioFailures(scenario, observation).join("\n");
+  assert.match(failures, /WebGPU is unavailable/u);
+  assert.match(failures, /GPU validation/u);
+  assert.match(failures, /only 1 GPU queue submissions/u);
+  assert.match(failures, /recorded only 1 texture acquisitions/u);
+});
+
+test("the preview error boundary remains a fatal rendering signal", () => {
+  const scenario = SCENARIOS[2];
+  const observation = healthyObservation(scenario);
+  observation.previewError = "Preview error\nVGPU-SHADER-SOURCE-UNPREPARED";
+  assert.match(
+    scenarioFailures(scenario, observation).join("\n"),
+    /preview error UI/u
+  );
+});
+
+test("errors emitted during screenshot capture fail the scenario before close", async () => {
+  const scenario = SCENARIOS[0];
+  const fake = fakeScenarioPage(scenario, {
+    onObservation(state) {
+      if (state.observationCount === 2) {
+        state.observation.smoke.submissions += 1;
+        state.observation.smoke.canvases[0].currentTextures += 1;
+      }
+    },
+    onCapture({ emit, state }) {
+      emit({
+        method: "Runtime.consoleAPICalled",
+        params: {
+          type: "error",
+          args: [
+            {
+              value:
+                "Prism background failed to render: VGPU-SHADER-SOURCE-UNPREPARED",
+            },
+          ],
+        },
+      });
+      state.observation.smoke.gpuErrors.push("captured: invalid shader module");
+    },
+  });
+  const artifactDir = await mkdtemp(join(tmpdir(), "vgpu-browser-smoke-"));
+  try {
+    const result = await browserSmoke.runScenario(
+      "https://example.test",
+      artifactDir,
+      scenario,
+      { launch: async () => fake.page, settle: async () => {} }
+    );
+    assert.equal(result.ok, false);
+    assert.match(
+      result.failures.join("\n"),
+      /render console error.*VGPU-SHADER-SOURCE-UNPREPARED/u
+    );
+    assert.match(
+      result.failures.join("\n"),
+      /GPU validation.*invalid shader module/u
+    );
+    assert.equal(fake.state.closed, true);
+  } finally {
+    await rm(artifactDir, { recursive: true, force: true });
+  }
+});
+
+test("server readiness aborts and cleans up a stalled response at its deadline", async () => {
+  let activeRequests = 0;
+  let aborted = false;
+  const stalledFetch = (_url, { signal }) =>
+    new Promise((_resolve, reject) => {
+      activeRequests += 1;
+      const guard = setTimeout(() => {
+        activeRequests -= 1;
+        reject(new Error("readiness did not abort the stalled response"));
+      }, 1000);
+      signal.addEventListener(
+        "abort",
+        () => {
+          clearTimeout(guard);
+          aborted = true;
+          activeRequests -= 1;
+          reject(signal.reason);
+        },
+        { once: true }
+      );
+    });
+  const startedAt = Date.now();
+  await assert.rejects(
+    browserSmoke.waitForServer(
+      "http://127.0.0.1:1",
+      { exitCode: null, signalCode: null },
+      { fetchImpl: stalledFetch, timeoutMs: 40 }
+    ),
+    /did not become ready within 40 ms/u
+  );
+  assert.equal(aborted, true);
+  assert.equal(activeRequests, 0);
+  assert.ok(Date.now() - startedAt < 1000);
+});
+
+test("a renderer stalled after its initial output fails the settle check", async () => {
+  const scenario = SCENARIOS[2];
+  const fake = fakeScenarioPage(scenario);
+  const artifactDir = await mkdtemp(join(tmpdir(), "vgpu-browser-smoke-"));
+  try {
+    const result = await browserSmoke.runScenario(
+      "https://example.test",
+      artifactDir,
+      scenario,
+      { launch: async () => fake.page, settle: async () => {} }
+    );
+    assert.equal(result.ok, false);
+    assert.match(
+      result.failures.join("\n"),
+      /queue submissions did not increase/u
+    );
+    assert.match(
+      result.failures.join("\n"),
+      /texture acquisitions did not increase/u
+    );
+  } finally {
+    await rm(artifactDir, { recursive: true, force: true });
+  }
+});
