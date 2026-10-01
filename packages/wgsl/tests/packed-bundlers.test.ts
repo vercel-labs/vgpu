@@ -8,6 +8,7 @@ import wgslVitePlugin from "@vgpu/wgsl/loader-vite";
 import { decodePackedMetadata } from "../src/packed/decode.ts";
 import { encodePackedMetadata } from "../src/packed/encode.ts";
 import { PACKED_QUERY_MAX_BYTES } from "../src/loader-shared/packed-query.ts";
+import { selectPackedReflection } from "../src/loader-shared/packed-selection.ts";
 import { build as viteBuild, createServer, type InlineConfig, type ViteDevServer } from "vite";
 import webpack, { type Compiler, type Configuration, type Stats, type Watching } from "webpack";
 import type { RollupWatcher } from "rollup";
@@ -100,6 +101,61 @@ describe.each(harnesses)("$name packed metadata graph", (harness) => {
       expect(cold.reflection.structs.some((item) => item.name === "ColdOnlyRecord")).toBe(true);
       expect(cold.reflection).not.toBe(shaderA.reflection);
       expect(cold.reflection).not.toBe(shaderB.reflection);
+    } finally {
+      await fixture.dispose();
+    }
+  }, 30_000);
+
+  test("removes stale packed helpers when one eager shader becomes plain and restores them on recovery", async () => {
+    const fixture = await createPackedBundlerFixture();
+    const shaderAPath = join(fixture.root, "src/shader-a.wgsl");
+    const shaderBPath = join(fixture.root, "src/shader-b.wgsl");
+    const transitionEntry = join(fixture.root, "src/transition-entry.mjs");
+    const cache = join(fixture.root, ".cache-transition", harness.name.toLowerCase());
+    try {
+      const originalA = await readFile(shaderAPath, "utf8");
+      const original = await readFile(shaderBPath, "utf8");
+      await writeFile(transitionEntry, `
+import shaderA from "./shader-a.wgsl";
+import shaderB from "./shader-b.wgsl";
+export const eager = [shaderA, shaderB];
+export async function loadCold() { return shaderA; }
+`);
+      const packed = await harness.build(fixture, { cache, entry: transitionEntry });
+      expect(packed.queryIds.length).toBeGreaterThan(0);
+      expect(packed.emittedText).toContain("decodePackedMetadata");
+      expectExactLoaderArtifact(packed.eager[0], shaderAPath);
+      expectExactLoaderArtifact(packed.eager[1], shaderBPath);
+      expect(selectPackedReflection(packed.eager[0].reflection)).not.toBeNull();
+      expect(selectPackedReflection(packed.eager[1].reflection)).not.toBeNull();
+
+      await writeFile(shaderBPath, singleUniformFallbackShader("B"));
+      const mixed = await harness.build(fixture, { cache, entry: transitionEntry });
+      expectExactLoaderArtifact(mixed.eager[0], join(fixture.root, "src/shader-a.wgsl"));
+      expectExactLoaderArtifact(mixed.eager[1], shaderBPath);
+      expect(selectPackedReflection(mixed.eager[0].reflection)).not.toBeNull();
+      expect(selectPackedReflection(mixed.eager[1].reflection)).toBeNull();
+      expect(mixed.emittedText).toContain("decodePackedMetadata");
+      expect(mixed.reusedQuery).toBe(false);
+
+      await writeFile(shaderAPath, singleUniformFallbackShader("A"));
+      const plain = await harness.build(fixture, { cache, entry: transitionEntry });
+      expect(plain.queryIds).toEqual([]);
+      expect(plain.emittedText).not.toContain("decodePackedMetadata");
+      expectExactLoaderArtifact(plain.eager[0], shaderAPath);
+      expectExactLoaderArtifact(plain.eager[1], shaderBPath);
+      expect(selectPackedReflection(plain.eager[0].reflection)).toBeNull();
+      expect(selectPackedReflection(plain.eager[1].reflection)).toBeNull();
+
+      await Promise.all([
+        writeFile(shaderAPath, originalA),
+        writeFile(shaderBPath, original),
+      ]);
+      const recovered = await harness.build(fixture, { cache, entry: transitionEntry });
+      expect(recovered.queryIds.length).toBeGreaterThan(0);
+      expect(recovered.emittedText).toContain("decodePackedMetadata");
+      expect(recovered.queryIds).toEqual(packed.queryIds);
+      expect(recovered.eager).toStrictEqual(packed.eager);
     } finally {
       await fixture.dispose();
     }
@@ -631,6 +687,16 @@ function expectExactLoaderArtifact(artifact: ShaderSource, originalDiagnosticPat
     "producer",
     "functionExports",
   ]);
+}
+
+function singleUniformFallbackShader(marker: "A" | "B"): string {
+  const members = Array.from({ length: 16 }, (_, index) => {
+    const type = index % 3 === 0 ? "mat4x4f" : index % 3 === 1 ? "array<vec4f, 4>" : "vec4f";
+    return `  plain${index}: ${type},`;
+  }).join("\n");
+  return `struct PlainOnlyRecord${marker} {\n${members}\n}
+@group(0) @binding(0) var<uniform> plain${marker}: PlainOnlyRecord${marker};
+@compute @workgroup_size(1) fn main_${marker}() { _ = plain${marker}.plain0; }`;
 }
 
 function normalizeModuleId(id: string): string {

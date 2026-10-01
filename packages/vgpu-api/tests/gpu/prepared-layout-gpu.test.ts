@@ -52,6 +52,28 @@ struct HalfParams {
 }
 `;
 
+const PREPARED_PACKED_F16 = `
+enable f16;
+struct PackedHalfFirst {
+${halfVectorMembers("a", 24)}
+}
+struct PackedHalfSecond {
+${halfVectorMembers("b", 25)}
+}
+@group(0) @binding(0) var<uniform> first: PackedHalfFirst;
+@group(0) @binding(1) var<uniform> second: PackedHalfSecond;
+@group(0) @binding(2) var<storage, read_write> output: array<vec4f>;
+
+@compute @workgroup_size(1) fn cs_main() {
+  output[0] = vec4f(first.a0);
+  output[1] = vec4f(second.b24);
+}
+
+@fragment fn fs_main() -> @location(0) vec4f {
+  return vec4f(f32(first.a23.x), f32(second.b0.y), f32(first.a15.z), f32(second.b16.w));
+}
+`;
+
 const PREPARED_LARGE = `
 struct LargeParams {
   m0: mat4x4f,
@@ -81,9 +103,11 @@ struct LargeParams {
 
 const F32_PATH = "<native-prepared-layout:f32>";
 const F16_PATH = "<native-prepared-layout:f16>";
+const PACKED_F16_PATH = "<native-prepared-layout:packed-f16>";
 const LARGE_PATH = "<native-prepared-layout:large>";
 const PREPARED_F32_ARTIFACT = prepareShader(PREPARED_F32, F32_PATH);
 const PREPARED_F16_ARTIFACT = prepareShader(PREPARED_F16, F16_PATH);
+const PREPARED_PACKED_F16_ARTIFACT = prepareShader(PREPARED_PACKED_F16, PACKED_F16_PATH);
 const PREPARED_LARGE_ARTIFACT = prepareShader(PREPARED_LARGE, LARGE_PATH);
 
 describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("prepared shader layout packing on a real GPU", () => {
@@ -138,6 +162,41 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("prepared shader layout pa
           },
           [1.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5],
           [6.5, 9.5, 5.5, 4.5],
+        );
+      }
+    } finally {
+      gpu.dispose();
+    }
+  });
+
+  test("qualifying shader-f16 uniforms execute from the naturally packed loader path", async ({ skip }) => {
+    const emitted = await loaderArtifact(PREPARED_PACKED_F16, PACKED_F16_PATH, true);
+    let gpu: Awaited<ReturnType<typeof init>>;
+    try {
+      gpu = await init({ requiredFeatures: ["shader-f16"] });
+    } catch (error) {
+      if (error instanceof Error && (error as Error & { readonly code?: string }).code === "VGPU-FEATURE-UNSUPPORTED") {
+        skip(`shader-f16 unsupported by the native adapter: ${error.message}`);
+      }
+      throw error;
+    }
+
+    const first = Object.fromEntries(Array.from({ length: 24 }, (_, index) => [
+      `a${index}`,
+      [index * 4 + 1, index * 4 + 2, index * 4 + 3, index * 4 + 4],
+    ]));
+    const second = Object.fromEntries(Array.from({ length: 25 }, (_, index) => [
+      `b${index}`,
+      [index * 4 + 101, index * 4 + 102, index * 4 + 103, index * 4 + 104],
+    ]));
+    try {
+      for (const prepared of [PREPARED_PACKED_F16_ARTIFACT, emitted]) {
+        await expectPreparedPacking(
+          gpu,
+          prepared,
+          { first, second },
+          [1, 2, 3, 4, 197, 198, 199, 200],
+          [93, 102, 63, 168],
         );
       }
     } finally {
@@ -213,4 +272,8 @@ function sequence(start: number, length: number): number[] {
 
 function vectors(start: number): number[][] {
   return Array.from({ length: 4 }, (_, vector) => sequence(start + vector * 4, 4));
+}
+
+function halfVectorMembers(prefix: string, count: number): string {
+  return Array.from({ length: count }, (_, index) => `  ${prefix}${index}: vec4h,`).join("\n");
 }

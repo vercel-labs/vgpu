@@ -167,6 +167,44 @@ console.log(JSON.stringify({
     expectExact(webpackArtifact.default ?? webpackArtifact as never, sourcePath);
   }, 30_000);
 
+  test("a plain package graph omits the decoder, selector, producer and parser", async () => {
+    const source = plainConsumerShader();
+    const sourcePath = join(fixture.consumer, "plain-shader.wgsl");
+    const entryPath = join(fixture.consumer, "plain-entry.mjs");
+    await writeFile(sourcePath, source);
+    await writeFile(entryPath, 'import shader from "./plain-shader.wgsl"; export default shader;\n');
+
+    const viteLoader = await import(pathToFileURL(join(fixture.wgslRoot, "dist/loader-vite/index.js")).href) as {
+      readonly default: (options?: unknown) => unknown;
+    };
+    const vite = singleViteBundle(await viteBuild({
+      root: fixture.consumer,
+      logLevel: "silent",
+      plugins: [viteLoader.default()],
+      build: { write: false, minify: false, lib: { entry: entryPath, formats: ["es"], fileName: "plain" } },
+    }));
+    expectPlainGraph(vite.code, vite.moduleIds);
+    expectNoWorkspacePackage(vite.moduleIds);
+    expectPlainExact(await importDataShader(vite.code), sourcePath);
+
+    const output = join(fixture.consumer, "plain-webpack-dist");
+    const stats = await runWebpack({
+      mode: "production",
+      target: "node",
+      context: fixture.consumer,
+      entry: entryPath,
+      output: { path: output, filename: "bundle.cjs", library: { type: "commonjs2" } },
+      module: { rules: [{ test: /\.wgsl$/u, loader: join(fixture.wgslRoot, "dist/loader-webpack/index.js") }] },
+      optimization: { minimize: false },
+    });
+    const code = await readFile(join(output, "bundle.cjs"), "utf8");
+    const moduleIds = webpackModuleIds(stats);
+    expectPlainGraph(code, moduleIds);
+    expectNoWorkspacePackage(moduleIds);
+    const artifact = require(join(output, "bundle.cjs")) as { readonly default?: ShaderSource };
+    expectPlainExact(artifact.default ?? artifact as never, sourcePath);
+  }, 30_000);
+
   test("a nested-only loader resolves its own helper, anchor and wgsl-std dependency", async () => {
     const nested = await createNestedConsumer(fixture);
     try {
@@ -295,6 +333,16 @@ ${bindings}
 `;
 }
 
+function plainConsumerShader(): string {
+  const members = Array.from({ length: 16 }, (_, index) => {
+    const type = index % 3 === 0 ? "mat4x4f" : index % 3 === 1 ? "array<vec4f, 4>" : "vec4f";
+    return `m${index}: ${type},`;
+  }).join("\n");
+  return `struct Params {\n${members}\n}
+@group(0) @binding(0) var<uniform> params: Params;
+@compute @workgroup_size(1) fn main() { _ = params.m0; }`;
+}
+
 function singleViteBundle(result: Awaited<ReturnType<typeof viteBuild>>): {
   readonly code: string;
   readonly moduleIds: readonly string[];
@@ -335,6 +383,25 @@ function expectPackedGraph(code: string, moduleIds: readonly string[], wgslRoot:
   )).toBe(true);
 }
 
+function expectPlainGraph(code: string, moduleIds: readonly string[]): void {
+  const normalized = moduleIds.map(normalize);
+  expect(code).not.toContain("decodePackedMetadata");
+  for (const forbidden of [
+    "/packed-metadata",
+    "/packed/decode",
+    "/packed/encode",
+    "/loader-shared/packed-selection",
+    "/prepare",
+    "/scanner",
+    "/parser",
+    "/reflection",
+    "node:zlib",
+  ]) {
+    expect(normalized.some((id) => id.includes(forbidden)), `unexpected plain-graph module ${forbidden}`).toBe(false);
+  }
+  expect(normalized.some((id) => id.includes("?__vgpu_packed_v1="))).toBe(false);
+}
+
 function expectNoWorkspacePackage(moduleIds: readonly string[]): void {
   const workspace = `${normalize(workspaceWgsl)}/`;
   expect(moduleIds.map(normalize).some((id) => id.includes(workspace))).toBe(false);
@@ -351,6 +418,14 @@ function expectExact(artifact: ShaderSource, diagnosticPath: string): void {
     functionExports: artifact.functionExports,
   }, diagnosticPath));
   expect(Buffer.byteLength(JSON.stringify(artifact.reflection))).toBeGreaterThanOrEqual(32 * 1024);
+}
+
+function expectPlainExact(artifact: ShaderSource, diagnosticPath: string): void {
+  expect(artifact).toStrictEqual(prepareShader({
+    wgsl: artifact.wgsl,
+    functionExports: artifact.functionExports,
+  }, diagnosticPath));
+  expect(Buffer.byteLength(JSON.stringify(artifact.reflection))).toBeGreaterThanOrEqual(16 * 1024);
 }
 
 function runWebpack(config: Configuration): Promise<Stats> {

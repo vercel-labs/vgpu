@@ -24,8 +24,10 @@ const MAX_SHARED_MODULES = 16;
 const MAX_TRIAL_REENCODES = 256;
 // Minified production decoder is 4,415 raw bytes; round up to the next 512-byte boundary.
 const DECODER_RAW_BYTES = 4608;
+const MIN_SUBSTANTIAL_LAYOUT_BYTES = DECODER_RAW_BYTES / 2;
 const HELPER_IMPORT_BYTES = 96;
 const SHARED_MODULE_BYTES = 128;
+const MISSING = Symbol("missing own data property");
 
 interface Candidate {
   readonly value: unknown;
@@ -103,6 +105,7 @@ function createInlinePlan(reflection: ShaderReflection): {
   if (reflectionKey === null || table === null) return null;
   const reflectionBytes = utf8Bytes(reflectionKey);
   if (reflectionBytes < MIN_REFLECTION_BYTES) return null;
+  if (!hasSubstantialUniformLayouts(reflection)) return null;
   return {
     reflectionKey,
     reflectionBytes,
@@ -113,6 +116,48 @@ function createInlinePlan(reflection: ShaderReflection): {
       score: tableBytes(table) + DECODER_RAW_BYTES + HELPER_IMPORT_BYTES,
     },
   };
+}
+
+function hasSubstantialUniformLayouts(reflection: ShaderReflection): boolean {
+  try {
+    const bindings = ownDataValue(reflection, "bindings");
+    if (!Array.isArray(bindings)) return false;
+    const length = ownDataValue(bindings, "length");
+    if (typeof length !== "number" || !Number.isSafeInteger(length) || length < 0) return false;
+
+    // This conservative proxy is scaled from decoder cost, not a break-even proof.
+    // Complete names remain identity, so it can admit unrelated uniforms and miss storage or single-uniform reuse.
+    // Calibration has one positive app family and an isolated +2,024 gzip-byte false positive;
+    // it does not imply universal gzip, Brotli or CPU improvement.
+    const keys = new Set<string>();
+    let serializations = 0;
+    for (let index = 0; index < length && index < MAX_CANDIDATE_VISITS; index++) {
+      const binding = ownDataValue(bindings, String(index));
+      if (!isRecord(binding)) continue;
+      if (ownDataValue(binding, "kind") !== "buffer") continue;
+      if (ownDataValue(binding, "addressSpace") !== "uniform") continue;
+      const layout = ownDataValue(binding, "layout");
+      if (layout === MISSING) continue;
+      if (serializations >= MAX_CANDIDATE_SERIALIZATIONS) return false;
+      serializations++;
+      const key = packedDataKey(layout);
+      if (key === null || utf8Bytes(key) < MIN_SUBSTANTIAL_LAYOUT_BYTES) continue;
+      keys.add(key);
+      if (keys.size === 2) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function ownDataValue(value: object, key: PropertyKey): unknown | typeof MISSING {
+  const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  return descriptor !== undefined && "value" in descriptor ? descriptor.value : MISSING;
+}
+
+function isRecord(value: unknown): value is Record<PropertyKey, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isUseful(score: number, reflectionBytes: number): boolean {

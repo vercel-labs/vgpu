@@ -107,6 +107,9 @@ test("webpack loader chooses safe packed imports for webpack, Turbopack and unkn
     _compiler: { webpack: {} },
     loaders: [{ path: loaderPath }],
     loaderIndex: 0,
+    async: () => {
+      throw new Error("sync packed leaf unexpectedly requested asynchronous mode");
+    },
   }, source);
   const turbopackCode = wgslWebpackLoader.call({
     resourcePath: turbopackPath,
@@ -166,12 +169,18 @@ test("plain fallback structurally emits hostile quoted __proto__ text", async ()
   expect(await evaluateShaderModule(code)).toEqual(prepareShader({ wgsl: source, functionExports: [] }, "/hostile.wgsl"));
 });
 
-test("packed emission preserves f16 layouts and unresolved workgroup sentinels", async () => {
-  const source = f16LayoutShader();
+test("storage-only f16 stays plain while qualifying f16 uniforms preserve exact metadata", async () => {
+  const storageSource = f16LayoutShader();
+  const storagePath = "/plain-storage-f16.wgsl";
+  const storageCode = shaderSourceModule(storageSource, storagePath);
+  expect(storageCode).not.toContain("decodePackedMetadata");
+  expect(await evaluateShaderModule(storageCode))
+    .toEqual(prepareShader({ wgsl: storageSource, functionExports: [] }, storagePath));
+
+  const source = qualifyingF16LayoutShader();
   const path = "/packed-f16.wgsl";
   const code = shaderSourceModule(source, path);
   const emitted = await evaluateShaderModule(code);
-
   expect(code).toContain("decodePackedMetadata");
   expect(emitted).toEqual(prepareShader({ wgsl: source, functionExports: [] }, path));
   expect(emitted.reflection.featuresRequired).toContain("f16");
@@ -258,6 +267,10 @@ test("candidate-visit exhaustion falls back to a bounded inline packed plan", ()
     nested: Array.from({ length: 7 }, () => []),
   };
   const reflection = {
+    bindings: [
+      { kind: "buffer", addressSpace: "uniform", layout: { name: "first", data: "a".repeat(2304) } },
+      { kind: "buffer", addressSpace: "uniform", layout: { name: "second", data: "b".repeat(2304) } },
+    ],
     aliases: Array.from({ length: 8192 }, () => repeated),
   } as unknown as ShaderReflection;
   const plan = selectPackedReflection(reflection);
@@ -270,7 +283,7 @@ test("candidate-visit exhaustion falls back to a bounded inline packed plan", ()
 test("packed identities are independent of call order and process state", async () => {
   const fixtures = [
     { path: "/order-a.wgsl", source: layoutShader(8) },
-    { path: "/order-b.wgsl", source: f16LayoutShader() },
+    { path: "/order-b.wgsl", source: qualifyingF16LayoutShader() },
   ];
   const local = new Map(fixtures.map((fixture) => [
     fixture.path,
@@ -316,6 +329,18 @@ struct Params {\n${members}\n}
 @group(0) @binding(3) var<storage, read> params3: Params;
 @id(7) override WIDTH: u32;
 @compute @workgroup_size(WIDTH, 2, 1) fn main() { let value = params0.m0[0]; }`;
+}
+
+function qualifyingF16LayoutShader(): string {
+  const first = Array.from({ length: 10 }, (_, index) => `a${index}: vec4<f16>,`).join("\n");
+  const second = Array.from({ length: 11 }, (_, index) => `b${index}: vec4<f16>,`).join("\n");
+  return `enable f16;
+struct HalfFirst {\n${first}\n}
+struct HalfSecond {\n${second}\n}
+@group(0) @binding(0) var<uniform> first: HalfFirst;
+@group(0) @binding(1) var<uniform> second: HalfSecond;
+@id(7) override WIDTH: u32;
+@compute @workgroup_size(WIDTH, 2, 1) fn main() { _ = first.a0; _ = second.b0; }`;
 }
 
 function webpackAsync(source: string, resourcePath: string, dependencies: string[] = []): Promise<string> {
