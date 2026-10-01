@@ -6,7 +6,7 @@ import { build } from "esbuild";
 import { expect, test } from "vitest";
 import { prepareShader } from "@vgpu/wgsl/prepare";
 import type { ShaderSource } from "@vgpu/wgsl";
-import { docsWgslPlugin } from "../../../apps/docs/scripts/esbuild-wgsl-plugin.mjs";
+import { docsRendererPlugins, docsWgslPlugin } from "../../../apps/docs/scripts/esbuild-wgsl-plugin.mjs";
 
 const REPO_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 
@@ -53,7 +53,7 @@ test("esbuild keeps an ineligible WGSL import on the exact literal parser-free p
   }
 });
 
-test("esbuild bundles the real atmosphere renderer through shared metadata without initializing a GPU", async () => {
+test.each(["standalone", "gallery"])("esbuild bundles Atmosphere with the %s plugins without initializing a GPU", async (mode) => {
   const root = await realpath(await mkdtemp(join(tmpdir(), "vgpu-docs-atmosphere-esbuild-")));
   const bundlePath = join(root, "atmosphere.mjs");
   try {
@@ -65,7 +65,7 @@ test("esbuild bundles the real atmosphere renderer through shared metadata witho
       format: "esm",
       metafile: true,
       external: ["vgpu", "vgpu/node"],
-      plugins: [docsWgslPlugin()],
+      plugins: mode === "gallery" ? docsRendererPlugins() : [docsWgslPlugin()],
       logLevel: "silent",
     });
     const inputs = Object.keys(result.metafile.inputs).map(normalizePath);

@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import typegpu from 'unplugin-typegpu/esbuild';
 import { transformWgsl } from '@vgpu/wgsl/loader-vite';
 
 const packedMetadataNamespace = 'docs-packed-wgsl';
@@ -27,4 +28,10 @@ export function docsWgslPlugin() {
       });
     },
   };
+}
+
+/** @returns {import('esbuild').Plugin[]} */
+export function docsRendererPlugins() {
+  // Handle virtual WGSL modules before TypeGPU's broad onLoad hook reads paths.
+  return [docsWgslPlugin(), typegpu()];
 }

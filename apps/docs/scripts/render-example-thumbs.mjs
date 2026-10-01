@@ -2,10 +2,9 @@ import { copyFile, mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
-import typegpu from 'unplugin-typegpu/esbuild';
 import { init, target } from 'vgpu/node';
 import { comparePngSnapshot, writePng } from '@vgpu/cli/lib/snapshot/png.js';
-import { docsWgslPlugin } from './esbuild-wgsl-plugin.mjs';
+import { docsRendererPlugins } from './esbuild-wgsl-plugin.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const docsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -532,7 +531,7 @@ async function loadRenderers(slugs) {
     format: 'esm',
     sourcemap: false,
     external: ['pngjs', 'vgpu', 'vgpu/node'],
-    plugins: [typegpu(), docsWgslPlugin()],
+    plugins: docsRendererPlugins(),
     logLevel: 'silent',
   });
   const module = await import(pathToFileURL(rendererBundle).href);
