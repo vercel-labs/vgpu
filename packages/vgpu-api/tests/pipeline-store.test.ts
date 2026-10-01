@@ -388,7 +388,7 @@ test("entry points participate in shared pipeline cache keys", async () => {
 test("pipelineKeyOf appends fragmentKey only when present", () => {
   const module = {} as GPUShaderModule;
   const pipelineLayout = {} as GPUPipelineLayout;
-  const parts = { module, pipelineLayout, signature: { colors: ["rgba8unorm"] as const } };
+  const parts = { vertexModule: module, fragmentModule: module, pipelineLayout, signature: { colors: ["rgba8unorm"] as const } };
   const base = pipelineKeyOf(parts);
 
   expect(pipelineKeyOf({ ...parts, fragmentKey: undefined })).toBe(base);

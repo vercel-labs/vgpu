@@ -6,7 +6,6 @@ export interface PackedBundlerFixture {
   readonly root: string;
   readonly entry: string;
   readonly transitive: string;
-  readonly missingDependency: string;
   readonly output: string;
   dispose(): Promise<void>;
 }
@@ -16,7 +15,6 @@ export async function createPackedBundlerFixture(): Promise<PackedBundlerFixture
   const source = join(root, "src");
   const output = join(root, "dist");
   const transitive = join(source, "shared.wgsl");
-  const missingDependency = join(source, "missing.wgsl");
   await Promise.all([
     mkdir(source, { recursive: true }),
     mkdir(output, { recursive: true }),
@@ -55,7 +53,6 @@ export async function loadCold() {
     root,
     entry,
     transitive,
-    missingDependency,
     output,
     dispose: () => rm(root, { recursive: true, force: true }),
   };

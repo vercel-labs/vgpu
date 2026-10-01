@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { prepareShader } from "@vgpu/wgsl/prepare";
-import { init, compute, draw, effect } from "../src/mock.ts";
+import { getMockGPUDeviceInstrumentation, init, compute, draw, effect } from "../src/mock.ts";
 import { drawReflection } from "../src/draw.ts";
 import { effectDraw } from "../src/effect.ts";
 import { shaderSourceChecksum } from "../src/shader-source-checksum.ts";
@@ -64,6 +64,41 @@ test("compute(gpu, ...) accepts ShaderSource", async () => {
   const job = compute(gpu, prepareShader(COMPUTE), { label: "artifact-compute" });
 
   job.set({ params: { value: 1 } });
+  gpu.dispose();
+});
+
+const BUFFER_CONSTRUCTORS = [
+  { name: "draw", source: DRAW, construct: (gpu: any, shader: any) => draw(gpu, { shader }) },
+  { name: "effect", source: FRAGMENT, construct: (gpu: any, shader: any) => effect(gpu, shader) },
+  { name: "compute", source: COMPUTE, construct: (gpu: any, shader: any) => compute(gpu, shader) },
+];
+
+test.each(BUFFER_CONSTRUCTORS.flatMap(({ name, source, construct }) => [
+  {
+    name,
+    source,
+    construct,
+    mutation: "missing packing layout",
+    path: "reflection.bindings[0].layout",
+    mutate(binding: any) { delete binding.layout; },
+  },
+  {
+    name,
+    source,
+    construct,
+    mutation: "a binding-layout type that contradicts its address space",
+    path: "reflection.bindings[0].bindingLayout.buffer.type",
+    mutate(binding: any) { binding.bindingLayout.buffer.type = "storage"; },
+  },
+]))("$name rejects $mutation before creating GPU objects", async ({ source, construct, mutate, path }) => {
+  const gpu = await init();
+  const artifact = mutableShader(source);
+  mutate(artifact.reflection.bindings[0]);
+  const calls = getMockGPUDeviceInstrumentation(gpu.device.gpu).calls;
+  const before = { ...calls };
+
+  expectInvalidShaderAt(() => construct(gpu, artifact), path);
+  expect(calls).toEqual(before);
   gpu.dispose();
 });
 
@@ -239,19 +274,20 @@ alias Items = array<ItemAlias>;
 });
 
 test.each([
-  ["direct scalar", "", "f32", "_ = value;"],
-  ["aliased scalar f16", "enable f16; alias Value = f16;", "Value", "_ = value;"],
-  ["direct vector", "", "vec3<u32>", "_ = value.x;"],
-  ["aliased vector", "alias Scalar = f32; alias Value = vec2<Scalar>;", "Value", "_ = value.x;"],
-  ["direct padded struct", "struct Value { @align(16) @size(16) item: f32 }", "Value", "_ = value.item;"],
-  ["aliased struct", "struct Value { item: vec2<f32> } alias ValueAlias = Value;", "ValueAlias", "_ = value.item.x;"],
-  ["direct fixed array", "", "array<vec2<f32>, 2>", "_ = value[0].x;"],
-  ["aliased runtime array", "alias Item = u32; alias Value = array<Item>;", "Value", "_ = value[0];"],
-] as const)("producer-valid %s binding layout is accepted", async (_case, declarations, type, use) => {
+  ["direct scalar", "", "f32", "read", "_ = value;"],
+  ["aliased scalar f16", "enable f16; alias Value = f16;", "Value", "read", "_ = value;"],
+  ["direct vector", "", "vec3<u32>", "read", "_ = value.x;"],
+  ["aliased vector", "alias Scalar = f32; alias Value = vec2<Scalar>;", "Value", "read", "_ = value.x;"],
+  ["direct padded struct", "struct Value { @align(16) @size(16) item: f32 }", "Value", "read", "_ = value.item;"],
+  ["aliased struct", "struct Value { item: vec2<f32> } alias ValueAlias = Value;", "ValueAlias", "read", "_ = value.item.x;"],
+  ["direct fixed array", "", "array<vec2<f32>, 2>", "read", "_ = value[0].x;"],
+  ["aliased runtime array", "alias Item = u32; alias Value = array<Item>;", "Value", "read", "_ = value[0];"],
+  ["read-write storage", "struct Value { item: u32 }", "Value", "read_write", "value.item += 1;"],
+] as const)("producer-valid %s binding layout is accepted", async (_case, declarations, type, access, use) => {
   const gpu = await init();
   const artifact = prepareShader(`
 ${declarations}
-@group(0) @binding(0) var<storage, read> value: ${type};
+@group(0) @binding(0) var<storage, ${access}> value: ${type};
 @compute @workgroup_size(1) fn main() { ${use} }
 `);
 

@@ -33,10 +33,12 @@ test("topology and stripIndexFormat participate in pipeline descriptors and keys
     expect(mock.createRenderPipelineDescriptors.at(-1)?.primitive).toMatchObject({ topology: "line-strip", stripIndexFormat: "uint16" });
     expect(mock.calls.createRenderPipeline).toBe(2);
 
-    const parts = { module: {} as GPUShaderModule, pipelineLayout: {} as GPUPipelineLayout, signature: { colors: ["rgba8unorm"] as const }, vertexBufferLayouts: a.vertexBufferLayouts, topology: a.topology, stripIndexFormat: a.stripIndexFormat };
+    const module = {} as GPUShaderModule;
+    const parts = { vertexModule: module, fragmentModule: module, pipelineLayout: {} as GPUPipelineLayout, signature: { colors: ["rgba8unorm"] as const }, vertexBufferLayouts: a.vertexBufferLayouts, topology: a.topology, stripIndexFormat: a.stripIndexFormat };
     expect(pipelineKeyOf(parts)).toBe(pipelineKeyOf({ ...parts }));
     expect(pipelineKeyOf({ ...parts, topology: "line-strip" })).not.toBe(pipelineKeyOf(parts));
-    const meshless = { module: {} as GPUShaderModule, pipelineLayout: {} as GPUPipelineLayout, signature: { colors: ["rgba8unorm"] as const } };
+    const meshlessModule = {} as GPUShaderModule;
+    const meshless = { vertexModule: meshlessModule, fragmentModule: meshlessModule, pipelineLayout: {} as GPUPipelineLayout, signature: { colors: ["rgba8unorm"] as const } };
     expect(pipelineKeyOf({ ...meshless, topology: undefined, stripIndexFormat: undefined })).toBe(pipelineKeyOf(meshless));
   } finally {
     gpu.dispose();
@@ -57,7 +59,8 @@ test("cull and frontFace participate in pipeline descriptors and keys", async ()
     expect(mock.createRenderPipelineDescriptors.at(-1)?.primitive).toEqual({ topology: "triangle-list" });
     expect(mock.calls.createRenderPipeline).toBe(3);
 
-    const parts = { module: {} as GPUShaderModule, pipelineLayout: {} as GPUPipelineLayout, signature: { colors: ["rgba8unorm"] as const } };
+    const module = {} as GPUShaderModule;
+    const parts = { vertexModule: module, fragmentModule: module, pipelineLayout: {} as GPUPipelineLayout, signature: { colors: ["rgba8unorm"] as const } };
     expect(pipelineKeyOf({ ...parts, cullMode: "back" })).not.toBe(pipelineKeyOf(parts));
     expect(pipelineKeyOf({ ...parts, cullMode: "back", frontFace: "cw" })).not.toBe(pipelineKeyOf({ ...parts, cullMode: "back" }));
     expect(pipelineKeyOf({ ...parts, cullMode: undefined, frontFace: undefined })).toBe(pipelineKeyOf(parts));

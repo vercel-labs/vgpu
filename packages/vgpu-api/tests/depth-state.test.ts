@@ -57,7 +57,8 @@ test("targets without depth keep depthStencil undefined regardless of depth opti
 });
 
 test("depth participates in pipeline keys", () => {
-  const parts = { module: {} as GPUShaderModule, pipelineLayout: {} as GPUPipelineLayout, signature: { colors: ["rgba8unorm"] as const, depth: "depth24plus" as const } };
+  const module = {} as GPUShaderModule;
+  const parts = { vertexModule: module, fragmentModule: module, pipelineLayout: {} as GPUPipelineLayout, signature: { colors: ["rgba8unorm"] as const, depth: "depth24plus" as const } };
   expect(pipelineKeyOf({ ...parts, depthKey: "1~less-equal~0~0~0" })).not.toBe(pipelineKeyOf(parts));
   expect(pipelineKeyOf({ ...parts, depthKey: "1~less-equal~0~0~0" })).not.toBe(pipelineKeyOf({ ...parts, depthKey: "0~always~0~0~0" }));
   expect(pipelineKeyOf({ ...parts, depthKey: undefined })).toBe(pipelineKeyOf(parts));

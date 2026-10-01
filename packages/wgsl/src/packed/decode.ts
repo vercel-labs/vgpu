@@ -34,7 +34,6 @@ interface CheckedTable {
   readonly shapes: readonly (readonly string[])[];
   readonly nodes: readonly CheckedNode[];
   readonly root: CheckedCell;
-  costs?: readonly Cost[];
   rootCost?: Cost;
 }
 
@@ -214,7 +213,6 @@ function preflight(table: CheckedTable, sharedCosts: readonly Cost[]): void {
 
   const rootCost = costOf(table.root, costs, sharedCosts);
   assertCost(rootCost);
-  table.costs = costs;
   table.rootCost = rootCost;
 }
 

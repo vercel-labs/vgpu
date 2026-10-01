@@ -63,11 +63,6 @@ test("workspace and package builds include the native source asset from a clean 
       );
       await put("packages/vgpu/bin/marker.js", "export const cli = 1;\n");
       await put("packages/vgpu/lib/marker.js", "export const library = 1;\n");
-      await put(
-        "packages/wgsl/src/wgsl-types.d.ts",
-        "export type Marker = number;\n"
-      );
-      await mkdir(join(fixture, "packages/wgsl/dist"), { recursive: true });
 
       const cwd = entrypoint === "workspace" ? fixture : native;
       const manifest = JSON.parse(
@@ -103,12 +98,6 @@ test("workspace and package builds include the native source asset from a clean 
             "utf8"
           )
         ).toContain("cli");
-        expect(
-          await readFile(
-            join(fixture, "packages/wgsl/dist/wgsl-types.d.ts"),
-            "utf8"
-          )
-        ).toContain("Marker");
       }
     } finally {
       await rm(fixture, { recursive: true, force: true });

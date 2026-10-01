@@ -213,7 +213,8 @@ test("frame.pass validates clearStencil range, preserve, and stencil aspect", as
 });
 
 test("stencil participates in pipeline keys; ref does not", () => {
-  const parts = { module: {} as GPUShaderModule, pipelineLayout: {} as GPUPipelineLayout, signature: { colors: ["rgba8unorm"] as const, depth: "depth24plus-stencil8" as const } };
+  const module = {} as GPUShaderModule;
+  const parts = { vertexModule: module, fragmentModule: module, pipelineLayout: {} as GPUPipelineLayout, signature: { colors: ["rgba8unorm"] as const, depth: "depth24plus-stencil8" as const } };
   const stencilKey = "st~equal,keep,keep,replace~equal,keep,keep,replace~4294967295~4294967295";
   expect(pipelineKeyOf({ ...parts, stencilKey })).not.toBe(pipelineKeyOf(parts));
   expect(pipelineKeyOf({ ...parts, stencilKey })).not.toBe(pipelineKeyOf({ ...parts, stencilKey: "st~default~default~255~4294967295" }));

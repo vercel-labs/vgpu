@@ -12,12 +12,24 @@ create the draw, effect, or compute and never parses WGSL, so prepared-only brow
 import `.wgsl` files and do not call `prepareShader()` at runtime no longer ship the WGSL scanner,
 parser, or reflection.
 
-The `@vgpu/wgsl` Vite and webpack/Turbopack loaders emit prepared, data-only modules for every
-`.wgsl` import — ordinary leaf files included, with `functionExports: []`. Because leaf files are now
-reflected at build time, reflection-detectable parse and layout errors (for example a `bool` in a
-uniform struct, `VGPU-WGSL-REFLECT-BOOL-HOST-SHAREABLE`) fail the build instead of surfacing at
-runtime. Loaders still do not run device validation; keep `npx vgpu check --require-validation` as
-the WGSL gate.
+The `@vgpu/wgsl` Vite and webpack/Turbopack loaders emit prepared ESM modules for every `.wgsl`
+import — ordinary leaf files included, with `functionExports: []`. Generated modules never import
+the WGSL parser. For eligible reflections, a bounded conservative estimate that requires distinct
+substantial uniform layouts can select compact metadata decoded by a small parser-free helper;
+Vite and webpack can also share private,
+independently reachable encoded metadata modules. Compact and literal forms export the same full
+own-data `ShaderSource` v2 object, while small inputs, bounded-work cases, and estimates that do not
+justify packing fall back to the literal form. Final bundler compression can vary, so compact
+selection estimates savings rather than guaranteeing them. The decoder, generated metadata modules,
+and requests are private implementation details, not author APIs, and require no extra configuration.
+
+Because leaf files are now reflected at build time, reflection-detectable parse and layout errors
+(for example a `bool` in a uniform struct, `VGPU-WGSL-REFLECT-BOOL-HOST-SHAREABLE`) fail the build
+instead of surfacing at runtime. Loaders still do not run device validation; keep
+`npx vgpu check --require-validation` as the WGSL gate. When an import names a missing WGSL file,
+`resolveShader()` reports the missing candidate paths through its existing `onDependency` callback
+before `VGPU-WGSL-RES-NOTFOUND`, allowing Vite and webpack watch builds to rebuild after the file is
+restored; successful dependency reporting is unchanged.
 
 The new `prepareShader(source, path?)` from `@vgpu/wgsl/prepare` builds a prepared artifact at
 runtime from a WGSL string, a `resolveShader()` result, or a legacy v1 asset, preserving
@@ -117,5 +129,7 @@ const legacy = effect(gpu, prepareShader(legacyAsset, "shaders/legacy.wgsl"));
   `"@vgpu/wgsl/prepare-v2"`.
 - Render once and confirm no `VGPU-SHADER-SOURCE-UNPREPARED`, `VGPU-SHADER-SOURCE-VERSION`, or
   `VGPU-SHADER-SOURCE-INVALID` is thrown.
+- In a Vite or webpack watch build, remove and restore an imported `.wgsl` dependency and confirm
+  the importer rebuilds without restarting the build.
 - Keep `npx vgpu check --require-validation <file>` in CI for device validation, which neither the
   loaders nor `prepareShader()` perform.

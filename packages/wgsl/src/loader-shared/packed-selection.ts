@@ -79,7 +79,7 @@ export function selectPackedReflection(reflection: ShaderReflection): PackedRefl
   const selected = bestShared !== null && inlineScore - bestShared.score >= 256
     ? bestShared
     : inlinePlan;
-  if (selected.score > reflectionBytes * 0.8 || reflectionBytes - selected.score < 2048) return null;
+  if (!isUseful(selected.score, reflectionBytes)) return null;
 
   const sharedTables = selected.shared.map((item) => item.table);
   const decoded = decodePackedMetadata(selected.table, sharedTables);

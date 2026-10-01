@@ -273,9 +273,19 @@ function validateReflection(reflection: Reflection): void {
     const key = bindingKey(binding);
     if (coordinates.has(key)) fail(`reflection.bindings[${index}]`, `duplicate binding coordinate ${key}`);
     coordinates.set(key, binding);
-    const expected = binding.kind === "buffer" ? "buffer" : binding.kind === "sampler" ? "sampler" : binding.kind === "externalTexture" ? "externalTexture" : undefined;
-    if (expected && binding.bindingLayout?.kind !== expected) fail(`reflection.bindings[${index}].bindingLayout`, `does not match binding kind '${binding.kind}'`);
-    if (binding.kind === "texture" && binding.bindingLayout && binding.bindingLayout.kind !== "texture" && binding.bindingLayout.kind !== "storageTexture") fail(`reflection.bindings[${index}].bindingLayout`, "does not describe a texture binding");
+    if (binding.kind === "buffer") {
+      const bindingPath = `reflection.bindings[${index}]`;
+      const bindingLayout = binding.bindingLayout;
+      if (bindingLayout?.kind !== "buffer") fail(`${bindingPath}.bindingLayout`, "does not match binding kind 'buffer'");
+      if (binding.addressSpace !== "uniform" && binding.addressSpace !== "storage") fail(`${bindingPath}.addressSpace`, "buffer bindings require a uniform or storage address space");
+      if (!binding.layout) fail(`${bindingPath}.layout`, "buffer bindings require host-shareable packing metadata");
+      const expectedType = binding.addressSpace === "uniform" ? "uniform" : binding.access === "read" ? "read-only-storage" : "storage";
+      if (bindingLayout.buffer.type !== expectedType) fail(`${bindingPath}.bindingLayout.buffer.type`, `does not match ${binding.addressSpace}${binding.access ? `/${binding.access}` : ""} buffer metadata`);
+    } else {
+      const expected = binding.kind === "sampler" ? "sampler" : binding.kind === "externalTexture" ? "externalTexture" : undefined;
+      if (expected && binding.bindingLayout?.kind !== expected) fail(`reflection.bindings[${index}].bindingLayout`, `does not match binding kind '${binding.kind}'`);
+      if (binding.kind === "texture" && binding.bindingLayout && binding.bindingLayout.kind !== "texture" && binding.bindingLayout.kind !== "storageTexture") fail(`reflection.bindings[${index}].bindingLayout`, "does not describe a texture binding");
+    }
   }
 
   uniqueIdentities(reflection.structs, "reflection.structs");

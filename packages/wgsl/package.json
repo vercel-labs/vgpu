@@ -84,7 +84,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -b && node -e \"require('fs').copyFileSync('src/wgsl-types.d.ts', 'dist/wgsl-types.d.ts')\""
+    "build": "tsc -b"
   },
   "dependencies": {
     "@vgpu/wgsl-std": "workspace:*"
