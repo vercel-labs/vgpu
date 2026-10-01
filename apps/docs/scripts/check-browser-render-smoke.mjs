@@ -16,7 +16,10 @@ import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import pngjs from "pngjs";
+
 import { launchChrome } from "../../../.subharness/tools/preview/chrome.ts";
+import { imageStats } from "../../../.subharness/tools/preview/image-stats.ts";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = resolve(SCRIPT_DIR, "..");
@@ -25,6 +28,15 @@ const READY_TIMEOUT_MS = 120_000;
 const RENDER_TIMEOUT_MS = 90_000;
 const POLL_INTERVAL_MS = 250;
 const SETTLE_TIME_MS = 2000;
+const SCREENSHOT_REGIONS = Object.freeze({
+  hero: Object.freeze({ x: 0.6, y: 0.2, width: 0.35, height: 0.6 }),
+  "particle-orbit": Object.freeze({
+    x: 0.1,
+    y: 0.1,
+    width: 0.8,
+    height: 0.7,
+  }),
+});
 
 /** 32 zero bytes encoded as base64. Synthetic and intentionally not a credential. */
 export const SYNTHETIC_FLAGS_SECRET =
@@ -526,13 +538,39 @@ function continuedActivityFailures(
   return failures;
 }
 
-async function captureScreenshot(page, path) {
+async function captureScreenshot(page, path, scenario) {
   const screenshot = await page.send("Page.captureScreenshot", {
     captureBeyondViewport: false,
     format: "png",
     fromSurface: true,
   });
-  await writeFile(path, Buffer.from(screenshot.data, "base64"));
+  const png = Buffer.from(screenshot.data, "base64");
+  await writeFile(path, png);
+  const source = pngjs.PNG.sync.read(png);
+  const normalized = SCREENSHOT_REGIONS[scenario.kind];
+  const x = Math.floor(source.width * normalized.x);
+  const y = Math.floor(source.height * normalized.y);
+  const right = Math.ceil(source.width * (normalized.x + normalized.width));
+  const bottom = Math.ceil(source.height * (normalized.y + normalized.height));
+  const pixels = { x, y, width: right - x, height: bottom - y };
+  const cropped = new pngjs.PNG({
+    width: pixels.width,
+    height: pixels.height,
+  });
+  pngjs.PNG.bitblt(
+    source,
+    cropped,
+    pixels.x,
+    pixels.y,
+    pixels.width,
+    pixels.height,
+    0,
+    0
+  );
+  return {
+    ...imageStats(pngjs.PNG.sync.write(cropped)),
+    sampledRegion: { normalized, pixels },
+  };
 }
 
 export async function runScenario(
@@ -545,6 +583,7 @@ export async function runScenario(
   const events = { consoleErrors: [], logErrors: [], pageExceptions: [] };
   let observation;
   let activityFailures = [];
+  let screenshotStats;
   let page;
   let thrown;
   try {
@@ -595,7 +634,11 @@ export async function runScenario(
   } finally {
     if (page) {
       try {
-        await captureScreenshot(page, screenshotPath);
+        screenshotStats = await captureScreenshot(
+          page,
+          screenshotPath,
+          scenario
+        );
       } catch (error) {
         thrown ??= `screenshot failed: ${
           error instanceof Error ? error.message : String(error)
@@ -621,12 +664,20 @@ export async function runScenario(
     ...scenarioFailures(scenario, observation),
     ...activityFailures,
   ];
+  if (screenshotStats?.uniform) {
+    failures.push(
+      `captured a uniform screenshot region ` +
+        `(mean luma ${screenshotStats.meanLuma}, ` +
+        `luma standard deviation ${screenshotStats.lumaStdDev})`
+    );
+  }
   if (thrown && !failures.includes(thrown)) failures.unshift(thrown);
   return {
     id: scenario.id,
     ok: failures.length === 0,
     failures,
     screenshot: screenshotPath,
+    screenshotStats,
     observation,
   };
 }

@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
+import pngjs from "pngjs";
+
 import * as browserSmoke from "./check-browser-render-smoke.mjs";
 
 import {
@@ -48,7 +50,31 @@ function healthyObservation(scenario = SCENARIOS[0]) {
   };
 }
 
-function fakeScenarioPage(scenario, { onCapture, onObservation } = {}) {
+function screenshotPng(kind = "patterned") {
+  const png = new pngjs.PNG({ width: 100, height: 100 });
+  for (let y = 0; y < png.height; y += 1) {
+    for (let x = 0; x < png.width; x += 1) {
+      const offset = (y * png.width + x) * 4;
+      const outsideHeroScene = x >= 5 && x < 45 && y >= 30 && y < 70;
+      let value = 0;
+      if (kind === "patterned") {
+        value = Math.floor(x / 10) % 2 === 0 ? 24 : 224;
+      } else if (kind === "blank-hero" && outsideHeroScene) {
+        value = 255;
+      }
+      png.data[offset] = value;
+      png.data[offset + 1] = value;
+      png.data[offset + 2] = value;
+      png.data[offset + 3] = 255;
+    }
+  }
+  return pngjs.PNG.sync.write(png);
+}
+
+function fakeScenarioPage(
+  scenario,
+  { onCapture, onObservation, screenshot = screenshotPng() } = {}
+) {
   const state = {
     closed: false,
     observation: healthyObservation(scenario),
@@ -73,7 +99,7 @@ function fakeScenarioPage(scenario, { onCapture, onObservation } = {}) {
         }
         if (method === "Page.captureScreenshot") {
           onCapture?.({ emit, state });
-          return { data: Buffer.from("screenshot").toString("base64") };
+          return { data: screenshot.toString("base64") };
         }
         return {};
       },
@@ -86,6 +112,100 @@ function fakeScenarioPage(scenario, { onCapture, onObservation } = {}) {
     },
   };
 }
+
+test("a patterned screenshot passes with continued GPU activity and reports pixel stats", async () => {
+  const scenario = SCENARIOS[2];
+  const fake = fakeScenarioPage(scenario, {
+    onObservation(state) {
+      if (state.observationCount === 2) {
+        state.observation.smoke.submissions += 1;
+        state.observation.smoke.canvases[0].currentTextures += 1;
+      }
+    },
+  });
+  const artifactDir = await mkdtemp(join(tmpdir(), "vgpu-browser-smoke-"));
+  try {
+    const result = await browserSmoke.runScenario(
+      "https://example.test",
+      artifactDir,
+      scenario,
+      { launch: async () => fake.page, settle: async () => {} }
+    );
+    assert.equal(result.ok, true);
+    assert.equal(result.screenshotStats.uniform, false);
+    assert.ok(result.screenshotStats.lumaStdDev > 2);
+  } finally {
+    await rm(artifactDir, { recursive: true, force: true });
+  }
+});
+
+test("a black screenshot fails despite continued GPU activity", async () => {
+  const scenario = SCENARIOS[2];
+  const fake = fakeScenarioPage(scenario, {
+    screenshot: screenshotPng("black"),
+    onObservation(state) {
+      if (state.observationCount === 2) {
+        state.observation.smoke.submissions += 1;
+        state.observation.smoke.canvases[0].currentTextures += 1;
+      }
+    },
+  });
+  const artifactDir = await mkdtemp(join(tmpdir(), "vgpu-browser-smoke-"));
+  try {
+    const result = await browserSmoke.runScenario(
+      "https://example.test",
+      artifactDir,
+      scenario,
+      { launch: async () => fake.page, settle: async () => {} }
+    );
+    assert.equal(result.ok, false);
+    assert.deepEqual(result.screenshotStats, {
+      meanLuma: 0,
+      lumaStdDev: 0,
+      uniform: true,
+      sampledRegion: {
+        normalized: { x: 0.1, y: 0.1, width: 0.8, height: 0.7 },
+        pixels: { x: 10, y: 10, width: 80, height: 70 },
+      },
+    });
+    assert.match(
+      result.failures.join("\n"),
+      /uniform screenshot.*mean luma 0.*luma standard deviation 0/u
+    );
+  } finally {
+    await rm(artifactDir, { recursive: true, force: true });
+  }
+});
+
+test("foreground outside a blank hero scene cannot satisfy the pixel oracle", async () => {
+  const scenario = SCENARIOS[0];
+  const fake = fakeScenarioPage(scenario, {
+    screenshot: screenshotPng("blank-hero"),
+    onObservation(state) {
+      if (state.observationCount === 2) {
+        state.observation.smoke.submissions += 1;
+        state.observation.smoke.canvases[0].currentTextures += 1;
+      }
+    },
+  });
+  const artifactDir = await mkdtemp(join(tmpdir(), "vgpu-browser-smoke-"));
+  try {
+    const result = await browserSmoke.runScenario(
+      "https://example.test",
+      artifactDir,
+      scenario,
+      { launch: async () => fake.page, settle: async () => {} }
+    );
+    assert.equal(result.ok, false);
+    assert.equal(result.screenshotStats.uniform, true);
+    assert.deepEqual(result.screenshotStats.sampledRegion, {
+      normalized: { x: 0.6, y: 0.2, width: 0.35, height: 0.6 },
+      pixels: { x: 60, y: 20, width: 35, height: 60 },
+    });
+  } finally {
+    await rm(artifactDir, { recursive: true, force: true });
+  }
+});
 
 test("synthetic flags secret has the required 32 decoded bytes", () => {
   assert.equal(Buffer.from(SYNTHETIC_FLAGS_SECRET, "base64").byteLength, 32);

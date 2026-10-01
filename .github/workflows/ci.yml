@@ -277,9 +277,9 @@ jobs:
   # same reason the app directory is named `apps/docs`: it is the docs app, and the required status
   # check kept reporting across the cutover without a branch-protection edit.
   docs-app-build:
-    # The production browser smoke below needs the Chrome bundled on GitHub's x64 image. The ARM
-    # image used previously has no browser capable of exercising WebGPU.
-    runs-on: ubuntu-24.04
+    # Match the verified browser WebGPU baseline (issue #109): Jammy, pinned Playwright Chromium,
+    # Mesa's Vulkan runtime, and headed rendering under Xvfb. System Chrome on Noble is not viable.
+    runs-on: ubuntu-22.04
     env:
       # 32 zero bytes in base64: valid flags-sdk key material, visibly synthetic, and never reused
       # outside this build. It must match for `next build` and the `next start` spawned by the smoke.
@@ -351,12 +351,27 @@ jobs:
         run: pnpm --filter docs test:remark
       - name: Unit-test the production browser smoke contract
         run: pnpm --filter docs test:browser-render-smoke
+      - name: Install pinned Chromium and the software WebGPU runtime
+        run: |
+          export PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/vgpu-chromium"
+          pnpm dlx playwright@1.61.1 install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libvulkan1 mesa-vulkan-drivers xvfb xauth
+          chrome_executables=("$PLAYWRIGHT_BROWSERS_PATH"/chromium-*/chrome-linux64/chrome)
+          test "${#chrome_executables[@]}" -eq 1
+          test -x "${chrome_executables[0]}"
+          echo "VGPU_CHROME_PATH=${chrome_executables[0]}" >> "$GITHUB_ENV"
       # A compiled docs tree can contain stale loader output even when every source-level and
       # bundle-isolation check above is green. Exercise the exact production build in raw-CDP
       # Chrome and require GPU canvas texture acquisitions plus queue submissions to continue for
-      # both signed homepage hero themes and Particle Orbit. Caught renderer errors remain fatal.
+      # both signed homepage hero themes and Particle Orbit, with nonuniform scene pixels.
+      # Caught renderer errors remain fatal.
       - name: Smoke production WebGPU rendering in Chrome
-        run: pnpm --filter docs check:browser-render-smoke
+        env:
+          VGPU_CHROME_ARGS: --no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage
+          # Linux headless screenshots can be black despite successful WebGPU submissions.
+          VGPU_CHROME_HEADED: "1"
+        run: xvfb-run -a -s '-screen 0 1280x720x24' pnpm --filter docs check:browser-render-smoke
       - name: Upload production WebGPU smoke evidence
         if: always()
         uses: actions/upload-artifact@v4
