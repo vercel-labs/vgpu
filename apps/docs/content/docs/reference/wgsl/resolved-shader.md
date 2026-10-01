@@ -1,5 +1,5 @@
 ---
-title: "ResolvedShader, ShaderSource, and ShaderReflection"
+title: "ResolvedShader and ShaderSource"
 description: "Data shapes returned or consumed by the WGSL helpers. Use `ShaderSource` for the prepared shader artifacts that `draw`, `effect`, and `compute` consume, `ShaderReflection` for the metadata inside them, `ResolvedShader` for `compile()` output, and `isShaderFunctionExport()` to check unknown function-export metadata at an integration boundary."
 ---
 
