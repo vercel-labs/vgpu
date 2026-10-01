@@ -16,6 +16,14 @@ For selected-to-active normal baking, verify the source selection, active LOW, s
 
 Isolate matched HIGH/LOW pairs when projection picks up adjacent parts. Move an explicit cage with its pair. Use compact, deterministic offsets: extreme coordinates lose precision around narrow bevels. Restore the assembly before export.
 
+## Directional tile mapping
+
+For shingles, boards or masonry courses, check the material axes against the intended construction direction on every differently oriented face. Dominant-axis projection can switch axes between adjacent facets, rotating rows or stretching their physical size. More texture resolution does not fix that mapping.
+
+On a planar pitched roof, use a horizontal eave axis and an orthogonal uphill axis in the face plane, with UV distances measured in metres. For unit upward normal `N` and world up `Z`, one frame is `U = normalize(Z × N)`, `V = N × U`; horizontal roofs need a separately chosen direction. Project relative to a shared eave origin and divide by the intended tile repeat distance. Define the frame on the whole polygon before triangulation so a diagonal cannot introduce a new orientation. Check constant row height along the eave, consistent physical tile dimensions and course alignment across hips under matched close-up and distant views.
+
+Rotate the associated color, roughness and normal maps together. Changing UV0 also changes its tangent frame: regenerate stored tangents or verify the renderer's derivative frame. Preserve a separate lighting UV layout when possible, but evaluate bake dependencies independently: unchanged UV1 can justify geometric AO reuse while changed material sampling still affects indirect lighting.
+
 ## Cap and side normals
 
 For a straight cylinder with flat ends, cap normals point outward along the cylinder axis: opposite directions at the two ends. Smooth side normals point radially outward and have no axial component. Keep a hard shading boundary at each rim; use flat cap faces, sharp rim edges, and split corner normals or separate cap/side vertices. Coincident positions do not imply that their normals should be averaged. Actual bevels have their own transition normals; preserve those deliberately.
