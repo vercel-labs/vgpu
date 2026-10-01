@@ -231,6 +231,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @vgpu/wgsl build
+      - name: Next 16 restored-cache WGSL producer smoke
+        run: node scripts/test-wgsl-turbopack-cache.mjs
       - name: next build (turbopack)
         run: pnpm --filter @vgpu/example-next-wgsl exec next build --turbopack
       - name: assert WGSL content in Turbopack output
