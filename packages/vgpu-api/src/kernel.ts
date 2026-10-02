@@ -236,7 +236,11 @@ export async function createDevice(entry: EntryKind, opts: InitOptions, adapterF
 
 async function requestBrowserDevice(opts: InitOptions): Promise<Device> {
   const nav = globalThis.navigator as Navigator & { gpu?: GPU };
-  const adapter = await nav.gpu?.requestAdapter({ powerPreference: opts.powerPreference });
+  // A browser that exposes no WebGPU and one whose adapter request came back empty are
+  // different failures, but the optional chain below collapses both into `undefined`.
+  // Reporting the latter for the former sends people hunting for a driver problem.
+  if (!nav?.gpu) throw unsupportedError("init", "WebGPU is not available in this browser.");
+  const adapter = await nav.gpu.requestAdapter({ powerPreference: opts.powerPreference });
   if (!adapter) throw unsupportedError("init", "navigator.gpu.requestAdapter() returned null.");
   validateRequiredFeatures(adapter.features, opts.requiredFeatures);
   const gpuDevice = await adapter.requestDevice({ requiredFeatures: opts.requiredFeatures, requiredLimits: opts.requiredLimits });
