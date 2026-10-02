@@ -109,6 +109,9 @@ vgpu/scene srgb packages/vgpu-api/src/scene/srgb.docs.md
 @vgpu/wgsl/runtime WGSLAst packages/wgsl/src/runtime/resolve-shader.docs.md
 @vgpu/wgsl/runtime SourceMap packages/wgsl/src/runtime/resolve-shader.docs.md
 @vgpu/wgsl/loader-webpack wgslWebpackLoader packages/wgsl/src/loader-webpack/index.docs.md
+@vgpu/wgsl/next wgslTurbopackRule packages/wgsl/src/next/index.docs.md
+@vgpu/wgsl/next WgslTurbopackRuleOptions packages/wgsl/src/next/index.docs.md
+@vgpu/wgsl/next WgslTurbopackRule packages/wgsl/src/next/index.docs.md
 @vgpu/wgsl/loader-vite wgslVitePlugin packages/wgsl/src/loader-vite/index.docs.md
 @vgpu/wgsl/reflect-source reflectSource packages/wgsl/src/runtime/reflect-source.docs.md
 @vgpu/wgsl/reflect-source Reflection packages/wgsl/src/runtime/reflect-source.docs.md

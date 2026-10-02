@@ -1,7 +1,6 @@
-import { createRequire } from "node:module";
+import { wgslTurbopackRule } from "@vgpu/wgsl/next";
 import { createMDX } from "fumadocs-mdx/next";
 import type { NextConfig } from "next";
-import { wgslLoaderFingerprint } from "../../scripts/lib/wgsl-loader-fingerprint.mjs";
 // Plain .mjs helper, shared with scripts/check-url-anchor-parity.mjs (which must
 // run on bare node, with no TS toolchain), so the gate and the app can never
 // disagree about what the redirect table is.
@@ -9,11 +8,6 @@ import { loadDocsRedirects } from "./lib/docs-redirects.mjs";
 import { homepageLinkHeader } from "./lib/site";
 
 const withMDX = createMDX();
-const require = createRequire(import.meta.url);
-// TGEIST-07: examples/** import `vgpu` and `@vgpu/*` workspace packages
-// straight from source (no build step) and `.wgsl` shader files directly.
-const wgslLoader = require.resolve("@vgpu/wgsl/loader-webpack");
-const wgslLoaderCacheKey = wgslLoaderFingerprint(wgslLoader);
 
 const config: NextConfig = {
   // TGEIST-07 begin: examples cluster support (transpile + wgsl loader).
@@ -30,18 +24,7 @@ const config: NextConfig = {
 
   turbopack: {
     rules: {
-      "*.wgsl": {
-        loaders: [
-          {
-            loader: wgslLoader,
-            // Turbopack otherwise keys this custom loader by its unchanged entry path.
-            // The loader ignores this inert option; its value changes with the small
-            // built @vgpu/wgsl JS tree, invalidating restored persistent caches.
-            options: { vgpuImplementationFingerprint: wgslLoaderCacheKey },
-          },
-        ],
-        as: "*.js",
-      },
+      "*.wgsl": wgslTurbopackRule(),
       "**/typegpu-liquid-glass/renderer.ts": {
         loaders: [
           {

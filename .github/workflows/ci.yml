@@ -72,7 +72,7 @@ jobs:
 
   wgsl-loader-bundler-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: Install pnpm
@@ -87,6 +87,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm test packages/wgsl/tests/webpack-real.test.ts packages/wgsl/tests/vite-real.test.ts packages/wgsl/tests/runtime-cjs-require.test.ts
+      - name: Webpack persistent-cache upgrade and compiler dependency matrix
+        run: node scripts/test-wgsl-webpack-cache.mjs --artifact-dir=artifacts/wgsl-cache-webpack
+      - name: Upload webpack cache evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wgsl-cache-webpack
+          path: artifacts/wgsl-cache-webpack
+          if-no-files-found: ignore
 
   docker-gpu:
     runs-on: ubuntu-24.04
@@ -217,7 +226,7 @@ jobs:
 
   wgsl-turbopack-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Install pnpm
@@ -231,8 +240,17 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @vgpu/wgsl build
-      - name: Next 16 restored-cache WGSL producer smoke
-        run: node scripts/test-wgsl-turbopack-cache.mjs
+      - name: Next 15 WGSL package, build and HMR matrix
+        run: node scripts/test-wgsl-turbopack-cache.mjs --next=15 --artifact-dir=artifacts/wgsl-cache-next-15
+      - name: Next 16 authentic upgrade and restored-cache matrix
+        run: node scripts/test-wgsl-turbopack-cache.mjs --next=16 --artifact-dir=artifacts/wgsl-cache-next-16
+      - name: Upload Next cache evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wgsl-cache-next
+          path: artifacts/wgsl-cache-next-*
+          if-no-files-found: ignore
       - name: next build (turbopack)
         run: pnpm --filter @vgpu/example-next-wgsl exec next build --turbopack
       - name: assert WGSL content in Turbopack output

@@ -94,6 +94,7 @@ try {
         "@vgpu/wgsl/reflect-source": ["packages/wgsl/src/runtime/reflect-source.ts"],
         "@vgpu/wgsl/loader-vite": ["packages/wgsl/src/loader-vite/index.ts"],
         "@vgpu/wgsl/loader-webpack": ["packages/wgsl/src/loader-webpack/index.ts"],
+        "@vgpu/wgsl/next": ["packages/wgsl/src/next/index.ts"],
         "@vgpu/wgsl-std/color": ["packages/wgsl-std/src/color/index.ts"],
         "@vgpu/wgsl-std/constants": ["packages/wgsl-std/src/constants/index.ts"],
         "@vgpu/wgsl-std/fullscreen": ["packages/wgsl-std/src/fullscreen/index.ts"],
