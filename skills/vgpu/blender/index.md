@@ -61,6 +61,8 @@ Do not default to uniformly decimating a high-poly mesh. Shared profiles, delibe
 
 ## 6. Verify the observable result
 
+When a defect could come from either the asset or its rendering, use [runtime parity and diagnostics](references/runtime-parity-and-diagnostics.md) to isolate the contribution before editing or rebaking. It covers cross-surface consistency, isolated production-shader probes and evidence tied to the version actually rendered.
+
 Compare the original, HIGH, unbaked LOW, and baked LOW under matched conditions where those versions exist. Review at close range and gameplay distance, from behind and during movement. Toggle normal maps and AO to confirm their visible contribution; a loaded texture does not prove the material uses it.
 
 For Blender/runtime parity, match world camera pose, projection, framing, light direction and environment, and record exposure and tone mapping. Save actual captures from both renderers; generated references guide design but do not certify implementation. Inspect the whole frame and defect crops at each delivered LOD. Toggle lightmaps independently when present, and distinguish intended renderer differences from missing or doubled lighting. Freeze animation at a recorded time for still comparisons, then verify motion separately; a settled frame does not mean animation is paused.

@@ -54,6 +54,8 @@ If the affected receiver set cannot be established, invalidate the dependent ass
 
 ## Diagnose before changing the bake
 
+First [classify the defect's origin](runtime-parity-and-diagnostics.md#classify-the-defects-origin). A camera, binding or scene-composition error can resemble damaged UVs or a bad bake; the table below narrows asset-specific causes after that separation.
+
 | Symptom | Distinguishing check | Possible correction |
 | --- | --- | --- |
 | Extra highlight or broken edge | Compare HIGH, unbaked LOW, and baked LOW under the same light | Inspect modifier order, bevel scope, and cage before changing the texture |
