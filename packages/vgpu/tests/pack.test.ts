@@ -16,8 +16,8 @@ test("dry-run pack includes bundled docs artifact", () => {
 
   expect(files).toContain("bin/vgpu.js");
   expect(files).toContain("lib/generated/docs-manifest.generated.js");
-  // Bundled loader/runtime documentation brings the CLI tarball to about 927 kB.
-  expect(pack.size).toBeLessThan(928_000);
+  // Bundled loader/cache migration documentation brings the CLI tarball to about 935 kB.
+  expect(pack.size).toBeLessThan(940_000);
 });
 
 test("packed install exposes vgpu docs bin", () => {
