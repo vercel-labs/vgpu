@@ -307,6 +307,9 @@ export async function isolatedPackageManagerUpgrade({ root, archives, logPath })
       "--dir",
       root,
       "install",
+      // This disposable consumer deliberately changes its manifest to upgrade.
+      // CI defaults to a frozen lockfile; the repository install stays frozen.
+      "--no-frozen-lockfile",
       "--force",
       "--store-dir",
       storeDir,
