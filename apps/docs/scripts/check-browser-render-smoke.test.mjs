@@ -73,7 +73,7 @@ function screenshotPng(kind = "patterned") {
 
 function fakeScenarioPage(
   scenario,
-  { onCapture, onObservation, screenshot = screenshotPng() } = {}
+  { onCapture, onObservation, onMouseMove, screenshot = screenshotPng() } = {}
 ) {
   const state = {
     closed: false,
@@ -96,6 +96,9 @@ function fakeScenarioPage(
                   return structuredClone(state.observation);
                 })();
           return { result: { value } };
+        }
+        if (method === "Input.dispatchMouseEvent") {
+          onMouseMove?.({ state, params });
         }
         if (method === "Page.captureScreenshot") {
           onCapture?.({ emit, state });
@@ -382,6 +385,46 @@ test("a renderer stalled after its initial output fails the settle check", async
       result.failures.join("\n"),
       /texture acquisitions did not increase/u
     );
+  } finally {
+    await rm(artifactDir, { recursive: true, force: true });
+  }
+});
+
+
+test("an idle light hero must render again in response to real pointer input", async () => {
+  const scenario = SCENARIOS[1];
+  const inputs = [];
+  const fake = fakeScenarioPage(scenario, {
+    onMouseMove({ state, params }) {
+      assert.ok(state.observationCount >= 1, "input must follow the initial rendering observation");
+      inputs.push(params);
+      state.observation.smoke.submissions += 1;
+      state.observation.smoke.canvases[0].currentTextures += 1;
+    },
+  });
+  const artifactDir = await mkdtemp(join(tmpdir(), "vgpu-browser-smoke-"));
+  try {
+    const result = await browserSmoke.runScenario("https://example.test", artifactDir, scenario, {
+      launch: async () => fake.page, settle: async () => {},
+    });
+    assert.equal(result.ok, true);
+    assert.ok(inputs.some((input) => input.type === "mouseMoved"));
+  } finally {
+    await rm(artifactDir, { recursive: true, force: true });
+  }
+});
+
+test("a light hero that ignores pointer input still fails the activity check", async () => {
+  const scenario = SCENARIOS[1];
+  const fake = fakeScenarioPage(scenario);
+  const artifactDir = await mkdtemp(join(tmpdir(), "vgpu-browser-smoke-"));
+  try {
+    const result = await browserSmoke.runScenario("https://example.test", artifactDir, scenario, {
+      launch: async () => fake.page, settle: async () => {},
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.failures.join("\n"), /texture acquisitions did not increase/u);
+    assert.match(result.failures.join("\n"), /queue submissions did not increase/u);
   } finally {
     await rm(artifactDir, { recursive: true, force: true });
   }

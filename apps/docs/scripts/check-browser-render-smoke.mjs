@@ -614,7 +614,14 @@ export async function runScenario(
     await page.send("Page.navigate", { url: targetUrl });
     await waitForCommittedDocument(page, targetUrl);
     const initialObservation = await waitForRendering(page, scenario, events);
-    // Let startup transitions settle and catch errors from subsequent frames.
+    // The light hero intentionally stops presenting when its scene is unchanged.
+    // Exercise its real pointer path so continued rendering is required even at rest.
+    if (scenario.kind === "hero") {
+      await page.send("Input.dispatchMouseEvent", {
+        type: "mouseMoved", x: 960, y: 260, buttons: 0,
+      });
+    }
+    // Let the interaction and startup transitions render; catch later-frame errors.
     await settle();
     observation = await collectObservation(page, events);
     activityFailures = continuedActivityFailures(

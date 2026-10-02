@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { prepareShader } from "@vgpu/wgsl/prepare";
 import type { ShaderSource } from "@vgpu/wgsl";
@@ -11,7 +11,7 @@ import { PACKED_QUERY_MAX_BYTES } from "../src/loader-shared/packed-query.ts";
 import { selectPackedReflection } from "../src/loader-shared/packed-selection.ts";
 import { build as viteBuild, createServer, type InlineConfig, type ViteDevServer } from "vite";
 import webpack, { type Compiler, type Configuration, type Stats, type Watching } from "webpack";
-import type { RollupWatcher } from "rollup";
+import type { OutputBundle, RollupWatcher } from "rollup";
 import { describe, expect, test } from "vitest";
 import {
   createPackedBundlerFixture,
@@ -303,22 +303,33 @@ export fn shared_color() -> vec4f { return vec4f(0.5, 0.75, 0.25, 1.0); }
 
 test("Vite watch rebuilds edits, prunes removed imports, reports deletion, and recovers", async () => {
   const fixture = await createPackedBundlerFixture();
-  const events = eventQueue<WatchEvent>((event) => event.error === undefined
-    ? `successful build; watched ${event.watched.join(", ")}`
-    : `build error: ${String(event.error)}; watched ${event.watched.join(", ")}`);
+  const events = eventQueue<ViteWatchEvent>((event) => event.error === undefined
+    ? `successful generation ${event.generation}; watched ${event.watched.join(", ")}`
+    : `generation ${event.generation} error: ${String(event.error)}; watched ${event.watched.join(", ")}`);
   const output = join(fixture.output, "vite-watch");
+  const snapshots = join(fixture.output, "vite-watch-generations");
+  const overlap = viteWatchOverlap(join(fixture.root, "watch-overlap-trigger"));
   let watcher: RollupWatcher | undefined;
   try {
+    await writeFile(overlap.trigger, "initial\n");
     const config = viteConfig(fixture, fixture.entry);
+    let generation = 0;
     config.plugins = [
       ...(config.plugins ?? []),
       {
         name: "vgpu-packed-watch-receipt",
-        buildEnd(error) {
-          if (error) events.push({ error, watched: [...this.getWatchFiles()] });
+        async buildStart() {
+          generation += 1;
+          this.addWatchFile(overlap.trigger);
+          await overlap.holdQueuedGeneration(generation);
         },
-        writeBundle() {
-          events.push({ watched: [...this.getWatchFiles()] });
+        buildEnd(error) {
+          if (error) events.push({ error, generation, watched: [...this.getWatchFiles()] });
+        },
+        async writeBundle(_options, bundle) {
+          const snapshot = await snapshotViteWatchOutput(output, snapshots, generation, bundle);
+          await overlap.queueAfterArmedWrite(generation);
+          events.push({ generation, snapshot, watched: [...this.getWatchFiles()] });
         },
       },
     ];
@@ -328,14 +339,18 @@ test("Vite watch rebuilds edits, prunes removed imports, reports deletion, and r
       watch: {
         clearScreen: false,
         chokidar: { usePolling: true, interval: 50 },
+        onInvalidate(id) {
+          overlap.onInvalidate(id);
+        },
       },
     };
     const running = await viteBuild(config);
     if (!("on" in running)) throw new Error("Vite did not return a watcher");
     watcher = running;
 
-    expect((await events.next()).error).toBeUndefined();
-    const initial = await loadViteWatchEntry(output);
+    const initialGeneration = await successfulViteWatch(events);
+    const initial = await loadViteWatchEntry(initialGeneration.snapshot);
+    expectExactLoaderArtifact(initial.eager[0], join(fixture.root, "src/shader-a.wgsl"));
     const initialReflection = initial.eager[0].reflection;
     const initialChecksum = initial.eager[0].sourceChecksum;
 
@@ -344,34 +359,42 @@ export struct SharedHelper { value: vec4f, changed: mat4x4f }
 export fn shared_color() -> vec4f { return vec4f(0.75, 0.5, 0.25, 1.0); }
 `;
     await writeFile(fixture.transitive, editedTransitive);
-    expect((await events.next()).error).toBeUndefined();
-    const edited = await loadViteWatchEntry(output);
+    const editedGeneration = await successfulViteWatch(events);
+    const edited = await loadViteWatchEntry(editedGeneration.snapshot);
+    expectExactLoaderArtifact(edited.eager[0], join(fixture.root, "src/shader-a.wgsl"));
     expect(edited.eager[0].sourceChecksum).not.toBe(initialChecksum);
     expect(edited.eager[0].reflection).not.toStrictEqual(initialReflection);
 
     const shaderAPath = join(fixture.root, "src/shader-a.wgsl");
     const importedA = await readFile(shaderAPath, "utf8");
     await writeFile(shaderAPath, withoutTransitiveImport(importedA));
-    expect((await events.next()).error).toBeUndefined();
-    const pruned = await loadViteWatchEntry(output);
+    const prunedGeneration = await successfulViteWatch(events);
+    const pruned = await loadViteWatchEntry(prunedGeneration.snapshot);
+    expectExactLoaderArtifact(pruned.eager[0], shaderAPath);
     expect(pruned.eager[0].wgsl).not.toContain("SharedHelper");
     expect(hasStruct(pruned.eager[0], "SharedHelper")).toBe(false);
-    expect(await currentViteClosureText(output)).not.toContain("SharedHelper");
+    expect(await currentViteClosureText(prunedGeneration.snapshot.directory)).not.toContain("SharedHelper");
 
     await writeFile(shaderAPath, importedA);
-    expect((await events.next()).error).toBeUndefined();
+    await successfulViteWatch(events);
     await unlink(fixture.transitive);
     const failed = await events.next();
     expect(failed.error).toBeDefined();
     expect(String(failed.error)).toContain("shared.wgsl");
     expect(failed.watched.map(normalizePath).some((path) => path.endsWith("/shared.wgsl"))).toBe(true);
 
+    overlap.armNextWrite();
     await writeFile(fixture.transitive, editedTransitive);
-    expect((await events.next()).error).toBeUndefined();
-    const recovered = await loadViteWatchEntry(output);
+    const recoveredGeneration = await successfulViteWatch(events);
+    const overlappingGeneration = await overlap.waitForQueuedGenerationStart();
+    expect(overlappingGeneration).toBe(recoveredGeneration.generation + 1);
+    await expect(readFile(join(output, "entry.mjs"))).rejects.toMatchObject({ code: "ENOENT" });
+    const recovered = await loadViteWatchEntry(recoveredGeneration.snapshot);
+    expectExactLoaderArtifact(recovered.eager[0], shaderAPath);
     expect(hasStruct(recovered.eager[0], "SharedHelper")).toBe(true);
     expect(recovered.eager[0].wgsl).toContain("changed");
   } finally {
+    overlap.releaseQueuedGeneration();
     await watcher?.close();
     await fixture.dispose();
   }
@@ -712,8 +735,16 @@ function asViteOutputs(result: Awaited<ReturnType<typeof viteBuild>>): readonly 
   return Array.isArray(result) ? result : [result];
 }
 
-interface WatchEvent {
+interface ViteWatchOutputSnapshot {
+  readonly directory: string;
+  readonly files: readonly string[];
+  readonly generation: number;
+}
+
+interface ViteWatchEvent {
   readonly error?: unknown;
+  readonly generation: number;
+  readonly snapshot?: ViteWatchOutputSnapshot;
   readonly watched: readonly string[];
 }
 
@@ -750,11 +781,98 @@ function eventQueue<T>(describe: (value: T) => string = String): {
   };
 }
 
-async function loadViteWatchEntry(output: string): Promise<{
+async function successfulViteWatch(
+  events: ReturnType<typeof eventQueue<ViteWatchEvent>>,
+): Promise<ViteWatchEvent & { readonly snapshot: ViteWatchOutputSnapshot }> {
+  const event = await events.next();
+  if (event.error) throw event.error;
+  if (!event.snapshot) throw new Error(`Vite watch generation ${event.generation} completed without an output snapshot`);
+  return event as ViteWatchEvent & { readonly snapshot: ViteWatchOutputSnapshot };
+}
+
+async function snapshotViteWatchOutput(
+  output: string,
+  snapshots: string,
+  generation: number,
+  bundle: OutputBundle,
+): Promise<ViteWatchOutputSnapshot> {
+  const directory = join(snapshots, `generation-${generation}`);
+  const emitted = Object.values(bundle).sort((left, right) => left.fileName.localeCompare(right.fileName));
+  if (emitted.length === 0) throw new Error(`Vite watch generation ${generation} emitted no output`);
+  for (const item of emitted) {
+    const bytes = await readFile(join(output, item.fileName));
+    const rollupBytes = Buffer.from(item.type === "chunk" ? item.code : item.source);
+    if (!bytes.equals(rollupBytes)) {
+      throw new Error(`Vite watch generation ${generation} wrote unexpected bytes for ${item.fileName}`);
+    }
+    const snapshotPath = join(directory, item.fileName);
+    await mkdir(dirname(snapshotPath), { recursive: true });
+    await writeFile(snapshotPath, bytes, { flag: "wx" });
+  }
+  return {
+    directory,
+    files: emitted.map((item) => item.fileName),
+    generation,
+  };
+}
+
+function viteWatchOverlap(trigger: string): {
+  readonly trigger: string;
+  armNextWrite(): void;
+  holdQueuedGeneration(generation: number): Promise<void>;
+  onInvalidate(id: string): void;
+  queueAfterArmedWrite(generation: number): Promise<void>;
+  releaseQueuedGeneration(): void;
+  waitForQueuedGenerationStart(): Promise<number>;
+} {
+  let armed = false;
+  let queuedAfterGeneration: number | undefined;
+  let resolveRelease!: () => void;
+  const invalidations = eventQueue<string>((id) => `Vite invalidated ${id}`);
+  const queuedGenerationStarts = eventQueue<number>((generation) => `Vite started generation ${generation}`);
+  const release = new Promise<void>((resolve) => { resolveRelease = resolve; });
+  return {
+    trigger,
+    armNextWrite() {
+      if (armed || queuedAfterGeneration !== undefined) throw new Error("Vite watch overlap was already armed");
+      armed = true;
+    },
+    async holdQueuedGeneration(generation) {
+      if (queuedAfterGeneration === undefined) return;
+      if (generation !== queuedAfterGeneration + 1) {
+        throw new Error(`Vite started generation ${generation} after queued generation ${queuedAfterGeneration}`);
+      }
+      queuedGenerationStarts.push(generation);
+      await release;
+      queuedAfterGeneration = undefined;
+    },
+    onInvalidate(id) {
+      if (normalizePath(id) === normalizePath(trigger)) invalidations.push(id);
+    },
+    async queueAfterArmedWrite(generation) {
+      if (!armed) return;
+      armed = false;
+      queuedAfterGeneration = generation;
+      await writeFile(trigger, `queued after generation ${generation}\n`);
+      await invalidations.next();
+    },
+    releaseQueuedGeneration() {
+      resolveRelease();
+    },
+    waitForQueuedGenerationStart() {
+      return queuedGenerationStarts.next();
+    },
+  };
+}
+
+async function loadViteWatchEntry(snapshot: ViteWatchOutputSnapshot): Promise<{
   readonly eager: readonly [ShaderSource, ShaderSource];
   readonly loadCold: () => Promise<ShaderSource>;
 }> {
-  return import(`${pathToFileURL(join(output, "entry.mjs")).href}?watch=${Date.now()}-${Math.random()}`) as Promise<{
+  if (!snapshot.files.includes("entry.mjs")) {
+    throw new Error(`Vite watch generation ${snapshot.generation} snapshot has no entry.mjs`);
+  }
+  return import(`${pathToFileURL(join(snapshot.directory, "entry.mjs")).href}?watch=${Date.now()}-${Math.random()}`) as Promise<{
     readonly eager: readonly [ShaderSource, ShaderSource];
     readonly loadCold: () => Promise<ShaderSource>;
   }>;
