@@ -147,7 +147,11 @@ test("loader metadata branches are early, synchronous and source-independent", a
   expect(webpackCode).toBe(`export default ${JSON.stringify(table)};`);
   expect(getOptions).not.toHaveBeenCalled();
   expect(asyncMode).not.toHaveBeenCalled();
-  expect(addDependency).not.toHaveBeenCalled();
+  expect(addDependency.mock.calls.map(([path]) => path)).toEqual(expect.arrayContaining([
+    expect.stringMatching(/packages\/wgsl\/package\.json$/u),
+    expect.stringMatching(/packages\/wgsl\/src\/metadata\.wgsl$/u),
+    expect.stringMatching(/packages\/wgsl\/src\/loader-webpack\/index\.ts$/u),
+  ]));
 
   expectPackedError(() => wgslWebpackLoader.call({
     resourcePath: packedModuleAssets().anchor,

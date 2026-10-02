@@ -1,5 +1,6 @@
 import { dirname, isAbsolute, relative } from "node:path";
 import { assertNoErrorDiagnostics } from "../loader-shared/diagnostics.ts";
+import { compilerDependencyError, compilerFilesForModule } from "../loader-shared/compiler-inventory.ts";
 import { shaderSourceModuleWithPackedImports, type PackedImportMode } from "../loader-shared/emit.ts";
 import { packedModuleAssets, packedQueryModule } from "../loader-shared/packed-query.ts";
 import { hasDirectFunctionExport } from "../loader-shared/source.ts";
@@ -19,6 +20,7 @@ type LoaderContext = {
   resourceQuery?: string;
   resourceFragment?: string;
   async?: () => (error: Error | null, result?: string) => void;
+  addBuildDependency?: (file: string) => void;
   addDependency?: (file: string) => void;
   getOptions?: () => unknown;
   _compiler?: object;
@@ -28,6 +30,12 @@ type LoaderContext = {
 };
 
 export default function wgslWebpackLoader(this: LoaderContext, source: string): string | void {
+  try {
+    registerCompilerDependencies(this);
+  } catch (error) {
+    const failure = error instanceof Error ? error : new Error(String(error));
+    return deliverRegistrationFailure(this, source, failure);
+  }
   const packedModule = packedQueryModule(
     this.resourcePath ?? "<webpack>",
     `${this.resourceQuery ?? ""}${this.resourceFragment ?? ""}`,
@@ -60,6 +68,40 @@ export default function wgslWebpackLoader(this: LoaderContext, source: string): 
   };
   if (!done) throw wgslError("VGPU-WGSL-RUNTIME-IMPORT", "@vgpu/wgsl webpack loader requires asynchronous mode for imports or direct exports.");
   run().then((code) => done(null, code), (error: unknown) => done(error instanceof Error ? error : new Error(String(error))));
+}
+
+function deliverRegistrationFailure(context: LoaderContext, source: string, failure: Error): void {
+  try {
+    const packedModule = packedQueryModule(
+      context.resourcePath ?? "<webpack>",
+      `${context.resourceQuery ?? ""}${context.resourceFragment ?? ""}`,
+    );
+    if (packedModule !== null) throw failure;
+    const path = context.resourcePath ?? "<webpack>";
+    const hasImports = hasTopLevelImport(source);
+    const exportedLeaf = !hasImports && hasDirectFunctionExport(source, path);
+    if (!hasImports && !exportedLeaf) throw failure;
+  } catch {
+    throw failure;
+  }
+  const done = context.async?.();
+  if (!done) throw failure;
+  done(failure);
+}
+
+function registerCompilerDependencies(context: LoaderContext): void {
+  const add = isTurbopackContext(context._module?.__reserved)
+    ? context.addDependency
+    : context.addBuildDependency ?? context.addDependency;
+  if (!add) return;
+  const inventory = compilerFilesForModule(import.meta.url, "wgslWebpackLoader");
+  for (const file of inventory.files) {
+    try {
+      add.call(context, file);
+    } catch (cause) {
+      throw compilerDependencyError("wgslWebpackLoader", file, cause);
+    }
+  }
 }
 
 function packedImportMode(context: LoaderContext, resourcePath: string): PackedImportMode {

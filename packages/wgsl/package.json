@@ -54,9 +54,15 @@
     "./_metadata.wgsl": "./src/metadata.wgsl",
     "./loader-webpack": {
       "types": "./dist/loader-webpack/index.d.ts",
-      "import": "./dist/loader-webpack/index.js",
-      "require": "./dist/loader-webpack/index.js",
-      "default": "./dist/loader-webpack/index.js"
+      "import": "./dist/loader-webpack/prepared.js",
+      "require": "./dist/loader-webpack/prepared.js",
+      "default": "./dist/loader-webpack/prepared.js"
+    },
+    "./next": {
+      "types": "./dist/next/index.d.ts",
+      "import": "./dist/next/index.js",
+      "require": "./dist/next/index.js",
+      "default": "./dist/next/index.js"
     },
     "./loader-vite": {
       "types": "./dist/loader-vite/index.d.ts",
@@ -108,6 +114,7 @@
     "./_packed": "client",
     "./prepare": "client",
     "./runtime": "tooling",
+    "./next": "tooling",
     "./loader-webpack": "tooling",
     "./loader-vite": "tooling",
     "./reflect-source": "tooling"
@@ -117,7 +124,8 @@
     "./_packed": 2048,
     "./prepare": 15360,
     "./runtime": 27136,
-    "./loader-webpack": 32256,
+    "./next": 3072,
+    "./loader-webpack": 34304,
     "./loader-vite": 32256,
     "./reflect-source": 14336
   },
