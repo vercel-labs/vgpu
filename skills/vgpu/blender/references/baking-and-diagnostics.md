@@ -1,5 +1,7 @@
 # Baking and Diagnostics
 
+For an end-to-end reduction and transfer procedure, start with [high-to-low baking](high-to-low-baking.md).
+
 ## Prepare the final low-poly mesh
 
 The final LOW defines the bake: transforms resolved without breaking rig pivots, clean topology, stable normals, UV seams, and triangulation. Export its tangents or verify equivalent tangent generation in the importer. Revisit affected bakes when this base changes.
@@ -13,6 +15,14 @@ Use stable names or groups to pair parts. An explicit cage must match LOW topolo
 For selected-to-active normal baking, verify the source selection, active LOW, source visibility, active image target in each receiving material, tangent space, and Y convention. Initialize unused normal texels to neutral (0.5, 0.5, 1) and AO to 1. Disable clearing between passes that accumulate into one atlas.
 
 Isolate matched HIGH/LOW pairs when projection picks up adjacent parts. Move an explicit cage with its pair. Use compact, deterministic offsets: extreme coordinates lose precision around narrow bevels. Restore the assembly before export.
+
+## Directional tile mapping
+
+For shingles, boards or masonry courses, check the material axes against the intended construction direction on every differently oriented face. Dominant-axis projection can switch axes between adjacent facets, rotating rows or stretching their physical size. More texture resolution does not fix that mapping.
+
+On a planar pitched roof, use a horizontal eave axis and an orthogonal uphill axis in the face plane, with UV distances measured in metres. For unit upward normal `N` and world up `Z`, one frame is `U = normalize(Z × N)`, `V = N × U`; horizontal roofs need a separately chosen direction. Project relative to a shared eave origin and divide by the intended tile repeat distance. Define the frame on the whole polygon before triangulation so a diagonal cannot introduce a new orientation. Check constant row height along the eave, consistent physical tile dimensions and course alignment across hips under matched close-up and distant views.
+
+Rotate the associated color, roughness and normal maps together. Changing UV0 also changes its tangent frame: regenerate stored tangents or verify the renderer's derivative frame. Preserve a separate lighting UV layout when possible, but evaluate bake dependencies independently: unchanged UV1 can justify geometric AO reuse while changed material sampling still affects indirect lighting.
 
 ## Cap and side normals
 
@@ -43,6 +53,8 @@ If the affected receiver set cannot be established, invalidate the dependent ass
 
 ## Texture filtering and runtime conventions
 
+Use the [asset delivery format table](asset-delivery.md#texture-delivery-choices) to choose container, codec and GPU format; keep bake masters separate from delivery conversions.
+
 - Normals and AO are linear data. Disable sRGB conversion and avoid premultiplying data channels by alpha.
 - Design island padding in pixels of the final resolution. Account for downsampling and mipmaps; more resolution cannot fix overlapping UVs.
 - For a downsampled normal master, decode RGB to vectors, average, normalize, and re-encode. Average AO separately as a scalar.
@@ -53,6 +65,8 @@ If the affected receiver set cannot be established, invalidate the dependent ass
 - Averaged normals can lose length in mipmaps. When specular highlights shimmer, consider filtering and roughness adjustment based on normal variance instead of globally blurring the intended material response.
 
 ## Diagnose before changing the bake
+
+First [classify the defect's origin](runtime-parity-and-diagnostics.md#classify-the-defects-origin). A camera, binding or scene-composition error can resemble damaged UVs or a bad bake; the table below narrows asset-specific causes after that separation.
 
 | Symptom | Distinguishing check | Possible correction |
 | --- | --- | --- |

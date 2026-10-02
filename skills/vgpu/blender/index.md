@@ -8,6 +8,10 @@ Read [shape and assembly](references/shape-and-assembly.md) when designing silho
 
 For long bakes or scripted export pipelines, read [preflight and recovery](references/preflight-and-recovery.md) before running them. It defines executable probes, stage checkpoints and recovery without discarding valid completed work.
 
+For texture format selection, model/download size or slow first-frame loading, read [asset delivery](references/asset-delivery.md). It compares PNG/WebP, KTX2 codecs and native GPU formats, geometry optimizations and end-to-end measurement.
+
+For reducing an existing dense model and transferring its detail to a new LOW mesh, read [high-to-low baking](references/high-to-low-baking.md). It covers regional reduction, a representative projection proof, multi-UV normal frames, assembled AO and matched acceptance.
+
 ## 1. Establish a baseline
 
 - Inspect the supplied references, source mesh, materials, rig, collision shapes, and export/import pipeline before editing.
@@ -60,6 +64,8 @@ Do not default to uniformly decimating a high-poly mesh. Shared profiles, delibe
 - If animation is part of the change, tune it at actual gameplay distances and speeds. Prefer existing rigid pivots for rigid motion, and verify animated bounds, shadows, dependent motion, and animation priorities. See [motion readability](references/shape-and-assembly.md#motion-readability).
 
 ## 6. Verify the observable result
+
+When a defect could come from either the asset or its rendering, use [runtime parity and diagnostics](references/runtime-parity-and-diagnostics.md) to isolate the contribution before editing or rebaking. It covers cross-surface consistency, isolated production-shader probes and evidence tied to the version actually rendered.
 
 Compare the original, HIGH, unbaked LOW, and baked LOW under matched conditions where those versions exist. Review at close range and gameplay distance, from behind and during movement. Toggle normal maps and AO to confirm their visible contribution; a loaded texture does not prove the material uses it.
 
