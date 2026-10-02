@@ -33,6 +33,10 @@ declare function wgslTurbopackRule(options?: WgslTurbopackRuleOptions): WgslTurb
 
 ## Parameters
 
+### WgslTurbopackRuleOptions
+
+The helper accepts the raw loader’s `WgslWebpackLoaderOptions` type:
+
 | Param | Type | Required | Default | Notes |
 |---|---|---|---|---|
 | options | `WgslTurbopackRuleOptions` | ✖ | `{}` | Plain object. `undefined` means omitted. `minify` is the only accepted field — there is no loader, path, version, or cache-key override. |
@@ -41,6 +45,8 @@ declare function wgslTurbopackRule(options?: WgslTurbopackRuleOptions): WgslTurb
 | options.minify.identifiers | `"none" \| "safe"` | ✖ | `"none"` in object form | `"safe"` shortens only function-local names, parameters, and safe resolver-generated helpers. |
 
 Known optional fields set to `undefined` count as omitted. Unknown field names are errors, even when their value is `undefined`.
+
+### WgslTurbopackRule [#wgslturbopackrule-2]
 
 **Returns:** `WgslTurbopackRule` — a fresh plain object with exactly one loader entry and `as: "*.js"`. Put it under `"*.wgsl"` unchanged:
 
