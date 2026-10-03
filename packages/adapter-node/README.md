@@ -14,10 +14,11 @@ pnpm add vgpu
 
 ```ts
 import { init, draw, frame, target } from "vgpu/node";
+import triangleShader from "./triangle.wgsl";
 
 const gpu = await init();
 const colorTarget = target(gpu, { size: [256, 256], format: "rgba8unorm" });
-const drawable = draw(gpu, { shader: TRIANGLE_WGSL, targets: [colorTarget] });
+const drawable = draw(gpu, { shader: triangleShader, targets: [colorTarget] });
 frame(gpu, (f) => f.pass({ target: colorTarget, clear: [0, 0, 0, 1] }, (p) => p.draw(drawable)));
 const rgba = await colorTarget.color.read({ mipLevel: 0, region: "all" });
 gpu.dispose();

@@ -9,6 +9,7 @@ import { expect, test } from "vitest";
 import {
   BUDGET_NOTE,
   DEFAULT_GROWTH_THRESHOLD,
+  prohibitedPreparedConsumerModules,
   evaluateBudget,
   exportBudgetField,
   formatFailure,
@@ -18,6 +19,7 @@ import {
   nextBudgetBytes,
   parseTarEntries,
   prohibitedExperienceInputs,
+  retainedMetafileModules,
   retainedMetafileInputs,
   resolveExportAudience,
   resolvePackageAudience,
@@ -67,6 +69,48 @@ test("experience input lists use bytes retained in the output, not all scanned m
       "src/scene/geometry-src/mesh-torus.ts": { bytesInOutput: 0 },
     },
   })).toEqual(["fixtures/effect-only.ts", "src/effect.ts"]);
+});
+
+test("prepared-consumer exclusions classify retained bytes across source and built graphs", () => {
+  const modules = retainedMetafileModules({
+    inputs: {
+      "packages/vgpu-api/dist/draw.js": { bytesInOutput: 121 },
+      "packages/wgsl/dist/prepare.js": { bytesInOutput: 97 },
+      "packages/wgsl/dist/preparation/serialize-reflection.js": { bytesInOutput: 83 },
+      "packages/wgsl/dist/runtime/scanner.js": { bytesInOutput: 71 },
+      "packages/wgsl/src/runtime/parser.ts": { bytesInOutput: 67 },
+      "packages/wgsl/dist/runtime/resolve-shader.js": { bytesInOutput: 59 },
+      "packages/wgsl/dist/runtime/reflect-layout.js": { bytesInOutput: 53 },
+      "packages/adapter-node/dist/index.js": { bytesInOutput: 47 },
+      "packages/vgpu-api/dist/cli/index.js": { bytesInOutput: 43 },
+      "node_modules/three/build/three.module.js": { bytesInOutput: 41 },
+      "packages/wgsl/dist/runtime/module-graph.js": { bytesInOutput: 0 },
+    },
+  });
+
+  expect(modules).toEqual([
+    { input: "packages/vgpu-api/dist/draw.js", bytesInOutput: 121 },
+    { input: "packages/wgsl/dist/prepare.js", bytesInOutput: 97 },
+    { input: "packages/wgsl/dist/preparation/serialize-reflection.js", bytesInOutput: 83 },
+    { input: "packages/wgsl/dist/runtime/scanner.js", bytesInOutput: 71 },
+    { input: "packages/wgsl/src/runtime/parser.ts", bytesInOutput: 67 },
+    { input: "packages/wgsl/dist/runtime/resolve-shader.js", bytesInOutput: 59 },
+    { input: "packages/wgsl/dist/runtime/reflect-layout.js", bytesInOutput: 53 },
+    { input: "packages/adapter-node/dist/index.js", bytesInOutput: 47 },
+    { input: "packages/vgpu-api/dist/cli/index.js", bytesInOutput: 43 },
+    { input: "node_modules/three/build/three.module.js", bytesInOutput: 41 },
+  ]);
+  expect(prohibitedPreparedConsumerModules(modules)).toEqual([
+    { category: "preparation", input: "packages/wgsl/dist/prepare.js", bytesInOutput: 97 },
+    { category: "preparation", input: "packages/wgsl/dist/preparation/serialize-reflection.js", bytesInOutput: 83 },
+    { category: "scanner", input: "packages/wgsl/dist/runtime/scanner.js", bytesInOutput: 71 },
+    { category: "parser", input: "packages/wgsl/src/runtime/parser.ts", bytesInOutput: 67 },
+    { category: "resolver", input: "packages/wgsl/dist/runtime/resolve-shader.js", bytesInOutput: 59 },
+    { category: "reflection", input: "packages/wgsl/dist/runtime/reflect-layout.js", bytesInOutput: 53 },
+    { category: "node", input: "packages/adapter-node/dist/index.js", bytesInOutput: 47 },
+    { category: "cli", input: "packages/vgpu-api/dist/cli/index.js", bytesInOutput: 43 },
+    { category: "three", input: "node_modules/three/build/three.module.js", bytesInOutput: 41 },
+  ]);
 });
 
 test("a budget is the next strictly greater 512 B multiple", () => {

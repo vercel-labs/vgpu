@@ -706,35 +706,37 @@ This shader is written for `box()`, which supplies only `position` and `normal`.
 
 The camera matrix is plain CPU data. It reaches the shader only when you pass it to `set()` under the WGSL binding name. The shader author chooses the group and binding; reflection maps the name `camera` to `@group(1) @binding(0)`, so the TypeScript side never repeats the numbers.
 
+```wgsl
+// lit.wgsl
+struct Lighting { direction: vec3f, ambient: f32 }
+struct CameraData { viewProjection: mat4x4f }
+@group(0) @binding(0) var<uniform> lighting: Lighting;
+@group(1) @binding(0) var<uniform> camera: CameraData;
+
+struct VertexOut { @builtin(position) clip: vec4f, @location(0) normal: vec3f }
+
+@vertex fn vs_main(@location(0) position: vec3f, @location(1) normal: vec3f) -> VertexOut {
+  var out: VertexOut;
+  out.clip = camera.viewProjection * vec4f(position, 1.0);
+  out.normal = normal;
+  return out;
+}
+
+@fragment fn fs_main(@location(0) normal: vec3f) -> @location(0) vec4f {
+  let diffuse = max(dot(normalize(normal), normalize(-lighting.direction)), 0.0);
+  return vec4f(vec3f(0.9, 0.5, 0.1) * (lighting.ambient + diffuse), 1.0);
+}
+```
+
 ```ts
 import { draw, geometry, init } from "vgpu";
 import { box } from "vgpu/scene";
+import litShader from "./lit.wgsl";
 
 const gpu = await init();
 const viewProjection = new Float32Array(16);
 
 // ---cut---
-const litShader = `
-  struct Lighting { direction: vec3f, ambient: f32 }
-  struct CameraData { viewProjection: mat4x4f }
-  @group(0) @binding(0) var<uniform> lighting: Lighting;
-  @group(1) @binding(0) var<uniform> camera: CameraData;
-
-  struct VertexOut { @builtin(position) clip: vec4f, @location(0) normal: vec3f }
-
-  @vertex fn vs_main(@location(0) position: vec3f, @location(1) normal: vec3f) -> VertexOut {
-    var out: VertexOut;
-    out.clip = camera.viewProjection * vec4f(position, 1.0);
-    out.normal = normal;
-    return out;
-  }
-
-  @fragment fn fs_main(@location(0) normal: vec3f) -> @location(0) vec4f {
-    let diffuse = max(dot(normalize(normal), normalize(-lighting.direction)), 0.0);
-    return vec4f(vec3f(0.9, 0.5, 0.1) * (lighting.ambient + diffuse), 1.0);
-  }
-`;
-
 const cube = draw(gpu, { shader: litShader, geometry: geometry(gpu, box({ size: 1 })) });
 
 // viewProjection is matrices.viewProjection, written by viewMatrices()
@@ -762,20 +764,23 @@ This setup renders the scene into an offscreen depth target and composites it to
 
 Shared setup — targets, the collection, the bridge, the draw, and camera state — is created once:
 
+```wgsl
+// present.wgsl
+@group(0) @binding(0) var scene: texture_2d<f32>;
+@group(0) @binding(1) var sceneSampler: sampler;
+
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return textureSampleLevel(scene, sceneSampler, uv, 0.0);
+}
+```
+
 ```ts
 // shared.ts
 import { clock, draw, effect, frameLoop, geometry, init, sampler, surface, target, type Frame } from "vgpu";
 import { box, composeMatrix, dolly, instances, orbit, orbitRig, pan, perspective, rigPose, smoothRig, viewMatrices, type InstanceId } from "vgpu/scene";
 import { instanceGeometry } from "vgpu/scene/gpu";
 import boxShader from "./boxes.wgsl";
-
-const presentShader = `
-  @group(0) @binding(0) var scene: texture_2d<f32>;
-  @group(0) @binding(1) var sceneSampler: sampler;
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return textureSampleLevel(scene, sceneSampler, uv, 0.0);
-  }
-`;
+import presentShader from "./present.wgsl";
 
 export const gpu = await init();
 const canvas = document.querySelector("canvas")!;

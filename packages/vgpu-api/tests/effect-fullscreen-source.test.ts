@@ -1,13 +1,7 @@
 import { expect, test } from "vitest";
-import { fullscreenSource } from "../src/effect.ts";
+import { reflectSource } from "@vgpu/wgsl/reflect-source";
+import { FULLSCREEN_VERTEX_ENTRY, FULLSCREEN_VERTEX_SOURCE } from "../src/fullscreen-stage.ts";
 
-test("fullscreenSource ignores @vertex text in comments", () => {
-  const source = `
-// @vertex fn fake() {}
-@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-  return vec4f(uv, 0.0, 1.0);
-}
-`;
-
-  expect(fullscreenSource(source)).toContain("@vertex fn vgpu_fullscreen_vs");
+test("fixed fullscreen vertex metadata exactly matches reflection", () => {
+  expect(reflectSource(FULLSCREEN_VERTEX_SOURCE, "fullscreen-stage.wgsl").entryPoints).toEqual([FULLSCREEN_VERTEX_ENTRY]);
 });

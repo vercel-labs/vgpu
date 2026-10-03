@@ -62,4 +62,5 @@ try {
 - Entry-point detection is intentionally lexical rather than semantic. It does not validate stage signatures, workgroup sizes, duplicate attributes, or any other WGSL rule. In incomplete source, an unterminated block comment or attribute argument ends extraction without throwing; names confirmed earlier are retained.
 - `stats.bindGroups` is `0` in this runtime passthrough shape. Do not use it as reflection for resource bindings.
 - Runtime WGSL modules with resources are allowed because there is no import graph. For imported WGSL modules, keep modules pure and declare every `@group/@binding` resource in the entry module.
-- **See also:** `ResolvedShader`, `ShaderSource`, `resolveShader`.
+- `compile()` output is not a renderer input: a `ResolvedShader` has no artifact `version`, so `draw`, `effect`, and `compute` reject it with `VGPU-SHADER-SOURCE-INVALID`. Pass `prepareShader(resolved.wgsl)` from `@vgpu/wgsl/prepare` instead, or import the file through a loader.
+- **See also:** `ResolvedShader`, `ShaderSource`, `prepareShader` (`@vgpu/wgsl/prepare`), `resolveShader`.

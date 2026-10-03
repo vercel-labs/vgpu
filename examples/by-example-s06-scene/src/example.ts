@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { init, draw, frame, geometry, target } from "vgpu/node";
 import { box, composeMatrix, group, perspective, viewMatrices } from "vgpu/scene";
 
@@ -21,6 +22,7 @@ struct VertexOut { @builtin(position) position: vec4f, @location(0) normal: vec3
   return vec4f(vec3f(0.2, 0.5, 1.0) * l, 1.0);
 }
 `;
+const LIT_SHADER = prepareShader(LIT_WGSL, "by-example-s06-scene.wgsl");
 
 export async function runSceneExample() {
   const gpu = await init();
@@ -33,7 +35,7 @@ export async function runSceneExample() {
     projection,
     matrices,
   );
-  const cube = draw(gpu, { shader: LIT_WGSL, geometry: geometry(gpu, box({ size: 1 })), label: "cube", targets: [colorTarget] });
+  const cube = draw(gpu, { shader: LIT_SHADER, geometry: geometry(gpu, box({ size: 1 })), label: "cube", targets: [colorTarget] });
   cube.set({
     camera: { viewProjection: matrices.viewProjection },
     model: { model: composeOrbitMatrix(0) },

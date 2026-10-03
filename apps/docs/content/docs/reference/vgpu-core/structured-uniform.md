@@ -105,15 +105,16 @@ void wgsl;
 ```ts
 import { init, draw } from "vgpu/mock";
 import { StructuredUniform } from "vgpu/core";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const params = new StructuredUniform(gpu.device, { schema: { value: "f32" } });
-const drawable = draw(gpu, { shader: `
+const drawable = draw(gpu, { shader: prepareShader(`
   struct Params { value: f32 }
   @group(0) @binding(0) var<uniform> params: Params;
   @vertex fn vs_main() -> @builtin(position) vec4f { return vec4f(0, 0, 0, 1); }
   @fragment fn fs_main() -> @location(0) vec4f { return vec4f(params.value); }
-` });
+`) });
 params.write({ value: 1 });
 drawable.set({ params });
 ```

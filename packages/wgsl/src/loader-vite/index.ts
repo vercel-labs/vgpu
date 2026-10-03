@@ -1,5 +1,6 @@
 import { assertNoErrorDiagnostics } from "../loader-shared/diagnostics.ts";
 import { shaderSourceModule } from "../loader-shared/emit.ts";
+import { packedQueryModule } from "../loader-shared/packed-query.ts";
 import { hasDirectFunctionExport } from "../loader-shared/source.ts";
 import { applyMinifyWgsl, type MinifyOption } from "../runtime/minify.ts";
 import { withEntrySource } from "../runtime/package-resolution.ts";
@@ -30,6 +31,9 @@ export function transformWgsl(source: string, id: string, options?: WgslVitePlug
 export function transformWgsl(opts: TransformWgslOptions): Promise<ViteLoadResult>;
 export async function transformWgsl(sourceOrOpts: string | TransformWgslOptions, id?: string, options: WgslVitePluginOptions = {}): Promise<ViteLoadResult> {
   const opts = typeof sourceOrOpts === "string" ? { ...options, source: sourceOrOpts, id: id ?? "<vite>" } : sourceOrOpts;
+  const request = splitRequest(opts.id);
+  const packedModule = packedQueryModule(request.resourcePath, request.resourceQuery);
+  if (packedModule !== null) return { code: packedModule, map: null };
   const hasImports = hasTopLevelImport(opts.source);
   const exportedLeaf = !hasImports && hasDirectFunctionExport(opts.source, opts.id);
   if (!hasImports && !exportedLeaf) {
@@ -38,7 +42,7 @@ export async function transformWgsl(sourceOrOpts: string | TransformWgslOptions,
     // importer resolves a graph through resolveShader().
     assertNoErrorDiagnostics(reservedIdentifierDiagnosticsForSource(opts.id, opts.source), opts.id);
     const wgsl = applyMinifyWgsl(opts.source, opts.minify);
-    return { code: shaderSourceModule(wgsl), map: null };
+    return { code: shaderSourceModule(wgsl, opts.id), map: null };
   }
   const resolved = await resolveShader(withEntrySource({
     entry: opts.id,
@@ -47,13 +51,16 @@ export async function transformWgsl(sourceOrOpts: string | TransformWgslOptions,
     onDependency: opts.onDependency,
   }, opts.source));
   assertNoErrorDiagnostics(resolved.diagnostics, opts.id);
-  return { code: shaderSourceModule(resolved.wgsl, resolved.functionExports), map: null };
+  return { code: shaderSourceModule(resolved.wgsl, opts.id, resolved.functionExports), map: null };
 }
 
 export function wgslVitePlugin(options: WgslVitePluginOptions = {}): { readonly name: string; readonly transform: (this: VitePluginContext, source: string, id: string) => Promise<ViteLoadResult | null> } {
   return {
     name: "@vgpu/wgsl",
     async transform(source, id) {
+      const request = splitRequest(id);
+      const packedModule = packedQueryModule(request.resourcePath, request.resourceQuery);
+      if (packedModule !== null) return { code: packedModule, map: null };
       if (!id.endsWith(".wgsl")) return null;
       return transformWgsl({
         source,
@@ -63,6 +70,13 @@ export function wgslVitePlugin(options: WgslVitePluginOptions = {}): { readonly 
       });
     },
   };
+}
+
+function splitRequest(id: string): { readonly resourcePath: string; readonly resourceQuery: string } {
+  const query = id.search(/[?#]/u);
+  return query < 0
+    ? { resourcePath: id, resourceQuery: "" }
+    : { resourcePath: id.slice(0, query), resourceQuery: id.slice(query) };
 }
 
 export default wgslVitePlugin;

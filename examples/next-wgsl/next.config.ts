@@ -1,12 +1,10 @@
+import { wgslTurbopackRule } from "@vgpu/wgsl/next";
 import type { NextConfig } from "next";
 
 const config: NextConfig = {
   turbopack: {
     rules: {
-      "*.wgsl": {
-        loaders: ["@vgpu/wgsl/loader-webpack"],
-        as: "*.js",
-      },
+      "*.wgsl": wgslTurbopackRule(),
     },
   },
 };

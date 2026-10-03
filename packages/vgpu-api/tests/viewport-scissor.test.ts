@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { expect, test, vi } from "vitest";
 import { init, draw, frame, target } from "../src/mock.ts";
 
@@ -13,7 +14,7 @@ test("viewport is emitted once at pass open with defaults filled", async () => {
   const gpu = await init();
   const ops = spyRenderPassOps(gpu.device.gpu);
   const colorTarget = target(gpu, { size: [4, 4] });
-  const drawable = draw(gpu, { shader: DRAW_SHADER, label: "vp" });
+  const drawable = draw(gpu, { shader: prepareShader(DRAW_SHADER), label: "vp" });
 
   frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, viewport: { width: 2, height: 1 } }, (p) => { p.draw(drawable); p.draw(drawable); }));
 
@@ -40,7 +41,7 @@ test("scissor is emitted once at pass open", async () => {
   const gpu = await init();
   const ops = spyRenderPassOps(gpu.device.gpu);
   const colorTarget = target(gpu, { size: [4, 4] });
-  const drawable = draw(gpu, { shader: DRAW_SHADER, label: "sc" });
+  const drawable = draw(gpu, { shader: prepareShader(DRAW_SHADER), label: "sc" });
 
   frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, scissor: [1, 0, 2, 3] }, (p) => p.draw(drawable)));
 
@@ -65,7 +66,7 @@ test("passes without viewport or scissor emit neither", async () => {
   const gpu = await init();
   const ops = spyRenderPassOps(gpu.device.gpu);
   const colorTarget = target(gpu, { size: [4, 4] });
-  const drawable = draw(gpu, { shader: DRAW_SHADER, label: "plain" });
+  const drawable = draw(gpu, { shader: prepareShader(DRAW_SHADER), label: "plain" });
 
   frame(gpu, (currentFrame) => {
     currentFrame.pass(colorTarget, (p) => p.draw(drawable));

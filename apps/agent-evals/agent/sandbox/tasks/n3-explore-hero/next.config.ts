@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-// `.wgsl` files import as `{ version: 1, wgsl: string }` through @vgpu/wgsl's
+// `.wgsl` files import as prepared ShaderSource v2 data through @vgpu/wgsl's
 // loader. Both bundlers are registered: `next build` uses webpack, `next dev`
 // uses Turbopack.
 const config: NextConfig = {

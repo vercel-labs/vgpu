@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { describe, expect, test } from "vitest";
 import { compute, effect, frame, init, sampler, target, texture } from "../../src/node.ts";
 
@@ -31,12 +32,12 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("storage textures on Dawn"
     const gpu = await init();
     const line = gpu.device.createTexture({ kind: "1d", size: [8], format: "rgba8unorm", usage: ["storage_binding", "copy_src"] });
     try {
-      compute(gpu, `
+      compute(gpu, prepareShader(`
         @group(0) @binding(0) var line: texture_storage_1d<rgba8unorm, write>;
         @compute @workgroup_size(8) fn main(@builtin(global_invocation_id) id: vec3u) {
           textureStore(line, id.x, vec4f(f32(id.x) / 7.0, 0.0, 1.0, 1.0));
         }
-      `, { set: { line } }).dispatch(1);
+      `), { set: { line } }).dispatch(1);
       const pixels = await line.read({ mipLevel: 0, region: "all" });
       expect(pixels.length).toBe(8 * 4);
       expect([...pixels.slice(0, 4)]).toEqual([0, 0, 255, 255]);
@@ -51,19 +52,19 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("storage textures on Dawn"
     const gpu = await init();
     try {
       const atlas = texture(gpu, { kind: "2d-array", size: [4, 4], layers, format: "rgba8unorm", usage: ["storage_binding", "texture_binding"] });
-      compute(gpu, `
+      compute(gpu, prepareShader(`
         @group(0) @binding(0) var atlas: texture_storage_2d_array<rgba8unorm, write>;
         @compute @workgroup_size(4, 4) fn main(@builtin(global_invocation_id) id: vec3u) {
           textureStore(atlas, id.xy, id.z, vec4f(f32(id.z) / 2.0, 0.0, 1.0, 1.0));
         }
-      `, { set: { atlas } }).dispatch(1, 1, layers);
+      `), { set: { atlas } }).dispatch(1, 1, layers);
       const output = target(gpu, { size: [layers, 1], format: "rgba8unorm" });
-      const view = effect(gpu, `
+      const view = effect(gpu, prepareShader(`
         @group(0) @binding(0) var atlas: texture_2d_array<f32>;
         @fragment fn main(@builtin(position) position: vec4f) -> @location(0) vec4f {
           return textureLoad(atlas, vec2i(0), i32(position.x), 0);
         }
-      `, { set: { atlas } });
+      `), { set: { atlas } });
       frame(gpu, (current) => current.pass({ target: output }, (pass) => pass.draw(view)));
       expect([...(await output.color.read({ mipLevel: 0, region: "all" }))]).toEqual([0, 0, 255, 255, 128, 0, 255, 255, 255, 0, 255, 255].slice(0, layers * 4));
       expect(atlas.size).toEqual([4, 4]);
@@ -77,7 +78,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("storage textures on Dawn"
     const gpu = await init();
     try {
       const out = texture(gpu, { kind: "2d", usage: ["storage_binding", "copy_src"], size: [8, 8], format: "rgba8unorm", label: "fill-2d" });
-      compute(gpu, FILL_2D, { label: "fill-2d", set: { out } }).dispatch(1, 1);
+      compute(gpu, prepareShader(FILL_2D), { label: "fill-2d", set: { out } }).dispatch(1, 1);
       const pixels = await out.read({ mipLevel: 0, region: "all" });
       expect(pixels.length).toBe(8 * 8 * 4);
       // texel (7, 0) -> r = 255, g = 0
@@ -96,9 +97,9 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("storage textures on Dawn"
     const gpu = await init();
     try {
       const lut = texture(gpu, { kind: "3d", usage: ["texture_binding", "storage_binding"], size: [4, 4, 4], format: "rgba16float", label: "lut" });
-      compute(gpu, FILL_3D, { label: "fill-3d", set: { lut } }).dispatch(1, 1, 1);
+      compute(gpu, prepareShader(FILL_3D), { label: "fill-3d", set: { lut } }).dispatch(1, 1, 1);
       const output = target(gpu, { size: [4, 4], format: "rgba8unorm" });
-      const view = effect(gpu, SAMPLE_3D, { label: "view-3d", set: { lut, linear: sampler(gpu) } });
+      const view = effect(gpu, prepareShader(SAMPLE_3D), { label: "view-3d", set: { lut, linear: sampler(gpu) } });
       frame(gpu, (current) => current.pass({ target: output, clear: [0, 0, 0, 1] }, (pass) => pass.draw(view)));
       const pixels = await output.color.read({ mipLevel: 0, region: "all" });
       const at = (x: number, y: number) => [pixels[(y * 4 + x) * 4]!, pixels[(y * 4 + x) * 4 + 1]!, pixels[(y * 4 + x) * 4 + 2]!];

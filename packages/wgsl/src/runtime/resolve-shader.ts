@@ -6,7 +6,7 @@ import { cacheKeys } from "./cache-key.ts";
 import type { DiagnosticList } from "./diagnostic-types.ts";
 import { assertNoMangleCollisions, emitModule, isEntryPoint, type ExportMap, type ExportTarget, type MangleModule } from "./mangler.ts";
 import { applyMinifyWgsl, normalizeMinifyOption, type MinifyOption } from "./minify.ts";
-import { canonicalEntry, readModule, resolveImport as resolvePath } from "./package-resolution.ts";
+import { canonicalEntry, readModule, resolveImport as resolvePath, withMissingDependencyReporter } from "./package-resolution.ts";
 import { type ImportDecl } from "./parser.ts";
 import { reflect, type EntryPointInfo, type Reflection } from "./reflect.ts";
 import { reservedIdentifierDiagnostics } from "./reserved-identifiers.ts";
@@ -94,9 +94,10 @@ function normalizeValidateMode(value: ResolveOptions["validate"]): ValidateMode 
 export async function resolveShader(opts: ResolveOptions): Promise<ResolvedShader> {
   const diagnostics: DiagnosticList[number][] = [];
   const entry = canonicalEntry(opts.entry, opts);
+  const resolutionOptions = withMissingDependencyReporter(opts, opts.onDependency);
   const graph = await loadModuleGraph([entry], {
     read: (path) => readModule(path, opts),
-    resolve: (specifier, from) => resolvePath(specifier, from, opts, diagnostics),
+    resolve: (specifier, from) => resolvePath(specifier, from, resolutionOptions, diagnostics),
     onDependency: opts.onDependency,
   });
   return resolveGraph(entry, graph, opts, diagnostics);

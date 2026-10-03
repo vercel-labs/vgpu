@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { init, effect, target } from "vgpu/mock";
 
 const NEEDS_SAMPLER = /* wgsl */ `
@@ -11,12 +12,17 @@ struct Params { speed: f32 }
 @group(0) @binding(0) var<uniform> params: Params;
 @fragment fn main(@location(0) uv: vec2f) -> @location(0) vec4f { return vec4f(params.speed, uv, 1.0); }
 `;
+const NEEDS_SAMPLER_SHADER = prepareShader(
+  NEEDS_SAMPLER,
+  "by-example-s05-needs-sampler.wgsl"
+);
+const SPEED_SHADER = prepareShader(SPEED, "by-example-s05-speed.wgsl");
 
 export async function collectFixitMessages() {
   const gpu = await init();
   try {
-    const missing = effect(gpu, NEEDS_SAMPLER, { label: "lighting" });
-    const ownership = effect(gpu, SPEED, { label: "wave", set: { speed: 2 } });
+    const missing = effect(gpu, NEEDS_SAMPLER_SHADER, { label: "lighting" });
+    const ownership = effect(gpu, SPEED_SHADER, { label: "wave", set: { speed: 2 } });
     const messages: string[] = [];
     try { missing.draw({ target: target(gpu, { size: [4, 4] }) }); } catch (error) { messages.push(String((error as Error).message)); }
     try { ownership.set({ speed: gpu.device.createBuffer({ size: 4, usage: ["uniform", "copy_dst"] }) }); } catch (error) { messages.push(String((error as Error).message)); }

@@ -17,40 +17,12 @@ Two-pass rendering draws the scene into an offscreen target, then draws that tar
 ```ts
 import { draw, frameLoop, geometry, init, surface } from "vgpu";
 import { box, composeMatrix, orbitRig, perspective, rigPose, sphere, viewMatrices } from "vgpu/scene";
+import objectShader from "./object.wgsl";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
 
 // Both objects share shading; vertex entrypoints match their different attribute layouts.
-const objectShader = `
-  struct Camera { viewProjection: mat4x4f }
-  struct Model { model: mat4x4f, color: vec3f }
-  @group(0) @binding(0) var<uniform> camera: Camera;
-  @group(0) @binding(1) var<uniform> model: Model;
-
-  struct VertexOut { @builtin(position) position: vec4f, @location(0) normal: vec3f }
-
-  fn vertex(position: vec3f, normal: vec3f) -> VertexOut {
-    var out: VertexOut;
-    out.position = camera.viewProjection * model.model * vec4f(position, 1.0);
-    out.normal = (model.model * vec4f(normal, 0.0)).xyz;
-    return out;
-  }
-
-  @vertex fn vs_box(@location(0) position: vec3f, @location(1) normal: vec3f) -> VertexOut {
-    return vertex(position, normal);
-  }
-
-  @vertex fn vs_sphere(@location(0) position: vec3f, @location(1) normal: vec3f, @location(2) uv: vec2f) -> VertexOut {
-    return vertex(position, normal);
-  }
-
-  @fragment fn fs_main(@location(0) normal: vec3f) -> @location(0) vec4f {
-    let light = max(dot(normalize(normal), normalize(vec3f(1.0, 1.0, 1.0))), 0.15);
-    return vec4f(model.color * light, 1.0);
-  }
-`;
-
 // ---cut---
 // One target: the canvas, with an owned depth24plus attachment and 4× MSAA.
 const canvasSurface = surface(gpu, canvas, { depth: true, msaa: true });
@@ -98,6 +70,50 @@ The pass clears depth to `1` by default, the draws keep their default depth stat
 
 The surface's depth and MSAA come with pass rules: with `msaa`, every surface pass must clear, because multisample attachments are discarded after each pass (`clear: false` throws `VGPU-PASS-PRESERVE-MSAA`). Encode a frame's draws into one surface pass. See [`Surface`](/reference/vgpu/surface#surface) for attachment lifetimes, resize, and reading a single-sample `surface.depth`.
 
+```wgsl
+// object.wgsl
+struct Camera { viewProjection: mat4x4f }
+struct Model { model: mat4x4f, color: vec3f }
+@group(0) @binding(0) var<uniform> camera: Camera;
+@group(0) @binding(1) var<uniform> model: Model;
+
+struct VertexOut { @builtin(position) position: vec4f, @location(0) normal: vec3f }
+
+fn vertex(position: vec3f, normal: vec3f) -> VertexOut {
+  var out: VertexOut;
+  out.position = camera.viewProjection * model.model * vec4f(position, 1.0);
+  out.normal = (model.model * vec4f(normal, 0.0)).xyz;
+  return out;
+}
+
+@vertex fn vs_box(@location(0) position: vec3f, @location(1) normal: vec3f) -> VertexOut {
+  return vertex(position, normal);
+}
+
+@vertex fn vs_sphere(
+  @location(0) position: vec3f,
+  @location(1) normal: vec3f,
+  @location(2) uv: vec2f,
+) -> VertexOut {
+  return vertex(position, normal);
+}
+
+@fragment fn fs_main(@location(0) normal: vec3f) -> @location(0) vec4f {
+  let light = max(dot(normalize(normal), normalize(vec3f(1.0, 1.0, 1.0))), 0.15);
+  return vec4f(model.color * light, 1.0);
+}
+```
+
+```wgsl
+// present.wgsl
+@group(0) @binding(0) var scene: texture_2d<f32>;
+@group(0) @binding(1) var sceneSampler: sampler;
+
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return textureSampleLevel(scene, sceneSampler, uv, 0.0);
+}
+```
+
 ## The recipe
 
 Use two passes whenever a later pass reads the rendered scene as a texture — a post-processing chain, temporal history, or `color.read(...)` after presentation. A surface cannot be an input binding (`VGPU-SURFACE-NOT-BINDABLE`), and its color is the current canvas texture, replaced after each presentation.
@@ -105,50 +121,14 @@ Use two passes whenever a later pass reads the rendered scene as a texture — a
 ```ts
 import { draw, effect, frame, geometry, init, sampler, surface, target } from "vgpu";
 import { box, composeMatrix, orbitRig, perspective, rigPose, sphere, viewMatrices } from "vgpu/scene";
+import objectShader from "./object.wgsl";
+import presentShader from "./present.wgsl";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
 
 // Both objects share shading; vertex entrypoints match their different attribute layouts.
-const objectShader = `
-  struct Camera { viewProjection: mat4x4f }
-  struct Model { model: mat4x4f, color: vec3f }
-  @group(0) @binding(0) var<uniform> camera: Camera;
-  @group(0) @binding(1) var<uniform> model: Model;
-
-  struct VertexOut { @builtin(position) position: vec4f, @location(0) normal: vec3f }
-
-  fn vertex(position: vec3f, normal: vec3f) -> VertexOut {
-    var out: VertexOut;
-    out.position = camera.viewProjection * model.model * vec4f(position, 1.0);
-    out.normal = (model.model * vec4f(normal, 0.0)).xyz;
-    return out;
-  }
-
-  @vertex fn vs_box(@location(0) position: vec3f, @location(1) normal: vec3f) -> VertexOut {
-    return vertex(position, normal);
-  }
-
-  @vertex fn vs_sphere(@location(0) position: vec3f, @location(1) normal: vec3f, @location(2) uv: vec2f) -> VertexOut {
-    return vertex(position, normal);
-  }
-
-  @fragment fn fs_main(@location(0) normal: vec3f) -> @location(0) vec4f {
-    let light = max(dot(normalize(normal), normalize(vec3f(1.0, 1.0, 1.0))), 0.15);
-    return vec4f(model.color * light, 1.0);
-  }
-`;
-
 // Pass 2 reads pass 1's color texture and writes it to the canvas.
-const presentShader = `
-  @group(0) @binding(0) var scene: texture_2d<f32>;
-  @group(0) @binding(1) var sceneSampler: sampler;
-
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return textureSampleLevel(scene, sceneSampler, uv, 0.0);
-  }
-`;
-
 // ---cut---
 const width = 960;
 const height = 540;
@@ -218,10 +198,11 @@ Rendering this from Node, a script, or a test instead of a browser? Everything i
 
 ```ts
 import { draw, effect, frame, geometry, init, sampler, target } from "vgpu/node";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { box, composeMatrix, orbitRig, perspective, rigPose, viewMatrices } from "vgpu/scene";
 
-const objectShader = "/* the same vertex + fragment shader as above */";
-const presentShader = "/* the same present shader as above */";
+const objectShader = prepareShader("/* the same vertex + fragment shader as above */");
+const presentShader = prepareShader("/* the same present shader as above */");
 const width = 960;
 const height = 540;
 

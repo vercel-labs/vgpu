@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { bundle, draw, effect, init, target, type Bundle } from "../../src/mock.ts";
 import { createBundleRegistry, type BundleBackReference } from "../../src/draw.ts";
 
@@ -22,7 +23,7 @@ try {
   const output = target(gpu, { size: [4, 4] });
   const source = target(gpu, { size: [4, 4] });
   const replacement = target(gpu, { size: [4, 4] });
-  const sampled = effect(gpu, SAMPLED, { label: "retention-probe", set: { source: source.color } });
+  const sampled = effect(gpu, prepareShader(SAMPLED), { label: "retention-probe", set: { source: source.color } });
   const originalOnDestroy = source.color.onDestroy.bind(source.color);
   let activeBundleSubscriptions = 0;
   source.color.onDestroy = (callback) => {
@@ -103,8 +104,8 @@ try {
 
   function makeStaleBundleWithLateDraw(): { staleBundle: Bundle; lateDrawRef: WeakRef<ReturnType<typeof draw>> } {
     const staleSource = target(gpu, { size: [4, 4] });
-    const first = effect(gpu, SAMPLED, { label: "stale-first", set: { source: staleSource.color } });
-    const late = draw(gpu, { shader: SOLID_DRAW, label: "late-after-stale" });
+    const first = effect(gpu, prepareShader(SAMPLED), { label: "stale-first", set: { source: staleSource.color } });
+    const late = draw(gpu, { shader: prepareShader(SOLID_DRAW), label: "late-after-stale" });
     const lateDrawRef = new WeakRef(late);
     const staleBundle = bundle(gpu, { target: output, label: "retained-stale" }, (recorder) => {
       recorder.draw(first);

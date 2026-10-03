@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { describe, expect, test } from "vitest";
 import { draw, frame, geometry, init, target, VGPUError } from "../../src/node.ts";
 import { instanceGeometry } from "../../src/scene/instance-geometry.ts";
@@ -61,8 +62,8 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("instanceGeometry native G
       expect(mirrorA.publish()).toBe(2);
       expect(mirrorB.publish()).toBe(2);
 
-      const drawA = draw(gpu, { shader: INSTANCED, geometry: mirrorA.geometry, label: "instances-A" });
-      const drawB = draw(gpu, { shader: INSTANCED, geometry: mirrorB.geometry, label: "instances-B" });
+      const drawA = draw(gpu, { shader: prepareShader(INSTANCED), geometry: mirrorA.geometry, label: "instances-A" });
+      const drawB = draw(gpu, { shader: prepareShader(INSTANCED), geometry: mirrorB.geometry, label: "instances-B" });
       const a = target(gpu, { size: [32, 16], format: "rgba8unorm" });
       const b = target(gpu, { size: [32, 16], format: "rgba8unorm" });
       frame(gpu, (current) => {
@@ -107,7 +108,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("instanceGeometry native G
       const mesh = geometry(gpu, { buffers: [{ data: new Float32Array(6), attributes: { position: { format: "float32x2", location: 0 } } }] });
       const collection = instances({ capacity: 0, attributes: { tint: "float32x3", signedCode: "sint32", kind: "uint32" } });
       const bridge = instanceGeometry(gpu, collection, { mesh });
-      const drawable = draw(gpu, { shader: INSTANCED, geometry: bridge.geometry });
+      const drawable = draw(gpu, { shader: prepareShader(INSTANCED), geometry: bridge.geometry });
       const output = target(gpu, { size: [1, 1], format: "rgba8unorm" });
       drawable.compileSync(output);
       mesh.destroy();

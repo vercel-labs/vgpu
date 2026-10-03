@@ -48,31 +48,6 @@ interface BoundLogo extends LogoRaster {
   readonly placement: FlarePlacement;
 }
 
-const TOP_LEFT_FULLSCREEN_VERTEX = /* wgsl */ `
-struct FlareFullscreenVertexOut {
-  @builtin(position) position: vec4f,
-  @location(0) uv: vec2f,
-};
-
-@vertex
-fn flare_fullscreen_vs(@builtin(vertex_index) vertexIndex: u32) -> FlareFullscreenVertexOut {
-  let positions = array<vec2f, 3>(
-    vec2f(-1.0, -1.0),
-    vec2f(3.0, -1.0),
-    vec2f(-1.0, 3.0),
-  );
-  let uvs = array<vec2f, 3>(
-    vec2f(0.0, 1.0),
-    vec2f(2.0, 1.0),
-    vec2f(0.0, -1.0),
-  );
-  var output: FlareFullscreenVertexOut;
-  output.position = vec4f(positions[vertexIndex], 0.0, 1.0);
-  output.uv = uvs[vertexIndex];
-  return output;
-}
-`;
-
 const GLYPH_CENTER_IN_BOX: Point = [(48 + 466 / 2) / 514, (88 + 536 / 2) / 624];
 const LOGO_HEIGHT_RATIO = 0.62;
 const MAX_RENDER_WIDTH = 1920;
@@ -113,15 +88,15 @@ export class FlarePipeline {
     this.blueNoise = createBlueNoiseTexture(gpu);
     try {
       this.effects = {
-        logo: effect(gpu, fullscreen(logoWgsl), { label: "nextjs-flare-logo" }),
-        rim: effect(gpu, fullscreen(rimWgsl), { label: "nextjs-flare-rim" }),
-        rimBlurH: effect(gpu, fullscreen(blurWgsl), {
+        logo: effect(gpu, logoWgsl, { label: "nextjs-flare-logo" }),
+        rim: effect(gpu, rimWgsl, { label: "nextjs-flare-rim" }),
+        rimBlurH: effect(gpu, blurWgsl, {
           label: "nextjs-flare-rim-horizontal",
         }),
-        rimBlurV: effect(gpu, fullscreen(blurWgsl), {
+        rimBlurV: effect(gpu, blurWgsl, {
           label: "nextjs-flare-rim-vertical",
         }),
-        composite: effect(gpu, fullscreen(compositeWgsl), {
+        composite: effect(gpu, compositeWgsl, {
           label: "nextjs-flare-composite",
         }),
       };
@@ -541,11 +516,6 @@ function lightPulse(timeSeconds: number): number {
 function pulseHash(index: number): number {
   const value = Math.sin(index * 127.1 + 311.7) * 43758.5453;
   return value - Math.floor(value);
-}
-
-function fullscreen(shader: string | { readonly wgsl: string }): string {
-  const source = typeof shader === "string" ? shader : shader.wgsl;
-  return `${TOP_LEFT_FULLSCREEN_VERTEX}\n${source}`;
 }
 
 function targetCleanups(targets: FlareTargets): Array<() => void> {

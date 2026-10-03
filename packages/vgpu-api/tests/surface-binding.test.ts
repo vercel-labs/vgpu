@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { expect, test, vi } from "vitest";
 import type { Target } from "../src/target.ts";
 import { compute, draw, effect, frame, init, sampler, surface, target, texture } from "../src/mock.ts";
@@ -42,9 +43,9 @@ test("Draw, Effect, and Compute reject Surface in constructors and later set, in
     const { canvasSurface, getCurrentTexture } = createSurface(gpu);
     const guardedSurface = rejectAttachmentReads(canvasSurface);
     const cases = [
-      { label: "sampled-draw", binding: "source", create: (set?: Record<string, unknown>) => draw(gpu, { shader: SAMPLED_DRAW, label: "sampled-draw", set }) },
-      { label: "sampler-effect", binding: "sourceSampler", create: (set?: Record<string, unknown>) => effect(gpu, SAMPLER_EFFECT, { label: "sampler-effect", set }) },
-      { label: "storage-compute", binding: "destination", create: (set?: Record<string, unknown>) => compute(gpu, STORAGE_COMPUTE, { label: "storage-compute", set }) },
+      { label: "sampled-draw", binding: "source", create: (set?: Record<string, unknown>) => draw(gpu, { shader: prepareShader(SAMPLED_DRAW), label: "sampled-draw", set }) },
+      { label: "sampler-effect", binding: "sourceSampler", create: (set?: Record<string, unknown>) => effect(gpu, prepareShader(SAMPLER_EFFECT), { label: "sampler-effect", set }) },
+      { label: "storage-compute", binding: "destination", create: (set?: Record<string, unknown>) => compute(gpu, prepareShader(STORAGE_COMPUTE), { label: "storage-compute", set }) },
     ];
 
     for (const item of cases) {
@@ -72,7 +73,7 @@ test("a JS-owned buffer cannot bypass Surface rejection and remains usable after
   try {
     const { canvasSurface, getCurrentTexture } = createSurface(gpu);
     const output = target(gpu, { size: [4, 4] });
-    const shader = effect(gpu, UNIFORM_EFFECT, { label: "uniform-effect", set: { params: { value: 0.25 } } });
+    const shader = effect(gpu, prepareShader(UNIFORM_EFFECT), { label: "uniform-effect", set: { params: { value: 0.25 } } });
 
     expect(() => shader.set({ params: canvasSurface })).toThrowError(expect.objectContaining({
       code: "VGPU-SURFACE-NOT-BINDABLE",
@@ -96,7 +97,7 @@ test("a failed Surface set preserves a sampled Target binding and its replacemen
       unsubscribes.push(unsubscribe);
       return unsubscribe;
     });
-    const post = effect(gpu, SAMPLED_DRAW, { label: "post", set: { source } });
+    const post = effect(gpu, prepareShader(SAMPLED_DRAW), { label: "post", set: { source } });
 
     expectSurfaceError(() => post.set({ source: canvasSurface }), "post", "source");
     expect(unsubscribes).toHaveLength(1);
@@ -115,7 +116,7 @@ test("disposed Surfaces and depth slots reject before attachment getter access",
     const { canvasSurface, getCurrentTexture } = createSurface(gpu);
     const depthTarget = target(gpu, { size: [4, 4], depth: true });
     const output = target(gpu, { size: [4, 4] });
-    const post = effect(gpu, DEPTH_EFFECT, { label: "depth-post", set: { sceneDepth: depthTarget } });
+    const post = effect(gpu, prepareShader(DEPTH_EFFECT), { label: "depth-post", set: { sceneDepth: depthTarget } });
     canvasSurface.dispose();
 
     expectSurfaceError(() => post.set({ sceneDepth: canvasSurface }), "depth-post", "sceneDepth");
@@ -131,8 +132,8 @@ test("ordinary and custom Targets keep following replacement textures", async ()
     const backing = target(gpu, { size: [4, 4] });
     const output = target(gpu, { size: [4, 4] });
     const custom = customTarget(backing);
-    const ordinaryPost = effect(gpu, SAMPLED_DRAW, { set: { source: ordinary } });
-    const customPost = effect(gpu, SAMPLED_DRAW, { set: { source: custom } });
+    const ordinaryPost = effect(gpu, prepareShader(SAMPLED_DRAW), { set: { source: ordinary } });
+    const customPost = effect(gpu, prepareShader(SAMPLED_DRAW), { set: { source: custom } });
 
     ordinary.resize([8, 8]);
     backing.resize([8, 8]);
@@ -150,9 +151,9 @@ test("explicit Textures, the current-frame Surface color escape, and Surface col
     const explicit = texture(gpu, { kind: "2d", size: [4, 4], format: "rgba8unorm", usage: ["texture_binding"] });
     const storage = texture(gpu, { kind: "2d", size: [4, 4], format: "rgba8unorm", usage: ["storage_binding"] });
     const output = target(gpu, { size: [4, 4] });
-    const sampled = effect(gpu, SAMPLED_DRAW, { label: "sampled", set: { source: explicit } });
-    const stored = compute(gpu, STORAGE_COMPUTE, { label: "stored", set: { destination: storage } });
-    const sampledWithSampler = effect(gpu, SAMPLER_EFFECT, { set: { sourceSampler: sampler(gpu) } });
+    const sampled = effect(gpu, prepareShader(SAMPLED_DRAW), { label: "sampled", set: { source: explicit } });
+    const stored = compute(gpu, prepareShader(STORAGE_COMPUTE), { label: "stored", set: { destination: storage } });
+    const sampledWithSampler = effect(gpu, prepareShader(SAMPLER_EFFECT), { set: { sourceSampler: sampler(gpu) } });
 
     expect(() => stored.dispatch(1)).not.toThrow();
     expect(() => frame(gpu, (currentFrame) => {

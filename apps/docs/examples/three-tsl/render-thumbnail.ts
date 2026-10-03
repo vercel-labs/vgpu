@@ -3,6 +3,7 @@ import { float } from "three/tsl";
 import { EXRLoader } from "three/addons/loaders/EXRLoader.js";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { effect, sampler, type Gpu, type Target } from "vgpu";
 import { createDemoCamera, createDemoScene } from "./scenes";
 import { createOutputPipeline } from "./post";
@@ -36,6 +37,7 @@ fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
   return textureSample(src_tex, src_samp, uv);
 }
 `;
+const PRESENT_SHADER = prepareShader(PRESENT_WGSL, "three-tsl-present.wgsl");
 
 /**
  * three.js reaches for browser globals during construction even when it never
@@ -217,7 +219,7 @@ export async function renderThumbnail(
       get(value: unknown): { texture: GPUTexture };
     };
     const source = backend.get(renderTarget.texture).texture;
-    effect(gpu, PRESENT_WGSL, { label: "three-tsl-present" })
+    effect(gpu, PRESENT_SHADER, { label: "three-tsl-present" })
       .set({
         src_tex: source.createView(),
         src_samp: sampler(gpu, { magFilter: "linear", minFilter: "linear" }),

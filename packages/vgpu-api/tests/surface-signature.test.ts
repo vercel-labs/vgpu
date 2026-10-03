@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
 import { expect, test, vi } from "vitest";
 import { bundle, draw, effect, frame, init, surface } from "../src/mock.ts";
@@ -27,17 +28,17 @@ test("every Surface preparation path uses configured metadata without presentati
     const submits = vi.spyOn(gpu.gpu.queue, "submit");
     const attachmentReads = rejectAttachmentReads(screen);
 
-    const asyncDraw = draw(gpu, { shader: DRAW_WGSL, label: "async-draw" });
-    const syncDraw = draw(gpu, { shader: `${DRAW_WGSL}\n// sync`, label: "sync-draw" });
-    const asyncEffect = effect(gpu, EFFECT_WGSL, { label: "async-effect" });
-    const syncEffect = effect(gpu, `${EFFECT_WGSL}\n// sync`, { label: "sync-effect" });
-    const bundledEffect = effect(gpu, `${EFFECT_WGSL}\n// bundle`, { label: "bundle-effect" });
+    const asyncDraw = draw(gpu, { shader: prepareShader(DRAW_WGSL), label: "async-draw" });
+    const syncDraw = draw(gpu, { shader: prepareShader(`${DRAW_WGSL}\n// sync`), label: "sync-draw" });
+    const asyncEffect = effect(gpu, prepareShader(EFFECT_WGSL), { label: "async-effect" });
+    const syncEffect = effect(gpu, prepareShader(`${EFFECT_WGSL}\n// sync`), { label: "sync-effect" });
+    const bundledEffect = effect(gpu, prepareShader(`${EFFECT_WGSL}\n// bundle`), { label: "bundle-effect" });
 
     await expect(asyncDraw.compile(screen)).resolves.toBe(asyncDraw);
     expect(syncDraw.compileSync(screen)).toBe(syncDraw);
     await expect(asyncEffect.compile(screen)).resolves.toBe(asyncEffect);
     expect(syncEffect.compileSync(screen)).toBe(syncEffect);
-    const prewarmed = draw(gpu, { shader: `${DRAW_WGSL}\n// constructor`, targets: [screen] });
+    const prewarmed = draw(gpu, { shader: prepareShader(`${DRAW_WGSL}\n// constructor`), targets: [screen] });
     const recorded = bundle(gpu, { target: screen, label: "surface-prepared" }, (recorder) => recorder.draw(bundledEffect));
 
     expect(prewarmed.gpu).toBeDefined();
@@ -77,7 +78,7 @@ test("Surface and equivalent explicit signatures share cache and rendering acqui
   try {
     const canvas = renderCanvas();
     const screen = surface(gpu, canvas.canvas, { autoResize: false, format: "rgba8unorm" });
-    const drawable = draw(gpu, { shader: DRAW_WGSL, label: "cache-shared" });
+    const drawable = draw(gpu, { shader: prepareShader(DRAW_WGSL), label: "cache-shared" });
     const instrumentation = getMockGPUDeviceInstrumentation(gpu.gpu);
 
     await drawable.compile(screen);
@@ -118,7 +119,7 @@ test("Surface preparation checks liveness while draw and submitted-frame boundar
   try {
     const canvas = renderCanvas();
     const screen = surface(gpu, canvas.canvas, { autoResize: false, format: "rgba8unorm" });
-    const drawable = draw(gpu, { shader: DRAW_WGSL, label: "surface-boundaries" });
+    const drawable = draw(gpu, { shader: prepareShader(DRAW_WGSL), label: "surface-boundaries" });
 
     expect(() => drawable.draw(screen)).toThrowError(expect.objectContaining({ code: "VGPU-SURFACE-NOT-IN-FRAME" }));
     const submitted = frame(gpu);
@@ -132,7 +133,7 @@ test("Surface preparation checks liveness while draw and submitted-frame boundar
     screen.dispose();
     expect(() => drawable.compile(screen)).toThrowError(expect.objectContaining({ code: "VGPU-SURFACE-DISPOSED" }));
     expect(() => drawable.compileSync(screen)).toThrowError(expect.objectContaining({ code: "VGPU-SURFACE-DISPOSED" }));
-    expect(() => draw(gpu, { shader: `${DRAW_WGSL}\n// disposed constructor`, targets: [screen] })).toThrowError(expect.objectContaining({ code: "VGPU-SURFACE-DISPOSED" }));
+    expect(() => draw(gpu, { shader: prepareShader(`${DRAW_WGSL}\n// disposed constructor`), targets: [screen] })).toThrowError(expect.objectContaining({ code: "VGPU-SURFACE-DISPOSED" }));
     expect(() => bundle(gpu, { target: screen }, () => undefined)).toThrowError(expect.objectContaining({ code: "VGPU-SURFACE-DISPOSED" }));
     expect(canvas.getCurrentTexture).not.toHaveBeenCalled();
   } finally {
@@ -158,7 +159,7 @@ test("custom Targets without the private protocol retain attachment-based signat
       get sampleCount() { return sampleCount(); },
       renderPassDescriptor: () => ({ colorAttachments: [] }),
     } as unknown as Target;
-    const drawable = draw(gpu, { shader: DRAW_WGSL, label: "custom-fallback" });
+    const drawable = draw(gpu, { shader: prepareShader(DRAW_WGSL), label: "custom-fallback" });
 
     expect(drawable.compileSync(custom)).toBe(drawable);
     expect(colors).toHaveBeenCalledTimes(1);

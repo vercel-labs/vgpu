@@ -141,17 +141,18 @@ declare class FrameRunner {
 
 ```ts
 import { init, draw, frame, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const scene = target(gpu, { size: [64, 64], format: "rgba8unorm", clearColor: [0.02, 0.02, 0.04, 1] });
 scene.clearColor = [0.02, 0.02, 0.04, 1]; // and it stays writable at runtime
-const drawable = draw(gpu, { shader: `
+const drawable = draw(gpu, { shader: prepareShader(`
   @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
     var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
     return vec4f(p[vi], 0, 1);
   }
   @fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.2, 0.4, 1.0, 1.0); }
-` });
+`) });
 
 frame(gpu, (currentFrame) => {
   currentFrame.pass(scene, (pass) => pass.draw(drawable)); // clears with scene.clearColor
@@ -160,10 +161,11 @@ frame(gpu, (currentFrame) => {
 
 ```ts
 import { init, effect, frameLoop, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const colorTarget = target(gpu, { size: [16, 16] });
-const shader = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const shader = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`));
 const handle = frameLoop(gpu, (frame) => {
   frame.pass({ target: colorTarget, clear: false }, shader); // preserve color and depth
 }, { fps: 30 });
@@ -172,11 +174,12 @@ handle.stop();
 
 ```ts
 import { init, effect, frame, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const screen = target(gpu, { size: [640, 360] });
-const p1View = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.1, 0.3, 0.6, 1); }`);
-const p2View = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.6, 0.3, 0.1, 1); }`);
+const p1View = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.1, 0.3, 0.6, 1); }`));
+const p2View = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.6, 0.3, 0.1, 1); }`));
 
 frame(gpu, (currentFrame) => {
   currentFrame.pass({ target: screen, viewport: { width: 320, height: 360 } }, p1View); // player 1, left half
@@ -188,12 +191,13 @@ Split-screen: the first pass clears the whole target and rasterizes one camera i
 
 ```ts
 import { init, draw, effect, frame, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const scene = target(gpu, { size: [256, 256], depth: true });
-const opaque = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.2, 0.5, 0.2, 1); }`);
+const opaque = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.2, 0.5, 0.2, 1); }`));
 const particles = draw(gpu, {
-  shader: `
+  shader: prepareShader(`
     @group(0) @binding(0) var sceneDepth: texture_depth_2d;
     @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
       var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
@@ -204,7 +208,7 @@ const particles = draw(gpu, {
       let fade = clamp((d - pos.z) * 32.0, 0.0, 1.0); // fade out where the particle nears geometry
       return vec4f(0.9, 0.6, 0.3, 1.0) * fade;
     }
-  `,
+  `),
   depth: { write: false }, // required: the pass depth is read-only
   blend: "additive",
   set: { sceneDepth: scene.depth },
@@ -220,11 +224,12 @@ Soft particles: pass 2 depth-tests against the opaque depth while sampling the s
 
 ```ts
 import { init, effect, frame, target, visibility } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const scene = target(gpu, { size: [64, 64], depth: true });
 const vis = visibility(gpu);
-const proxy = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const proxy = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`));
 
 const currentFrame = frame(gpu); // manual frame: nothing submits it for you
 currentFrame.pass({ target: scene, visibility: vis }, (pass) => pass.occlusion(vis.query("statue"), proxy));
@@ -264,17 +269,18 @@ Async preparation and teardown: await everything asynchronous before the frame a
 
 ```ts
 import { init, compute, effect, frame, storage, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const scene = target(gpu, { size: [64, 64] });
 const particles = storage(gpu, 64 * 16);
-const simulation = compute(gpu, `
+const simulation = compute(gpu, prepareShader(`
   @group(0) @binding(0) var<storage, read_write> particles: array<vec4f>;
   @compute @workgroup_size(64) fn main(@builtin(global_invocation_id) id: vec3u) {
     particles[id.x] += vec4f(0.0, -0.01, 0.0, 0.0);
   }
-`, { set: { particles } });
-const shade = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.1, 0.2, 0.4, 1); }`);
+`), { set: { particles } });
+const shade = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.1, 0.2, 0.4, 1); }`));
 
 await simulation.compile(); // async preparation happens before the frame
 

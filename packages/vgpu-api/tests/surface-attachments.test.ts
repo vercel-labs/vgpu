@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { getMockGPUDeviceInstrumentation, type Texture } from "@vgpu/core";
 import { expect, test, vi } from "vitest";
 import { bundle, draw, effect, frame, geometry, init, surface, target } from "../src/mock.ts";
@@ -204,7 +205,7 @@ test("descriptor reconciliation cannot clear an immediate onResize guard inside 
       size: [8, 6],
     });
     const oldDepth = screen.depth!;
-    const drawable = draw(gpu, { shader: FULLSCREEN, label: "surface-drift-inside-resize-listener" });
+    const drawable = draw(gpu, { shader: prepareShader(FULLSCREEN), label: "surface-drift-inside-resize-listener" });
     let callbackCount = 0;
     let reconciledDepth: Texture | undefined;
 
@@ -297,8 +298,8 @@ test.each([
     });
     publicResizes.length = 0;
 
-    const offscreenDraw = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0, 0, 1, 1); }`);
-    const surfaceDraw = draw(gpu, { shader: FULLSCREEN, label: "surface-after-external-drift" });
+    const offscreenDraw = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0, 0, 1, 1); }`));
+    const surfaceDraw = draw(gpu, { shader: prepareShader(FULLSCREEN), label: "surface-after-external-drift" });
     frame(gpu, (current) => {
       current.pass(derived, offscreenDraw);
       canvas.canvas.width = 12;
@@ -343,7 +344,7 @@ test("frame start silently reconciles external depth drift before user encoding"
     }) as CanvasSurface;
     const output = target(gpu, { size: [12, 9], format: "rgba8unorm" });
     const oldDepth = screen.depth!;
-    const inspect = draw(gpu, { shader: DEPTH_READ, depth: false, label: "inspect-pre-frame-depth", set: { sourceDepth: oldDepth } });
+    const inspect = draw(gpu, { shader: prepareShader(DEPTH_READ), depth: false, label: "inspect-pre-frame-depth", set: { sourceDepth: oldDepth } });
     const recreated = vi.fn();
     const resized = vi.fn();
     screen.onTexturesRecreated(recreated);
@@ -739,7 +740,7 @@ test("configured signatures use depth/MSAA without attachment acquisition and bu
       vi.spyOn(screen, "sampleCount", "get").mockImplementation(() => { throw new Error("read sampleCount"); }),
       vi.spyOn(screen, "size", "get").mockImplementation(() => { throw new Error("read size"); }),
     ];
-    const drawable = draw(gpu, { shader: FULLSCREEN, label: "surface-signature" });
+    const drawable = draw(gpu, { shader: prepareShader(FULLSCREEN), label: "surface-signature" });
 
     expect(drawable.compileSync(screen)).toBe(drawable);
     const recorded = bundle(gpu, { target: screen, label: "surface-depth-msaa" }, (recorder) => recorder.draw(drawable));
@@ -777,7 +778,7 @@ test("explicit single-sample Surface depth bindings invalidate on resize and wor
     const screen = surface(gpu, canvasFixture(8, 6).canvas, { autoResize: false, depth: true, format: "rgba8unorm" });
     const output = target(gpu, { size: [8, 6], format: "rgba8unorm" });
     const oldDepth = screen.depth!;
-    const inspect = draw(gpu, { shader: DEPTH_READ, depth: false, label: "inspect-surface-depth", set: { sourceDepth: oldDepth } });
+    const inspect = draw(gpu, { shader: prepareShader(DEPTH_READ), depth: false, label: "inspect-surface-depth", set: { sourceDepth: oldDepth } });
     expect(() => frame(gpu, (current) => current.pass(output, inspect))).not.toThrow();
     expect(() => inspect.set({ sourceDepth: screen })).toThrowError(expect.objectContaining({ code: "VGPU-SURFACE-NOT-BINDABLE" }));
 
@@ -806,7 +807,7 @@ test("scene instance publication, count, and liveness remain intact on a depth S
     expect(bridge.publish()).toBe(1);
     const scene = draw(gpu, {
       geometry: bridge.geometry,
-      shader: `
+      shader: prepareShader(`
         struct Out { @builtin(position) position: vec4f }
         @vertex fn vs_main(
           @location(0) position: vec2f,
@@ -820,7 +821,7 @@ test("scene instance publication, count, and liveness remain intact on a depth S
           return out;
         }
         @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }
-      `,
+      `),
     });
     expect(() => frame(gpu, (current) => current.pass(screen, (pass) => pass.draw(scene, { instances: 1 })))).not.toThrow();
     mesh.destroy();

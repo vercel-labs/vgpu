@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { resolveShader } from "@vgpu/wgsl/runtime";
 import { PNG } from "pngjs";
 import { draw, frame, geometry, init, target } from "vgpu/node";
@@ -61,7 +62,7 @@ try {
     validate: false,
   });
   const drawable = draw(gpu, {
-    shader: shader.wgsl,
+    shader: prepareShader(shader, DEBUG_SHADER_PATH),
     geometry: mesh.geometry,
     instances: 4,
     cull: "back",

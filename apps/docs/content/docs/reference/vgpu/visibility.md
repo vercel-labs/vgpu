@@ -58,13 +58,14 @@ interface VisibilityQuery {
 
 ```ts
 import { init, draw, effect, frameLoop, target, visibility } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const scene = target(gpu, { size: [256, 256], depth: true });
-const world = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
-const statue = draw(gpu, { shader: `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.5); }` });
+const world = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`));
+const statue = draw(gpu, { shader: prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.5); }`) });
 const statueProxy = draw(gpu, {
-  shader: `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0); }`,
+  shader: prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0); }`),
   writeMask: [],           // write no color channels
   depth: { write: false }, // test depth, never write it
 });

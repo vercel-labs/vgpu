@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { draw, frame, geometry, init, target } from "vgpu/node";
 import { box, instances, sphere } from "vgpu/scene";
@@ -6,10 +7,10 @@ import { PNG } from "pngjs";
 
 const BOUNDS = [-4, 4, -3, 3, 0.1, 20];
 const fault = process.env.VGPU_SCENE_CONTROL_FAULT || "handwritten";
-const REFERENCE_SHADER = await readFile(new URL(
+const REFERENCE_SHADER = prepareShader(await readFile(new URL(
   fault === "sphere" ? "./scene-keyframes-sphere.wgsl" : "./scene-reference.wgsl",
   import.meta.url,
-), "utf8");
+), "utf8"));
 const [inputPath, outputDir] = process.argv.slice(2);
 if (!inputPath || !outputDir) throw new Error("usage: node render.mjs <input.json> <output-directory>");
 const input = JSON.parse(await readFile(inputPath, "utf8"));

@@ -47,19 +47,8 @@ const current = orbitRig({ target: [0, 1, 0], yaw: degToRad(30), pitch: degToRad
 
 A complete smoothed orbit camera following a moving object. Input changes the goal, `smoothRig` eases an independent current rig toward it, and the matrices are packed into the draw on every update:
 
-```ts
-import { clock, draw, frameLoop, geometry, init, surface } from "vgpu";
-import {
-  box, composeMatrix, dolly, orbit, orbitRig, pan, perspective, rigPose, smoothRig, viewMatrices, worldPerPixel,
-  type CameraMatrices, type Lens, type Pose, type RigLimits,
-} from "vgpu/scene";
-
-const gpu = await init();
-const canvas = document.querySelector("canvas")!;
-const canvasSurface = surface(gpu, canvas);
-
-// ---cut---
-const sceneShader = /* wgsl */ `
+```wgsl
+// scene.wgsl
 struct ModelData { world: mat4x4f }
 struct CameraData { viewProjection: mat4x4f }
 @group(0) @binding(0) var<uniform> model: ModelData;
@@ -77,7 +66,22 @@ struct VertexOut { @builtin(position) position: vec4f, @location(0) normal: vec3
 @fragment fn fs_main(@location(0) normal: vec3f) -> @location(0) vec4f {
   let shade = max(dot(normalize(normal), normalize(vec3f(0.4, 1.0, 0.6))), 0.15);
   return vec4f(vec3f(0.9, 0.5, 0.2) * shade, 1.0);
-}`;
+}
+```
+
+```ts
+import { clock, draw, frameLoop, geometry, init, surface } from "vgpu";
+import {
+  box, composeMatrix, dolly, orbit, orbitRig, pan, perspective, rigPose, smoothRig, viewMatrices, worldPerPixel,
+  type CameraMatrices, type Lens, type Pose, type RigLimits,
+} from "vgpu/scene";
+import sceneShader from "./scene.wgsl";
+
+const gpu = await init();
+const canvas = document.querySelector("canvas")!;
+const canvasSurface = surface(gpu, canvas);
+
+// ---cut---
 const cube = draw(gpu, { shader: sceneShader, geometry: geometry(gpu, box({ size: 1 })), cull: "back" });
 
 const limits: RigLimits = { minPitch: -0.2, maxPitch: 1.2, minDistance: 2, maxDistance: 30 };

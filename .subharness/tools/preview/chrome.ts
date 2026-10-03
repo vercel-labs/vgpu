@@ -1,5 +1,5 @@
-// Launches a throwaway headless Chrome with WebGPU enabled and speaks raw CDP to its first page.
-// Raw CDP keeps the preview tooling dependency-free: no Playwright install, no browser download.
+// Launches a throwaway Chrome with WebGPU enabled and speaks raw CDP to its first page.
+// Raw CDP requires no automation library; CI supplies a pinned browser through VGPU_CHROME_PATH.
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -23,7 +23,8 @@ const macChrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
  * Starts headless Chrome (`VGPU_CHROME_PATH`, else the installed Google Chrome) with
  * `--enable-unsafe-webgpu` and returns a CDP handle for its page. On macOS the adapter is the real
  * Metal GPU; on Linux it selects SwiftShader like docs/topics/agent-browser-webgpu.docs.md.
- * Background throttling is disabled so requestAnimationFrame keeps its display rate headless.
+ * Set `VGPU_CHROME_HEADED=1` under Xvfb for Linux canvas screenshots. Background throttling is
+ * disabled so requestAnimationFrame keeps its display rate headless.
  *
  * @example
  *   const page = await launchChrome({ width: 1280, height: 720 });
@@ -37,7 +38,7 @@ export async function launchChrome(viewport: { width: number; height: number }):
     ? ["--enable-features=Vulkan", "--use-angle=vulkan", "--use-vulkan=swiftshader", "--use-webgpu-adapter=swiftshader", "--disable-vulkan-surface"]
     : [];
   const browser = spawn(executable, [
-    "--headless",
+    ...(process.env.VGPU_CHROME_HEADED === "1" ? [] : ["--headless"]),
     "--enable-unsafe-webgpu",
     ...linuxWebgpu,
     ...(process.env.VGPU_CHROME_ARGS?.split(/\s+/).filter(Boolean) ?? []),
@@ -68,14 +69,27 @@ export async function launchChrome(viewport: { width: number; height: number }):
   })();
   try {
     const endpoint = await devtoolsEndpoint(browser);
-    const targets = await (await fetch(`http://127.0.0.1:${new URL(endpoint).port}/json/list`)).json() as Array<{ type: string; webSocketDebuggerUrl: string }>;
-    const target = targets.find((candidate) => candidate.type === "page");
-    if (!target) throw new Error("Chrome started without a page target.");
-    return await connectPage(target.webSocketDebuggerUrl, shutdown);
+    // DevTools can become ready before the initial about:blank target exists (notably under Xvfb).
+    const target = await pageTarget(endpoint);
+    return await connectPage(target, shutdown);
   } catch (error) {
     await shutdown();
     throw error;
   }
+}
+
+async function pageTarget(endpoint: string): Promise<string> {
+  const deadline = Date.now() + 20_000;
+  const url = `http://127.0.0.1:${new URL(endpoint).port}/json/list`;
+  while (Date.now() < deadline) {
+    const response = await fetch(url, { signal: AbortSignal.timeout(Math.max(1, deadline - Date.now())) });
+    if (!response.ok) throw new Error(`Chrome target discovery failed: HTTP ${response.status}.`);
+    const targets = await response.json() as Array<{ type: string; webSocketDebuggerUrl: string }>;
+    const target = targets.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
+    if (target) return target.webSocketDebuggerUrl;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error("Chrome did not expose a page target within 20 s.");
 }
 
 function chromePath(): string {

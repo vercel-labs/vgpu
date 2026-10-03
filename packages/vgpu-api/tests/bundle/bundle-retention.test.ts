@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { expect, test, vi } from "vitest";
 import { build } from "esbuild";
 import { spawnSync } from "node:child_process";
@@ -26,7 +27,7 @@ test("Bundle.dispose() is idempotent and guards native access and replay", async
   const gpu = await init();
   try {
     const output = target(gpu, { size: [4, 4] });
-    const drawable = effect(gpu, SOLID);
+    const drawable = effect(gpu, prepareShader(SOLID));
     const recorded = bundle(gpu, { target: output, label: "retired" }, (recorder) => recorder.draw(drawable));
 
     recorded.dispose();
@@ -54,8 +55,8 @@ test("the first permanent stale event detaches a bundle from every draw and reso
     const firstSource = target(gpu, { size: [4, 4] });
     const secondSource = target(gpu, { size: [4, 4] });
     const replacement = target(gpu, { size: [4, 4] });
-    const first = effect(gpu, SAMPLED, { label: "first", set: { source: firstSource } });
-    const second = effect(gpu, SAMPLED, { label: "second", set: { source: secondSource } });
+    const first = effect(gpu, prepareShader(SAMPLED), { label: "first", set: { source: firstSource } });
+    const second = effect(gpu, prepareShader(SAMPLED), { label: "second", set: { source: secondSource } });
     const recorded = bundle(gpu, { target: output, label: "stale-once" }, (recorder) => {
       recorder.draw(first);
       recorder.draw(second);
@@ -88,7 +89,7 @@ test("failed recording releases every captured resource subscription", async () 
     const output = target(gpu, { size: [4, 4] });
     const source = target(gpu, { size: [4, 4] });
     const replacement = target(gpu, { size: [4, 4] });
-    const sampled = effect(gpu, SAMPLED, { set: { source: source.color } });
+    const sampled = effect(gpu, prepareShader(SAMPLED), { set: { source: source.color } });
     const subscribe = source.color.onDestroy.bind(source.color);
     const offs: ReturnType<typeof vi.fn>[] = [];
     vi.spyOn(source.color, "onDestroy").mockImplementation((callback) => {
@@ -145,7 +146,7 @@ test("disposing one facade preserves encoded work, saved native handles, shared 
   try {
     const output = target(gpu, { size: [4, 4] });
     const source = target(gpu, { size: [4, 4] });
-    const sampled = effect(gpu, SAMPLED, { label: "shared", set: { source: source.color } });
+    const sampled = effect(gpu, prepareShader(SAMPLED), { label: "shared", set: { source: source.color } });
     const retired = bundle(gpu, { target: output, label: "retired-shared" }, (recorder) => recorder.draw(sampled));
     const live = bundle(gpu, { target: output, label: "live-shared" }, (recorder) => recorder.draw(sampled));
     const savedNative = retired.gpu;
@@ -179,7 +180,7 @@ test("a mixed live and disposed bundle list encodes none of the list", async () 
   const gpu = await init();
   try {
     const output = target(gpu, { size: [4, 4] });
-    const drawable = effect(gpu, SOLID);
+    const drawable = effect(gpu, prepareShader(SOLID));
     const live = bundle(gpu, { target: output, label: "live" }, (recorder) => recorder.draw(drawable));
     const disposed = bundle(gpu, { target: output, label: "disposed" }, (recorder) => recorder.draw(drawable));
     disposed.dispose();
@@ -211,7 +212,7 @@ test("a wrong replay target does not poison a later compatible replay", async ()
   try {
     const compatible = target(gpu, { size: [4, 4], format: "rgba8unorm" });
     const incompatible = target(gpu, { size: [4, 4], format: "bgra8unorm" });
-    const drawable = effect(gpu, SOLID);
+    const drawable = effect(gpu, prepareShader(SOLID));
     const recorded = bundle(gpu, { target: compatible, label: "target-mismatch" }, (recorder) => recorder.draw(drawable));
 
     expect(() => frame(gpu, (currentFrame) => {
@@ -229,7 +230,7 @@ test("recording keeps managed uniforms eager for previously exposed native consu
   const gpu = await init();
   try {
     const output = target(gpu, { size: [4, 4] });
-    const drawable = effect(gpu, UNIFORM, { set: { params: { value: 0.25 } } });
+    const drawable = effect(gpu, prepareShader(UNIFORM), { set: { params: { value: 0.25 } } });
     const recorded = bundle(gpu, { target: output }, (recorder) => recorder.draw(drawable));
     const native = recorded.gpu;
     const writeBuffer = vi.spyOn(gpu.gpu.queue, "writeBuffer");

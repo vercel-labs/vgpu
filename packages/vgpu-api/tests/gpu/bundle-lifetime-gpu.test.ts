@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { describe, expect, test } from "vitest";
 import { bundle, effect, frame, init, target } from "../../src/node.ts";
 
@@ -12,7 +13,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("bundle lifetime GPU accep
     const gpu = await init();
     try {
       const output = target(gpu, { size: [4, 4], format: "rgba8unorm" });
-      const drawable = effect(gpu, LIVE_COLOR, { label: "live-color", set: { params: { color: [1, 0, 0, 1] } } });
+      const drawable = effect(gpu, prepareShader(LIVE_COLOR), { label: "live-color", set: { params: { color: [1, 0, 0, 1] } } });
       const recorded = bundle(gpu, { target: output, label: "live-color-bundle" }, (recorder) => recorder.draw(drawable));
 
       frame(gpu, (currentFrame) => currentFrame.pass(output, (pass) => pass.bundles(recorded)));

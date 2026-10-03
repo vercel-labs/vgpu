@@ -106,7 +106,8 @@ so harness screenshots match the on-screen image only on the post path
 - `wgslVitePlugin({ minify: true })` from `vgpu/client` resolves each imported
   WGSL graph before Vite emits it.
 - `import lavaModule from "./lava.wgsl"` returns the complete
-  `{ version: 1, wgsl, functionExports }` artifact. `functionExports` preserves
+  prepared `{ version: 2, wgsl, reflection, sourceChecksum, producer, functionExports }`
+  artifact. `functionExports` preserves
   authored export and parameter names while mapping each export to its final
   `resolvedName`, so identifier minification remains safe.
 - `tslExports<LavaExports>(lavaModule)("lavaGlow", "blackbody")` selects exports by their

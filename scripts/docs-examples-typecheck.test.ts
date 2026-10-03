@@ -264,7 +264,7 @@ test("isolated program resolves source and declaration graph without Next output
     resolve(docsRoot, "wgsl.d.ts"),
   ]));
   expect(programSources).toEqual(expect.arrayContaining([
-    resolve(repoRoot, "packages/vgpu-api/client.d.ts"),
+    resolve(repoRoot, "packages/wgsl/src/wgsl-types.d.ts"),
     resolve(repoRoot, "packages/vgpu-api/dist/index.d.ts"),
     resolve(repoRoot, "packages/wgsl/dist/runtime/resolve-shader.d.ts"),
     ts.sys.realpath?.(resolve(
@@ -427,7 +427,7 @@ test("checked-in WGSL declaration accepts artifacts and rejects strings", () => 
       "@compute @workgroup_size(1) fn main() {}\n",
     "examples/typecheck-control/valid.ts": [
       'import shader from "./shader.wgsl";',
-      "const version: 1 = shader.version;",
+      "const version: 2 = shader.version;",
       "const source: string = shader.wgsl;",
       "export { shader, source, version };",
       "",

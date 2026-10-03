@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { describe, expect, test } from "vitest";
 import { init, draw, effect, sampler, target } from "../../src/node.ts";
 
@@ -33,6 +34,11 @@ struct FullscreenOut {
 ${UV_PATTERN}
 `;
 
+const INTERFACE_MISMATCHES = [
+  ["missing location", `@fragment fn main(@location(1) extra: f32) -> @location(0) vec4f { return vec4f(extra); }`],
+  ["wrong location type", `@fragment fn main(@location(0) uv: vec3f) -> @location(0) vec4f { return vec4f(uv, 1.0); }`],
+] as const;
+
 const dockerTest = process.env.VGPU_DOCKER_TEST === "1";
 
 describe.skipIf(!dockerTest)("fragment-only effect UV orientation", () => {
@@ -40,7 +46,7 @@ describe.skipIf(!dockerTest)("fragment-only effect UV orientation", () => {
     const gpu = await init();
     try {
       const colorTarget = target(gpu, { size: [SIZE, SIZE], format: "rgba8unorm" });
-      effect(gpu, UV_PATTERN).draw(colorTarget);
+      effect(gpu, prepareShader(UV_PATTERN)).draw(colorTarget);
 
       const pixels = await colorTarget.color.read({ mipLevel: 0, region: "all" });
       const top = pixelAt(pixels, 0, 0);
@@ -61,8 +67,8 @@ describe.skipIf(!dockerTest)("fragment-only effect UV orientation", () => {
     try {
       const source = target(gpu, { size: [SIZE, SIZE], format: "rgba8unorm" });
       const output = target(gpu, { size: [SIZE, SIZE], format: "rgba8unorm" });
-      effect(gpu, UV_PATTERN).draw(source);
-      effect(gpu, IDENTITY_COPY, {
+      effect(gpu, prepareShader(UV_PATTERN)).draw(source);
+      effect(gpu, prepareShader(IDENTITY_COPY), {
         set: {
           src: source,
           srcSampler: sampler(gpu, { minFilter: "nearest", magFilter: "nearest" }),
@@ -80,10 +86,20 @@ describe.skipIf(!dockerTest)("fragment-only effect UV orientation", () => {
     try {
       const injected = target(gpu, { size: [SIZE, SIZE], format: "rgba8unorm" });
       const helper = target(gpu, { size: [SIZE, SIZE], format: "rgba8unorm" });
-      effect(gpu, UV_PATTERN).draw(injected);
-      draw(gpu, { shader: WGSL_STD_ORIENTATION, vertices: 3 }).draw(helper);
+      effect(gpu, prepareShader(UV_PATTERN)).draw(injected);
+      draw(gpu, { shader: prepareShader(WGSL_STD_ORIENTATION), vertices: 3 }).draw(helper);
 
       expect(await injected.color.read({ mipLevel: 0, region: "all" })).toEqual(await helper.color.read({ mipLevel: 0, region: "all" }));
+    } finally {
+      gpu.dispose();
+    }
+  });
+
+  test.each(INTERFACE_MISMATCHES)("rejects the fixed vertex interface %s natively", async (_case, source) => {
+    const gpu = await init();
+    try {
+      const output = target(gpu, { size: [SIZE, SIZE], format: "rgba8unorm" });
+      await expect(effect(gpu, prepareShader(source)).compile(output)).rejects.toMatchObject({ code: "VGPU-COMPILE-FAILED" });
     } finally {
       gpu.dispose();
     }

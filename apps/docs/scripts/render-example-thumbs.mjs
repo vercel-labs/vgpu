@@ -1,11 +1,10 @@
-import { copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
-import typegpu from 'unplugin-typegpu/esbuild';
 import { init, target } from 'vgpu/node';
 import { comparePngSnapshot, writePng } from '@vgpu/cli/lib/snapshot/png.js';
-import { transformWgsl } from '@vgpu/wgsl/loader-vite';
+import { docsRendererPlugins } from './esbuild-wgsl-plugin.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const docsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -534,7 +533,7 @@ async function loadRenderers(slugs) {
     // Let Node load cannon-es's CommonJS entry (and its perf_hooks require) normally.
     // Inlining it into this ESM bundle would need a global require shim.
     external: ['pngjs', 'vgpu', 'vgpu/node', 'cannon-es'],
-    plugins: [typegpu(), wgslPlugin()],
+    plugins: docsRendererPlugins(),
     logLevel: 'silent',
   });
   const module = await import(pathToFileURL(rendererBundle).href);
@@ -546,19 +545,6 @@ async function loadRenderers(slugs) {
     acc[slug] = renderer;
     return acc;
   }, /** @type {Record<string, Function>} */ ({}));
-}
-
-function wgslPlugin() {
-  return {
-    name: 'docs-wgsl',
-    setup(build) {
-      build.onLoad({ filter: /\.wgsl$/ }, async (args) => {
-        const source = await readFile(args.path, 'utf8');
-        const result = await transformWgsl({ source, id: args.path });
-        return { contents: result.code, loader: 'js', resolveDir: path.dirname(args.path) };
-      });
-    },
-  };
 }
 
 async function loadDocsData() {

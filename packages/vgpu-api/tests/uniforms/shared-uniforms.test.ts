@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
 import { describe, expect, test } from "vitest";
 import { init, effect, frame, target } from "../../src/mock.ts";
@@ -60,7 +61,7 @@ describe("uniforms(gpu) shared uniforms", () => {
     const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
 
     expect(mock.calls.createBuffer).toBe(0);
-    const wave = effect(gpu, WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
+    const wave = effect(gpu, prepareShader(WAVE_WGSL), { label: "WAVE_WGSL", set: { globals } });
 
     expect(mock.calls.createBuffer).toBe(1);
     const state = drawBindingState(effectDraw(wave), "globals");
@@ -73,9 +74,9 @@ describe("uniforms(gpu) shared uniforms", () => {
     const gpu = await init();
     const globals = uniforms(gpu, { time: 0, mouse: [0, 0] });
 
-    effect(gpu, WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
+    effect(gpu, prepareShader(WAVE_WGSL), { label: "WAVE_WGSL", set: { globals } });
 
-    expect(() => effect(gpu, BLUR_BAD_WGSL, { label: "BLUR_WGSL", set: { globals } })).toThrowError(
+    expect(() => effect(gpu, prepareShader(BLUR_BAD_WGSL), { label: "BLUR_WGSL", set: { globals } })).toThrowError(
       "Uniform 'globals' layout { time: f32, mouse: vec2f } from WAVE_WGSL != { time: vec2f, ... } from " +
         "BLUR_WGSL. Fix: align structs or split uniforms.",
     );
@@ -86,9 +87,9 @@ describe("uniforms(gpu) shared uniforms", () => {
     const gpu = await init();
     const globals = uniforms(gpu, { time: 0, mouse: [0, 0] });
 
-    effect(gpu, PADDED_WGSL, { label: "PADDED_WGSL", set: { globals } });
+    effect(gpu, prepareShader(PADDED_WGSL), { label: "PADDED_WGSL", set: { globals } });
 
-    expect(() => effect(gpu, WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } })).toThrowError(
+    expect(() => effect(gpu, prepareShader(WAVE_WGSL), { label: "WAVE_WGSL", set: { globals } })).toThrowError(
       "Uniform 'globals' layout { time: f32, mouse: vec2f } from PADDED_WGSL != { time: f32, ... } from " +
         "WAVE_WGSL. Fix: align structs or split uniforms.",
     );
@@ -98,8 +99,8 @@ describe("uniforms(gpu) shared uniforms", () => {
   test("shared buffer identity stays stable while frame consumers capture their own upload slices", async () => {
     const gpu = await init();
     const globals = uniforms(gpu, { time: 0, mouse: [0, 0] });
-    const wave = effect(gpu, WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
-    const blur = effect(gpu, BLUR_WGSL, { label: "BLUR_WGSL", set: { globals } });
+    const wave = effect(gpu, prepareShader(WAVE_WGSL), { label: "WAVE_WGSL", set: { globals } });
+    const blur = effect(gpu, prepareShader(BLUR_WGSL), { label: "BLUR_WGSL", set: { globals } });
     const colorTarget = target(gpu, { size: [4, 4] });
     const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
 
@@ -137,7 +138,7 @@ describe("uniforms(gpu) shared uniforms", () => {
   test("set() defers partial updates until a persistent draw needs them", async () => {
     const gpu = await init();
     const globals = uniforms(gpu, { time: 0, mouse: [0, 0] });
-    const wave = effect(gpu, WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
+    const wave = effect(gpu, prepareShader(WAVE_WGSL), { label: "WAVE_WGSL", set: { globals } });
     let writes = 0;
     const originalWriteBuffer = gpu.device.gpu.queue.writeBuffer.bind(gpu.device.gpu.queue);
     gpu.device.gpu.queue.writeBuffer = ((...args: Parameters<GPUQueue["writeBuffer"]>) => {
@@ -156,7 +157,7 @@ describe("uniforms(gpu) shared uniforms", () => {
   test("a rejected update leaves GPU bytes and the previous partial-update base unchanged", async () => {
     const gpu = await init();
     const globals = uniforms(gpu, { time: 1, mouse: [2, 3] });
-    const wave = effect(gpu, WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
+    const wave = effect(gpu, prepareShader(WAVE_WGSL), { label: "WAVE_WGSL", set: { globals } });
     const color = target(gpu, { size: [1, 1] });
     wave.draw(color);
     const resource = drawBindingState(effectDraw(wave), "globals")?.resource as GPUBufferBinding;
@@ -203,8 +204,8 @@ describe("uniforms(gpu) shared uniforms", () => {
   test("binding name is chosen by each shader", async () => {
     const gpu = await init();
     const globals = uniforms(gpu, { time: 0, mouse: [0, 0] });
-    const wave = effect(gpu, WAVE_WGSL, { label: "WAVE_WGSL", set: { globals } });
-    const override = effect(gpu, OVERRIDE_NAME_WGSL, { label: "OVERRIDE_WGSL", set: { g: globals } });
+    const wave = effect(gpu, prepareShader(WAVE_WGSL), { label: "WAVE_WGSL", set: { globals } });
+    const override = effect(gpu, prepareShader(OVERRIDE_NAME_WGSL), { label: "OVERRIDE_WGSL", set: { g: globals } });
 
     expect(drawBindingState(effectDraw(wave), "globals")?.ownership).toBe("user");
     expect(drawBindingState(effectDraw(override), "g")?.ownership).toBe("user");
@@ -215,7 +216,7 @@ describe("uniforms(gpu) shared uniforms", () => {
   test("storage address-space uses the same deferred-layout shared resource path", async () => {
     const gpu = await init();
     const globals = uniforms(gpu, { time: 0, mouse: [0, 0] });
-    const storage = effect(gpu, STORAGE_WGSL, { label: "STORAGE_WGSL", set: { globals } });
+    const storage = effect(gpu, prepareShader(STORAGE_WGSL), { label: "STORAGE_WGSL", set: { globals } });
     const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
 
     expect(drawBindingState(effectDraw(storage), "globals")?.ownership).toBe("user");
@@ -233,8 +234,8 @@ describe("uniforms(gpu, values)", () => {
     const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
     const before = mock.createBufferDescriptors.length;
 
-    const wave = effect(gpu, WAVE_WGSL, { set: { globals } });
-    const blur = effect(gpu, BLUR_WGSL, { set: { globals } });
+    const wave = effect(gpu, prepareShader(WAVE_WGSL), { set: { globals } });
+    const blur = effect(gpu, prepareShader(BLUR_WGSL), { set: { globals } });
     effectDraw(wave);
     effectDraw(blur);
 
@@ -251,7 +252,7 @@ describe("uniforms(gpu, values)", () => {
   test("the adopted buffer is destroyed by gpu.dispose(), and a disposed gpu is refused up front", async () => {
     const gpu = await init();
     const globals = uniforms(gpu, { time: 0, mouse: [0, 0] });
-    effectDraw(effect(gpu, WAVE_WGSL, { set: { globals } }));
+    effectDraw(effect(gpu, prepareShader(WAVE_WGSL), { set: { globals } }));
     expect(() => globals.set({ time: 1 })).not.toThrow();
 
     gpu.dispose();

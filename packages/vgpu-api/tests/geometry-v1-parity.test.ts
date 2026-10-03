@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
 import { expect, test } from "vitest";
 import { init, draw, geometry, target } from "../src/mock.ts";
@@ -767,7 +768,7 @@ test("geometry(gpu, scene geometry) v1 parity: mock pipeline descriptor receives
   try {
     const geo = geometry(gpu, capsule());
     const colorTarget = target(gpu, { size: [4, 4], format: "rgba8unorm" });
-    const drawable = draw(gpu, { shader: PRIMITIVE_SHADER, geometry: geo, label: "geometry-v1-parity-capsule" });
+    const drawable = draw(gpu, { shader: prepareShader(PRIMITIVE_SHADER), geometry: geo, label: "geometry-v1-parity-capsule" });
 
     drawable.pipelineFor(colorTarget);
 

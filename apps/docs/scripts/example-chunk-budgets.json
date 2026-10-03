@@ -6,6 +6,7 @@
   "$comment:glass-sculpture": "Measured at 72804 B gzip from the current canary production build on Node 22.21.1; the external proposal's provisional 78000 B value was not carried forward.",
   "$comment:matcap": "Measured at 70640 B gzip from the current canary production build on Node 22.21.1 / Next 16.3.3 after the reviewed lifecycle and vertex-shading refinements.",
   "$comment:video-to-texture": "Measured at 68829 B gzip from the current canary production build on Node 22.21.1 / Next 16.3.3 after lifecycle, media-provenance, and current texture-API integration.",
+  "$comment:b1-prepared-shaders": "Final B1 route budget provenance: TypeGPU Liquid Glass moved from 150554 to 158810 B gzip because it performs explicit runtime shader preparation; Atmosphere moved from 106538 to 142958 B gzip with 21 prepared artifacts carrying heterogeneous metadata. These comparisons include shared chunks, so they are final route budget baselines rather than an isolated matched benchmark and make no universal savings claim.",
   "sharedHost": {
     "gzipBytes": 2104,
     "maxGrowthBytes": 5120
@@ -39,9 +40,9 @@
     "tsl-exports": 239570,
     "three-tsl": 279113,
     "particle-orbit": 160967,
-    "typegpu-liquid-glass": 150554,
+    "typegpu-liquid-glass": 158810,
     "adaptive-quality": 63030,
-    "atmosphere": 111852,
+    "atmosphere": 134333,
     "glass-sculpture": 72804,
     "spiral-galaxy": 87196,
     "liquid-layout": 139352,
@@ -85,5 +86,6 @@
   "$comment:scene-gallery": "Measured together from the final three-example production build on Node 22.21.1 / Next 16.3.3: Kinetic Sculpture 98611 B, Modular City 108272 B, Marble Machine 133147 B gzip. These include the shared runtime chunks; Marble Machine also includes the docs-only cannon-es physics dependency. The checker passed isolation and existing route limits before these three measured entries were added. All 35 existing example baselines, the shared-host budget, growth allowances and historical provenance are unchanged.",
   "$comment:mechanical-garden": "Measured at 142492 B gzip from the robot-training-ground production build on Node 22.21.1 / Next 16.3.3. The route-owned chunk is 53023 B, including the quadruped geometry, exclusive DOM toolbar, seven WGSL modules and selected math utilities; the remaining 89469 B are shared runtime chunks, including vgpu/scene and lil-gui. All 38 other routes pass their unchanged budgets; the shared-host budget, growth allowances and isolation checks are unchanged. math remains a private docs-app dependency.",
   "$comment:device-loss": "Only holographic-card was remeasured by the official checker after gpu.lost: a fresh Node 22.21.1 / Next 16.3.3 production build measured 75367 B gzip, identical to Linux CI, versus 75070 B on exact-base canary 8c048592. Its previous baseline was 69978 B, leaving only 28 B before this feature. The 297 B shared-runtime growth is intentional; the remaining 38 routes pass their existing limits. Shared-host baseline, growth allowances, chunk isolation/freshness rules and historical provenance are unchanged.",
-  "$comment:surface-depth-msaa": "Only triangle-led-front, fluid, depth-estimation and air-painting were remeasured by the official checker from a fresh Node 22.21.1 / Next 16.3.3 production build after opt-in Surface depth/MSAA. Against exact-base canary 86d1f01b CI, their shared-runtime growth is 697, 715, 647 and 647 gzip bytes respectively; all four crossed their remaining allowance. The other 35 route baselines (including holographic-card), shared-host baseline, growth allowances, isolation/freshness rules and historical provenance are unchanged."
+  "$comment:surface-depth-msaa": "Only triangle-led-front, fluid, depth-estimation and air-painting were remeasured by the official checker from a fresh Node 22.21.1 / Next 16.3.3 production build after opt-in Surface depth/MSAA. Against exact-base canary 86d1f01b CI, their shared-runtime growth is 697, 715, 647 and 647 gzip bytes respectively; all four crossed their remaining allowance. The other 35 route baselines (including holographic-card), shared-host baseline, growth allowances, isolation/freshness rules and historical provenance are unchanged.",
+  "$comment:prepared-canary-integration": "After merging canary b102ed88 (scene composition, Surface depth/MSAA, synchronous frames and device loss), the official checker measured Atmosphere at 134333 B gzip on Node 22.21.1 / Next 16.3.3. This replaces the conflicting canary baseline of 111852 B and the prior prepared-shader baseline of 142958 B; shared chunk factoring makes these whole-route measurements, not isolated shader savings. All other 38 routes pass existing limits. Shared-host baseline, growth allowances and isolation checks remain unchanged."
 }

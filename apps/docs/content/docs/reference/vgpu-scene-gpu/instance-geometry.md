@@ -47,52 +47,54 @@ declare function instanceGeometry<A extends import("vgpu/scene").InstanceAttribu
 
 Publish once and draw once. The shader declares every vertex input the composed geometry provides, including `kind`, which it does not use, and the draw passes the count from `publish()`:
 
+```wgsl
+// crates.wgsl
+struct CameraData { viewProjection: mat4x4f }
+@group(0) @binding(0) var<uniform> camera: CameraData; // group and binding are your choice
+
+struct VertexIn {
+  @location(0) position: vec3f, // box() mesh
+  @location(1) normal: vec3f,   // box() mesh
+  @location(3) world0: vec4f,   // instance stream: world matrix columns
+  @location(4) world1: vec4f,
+  @location(5) world2: vec4f,
+  @location(6) world3: vec4f,
+  @location(7) tint: vec3f,     // "tint": "float32x3"
+  @location(8) kind: u32,       // "kind": "uint32" — unused, but must be declared
+}
+
+struct VertexOut {
+  @builtin(position) clip: vec4f,
+  @location(0) normal: vec3f,
+  @location(1) tint: vec3f,
+}
+
+@vertex fn vs_main(input: VertexIn) -> VertexOut {
+  let world = mat4x4f(input.world0, input.world1, input.world2, input.world3);
+  var out: VertexOut;
+  out.clip = camera.viewProjection * world * vec4f(input.position, 1.0);
+  out.normal = (world * vec4f(input.normal, 0.0)).xyz;
+  out.tint = input.tint;
+  return out;
+}
+
+@fragment fn fs_main(input: VertexOut) -> @location(0) vec4f {
+  let light = max(dot(normalize(input.normal), normalize(vec3f(0.4, 1.0, 0.3))), 0.0);
+  return vec4f(input.tint * (0.2 + 0.8 * light), 1.0);
+}
+```
+
 ```ts
 import { draw, frame, geometry, init, surface } from "vgpu";
 import { box, instances } from "vgpu/scene";
 import { instanceGeometry } from "vgpu/scene/gpu";
+import crateShader from "./crates.wgsl";
 
 const gpu = await init();
 const canvasSurface = surface(gpu, document.querySelector("canvas")!);
 const viewProjection = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]); // from your camera
 
 // ---cut---
-const crateShader = /* wgsl */ `
-  struct CameraData { viewProjection: mat4x4f }
-  @group(0) @binding(0) var<uniform> camera: CameraData; // group and binding are your choice
-
-  struct VertexIn {
-    @location(0) position: vec3f, // box() mesh
-    @location(1) normal: vec3f,   // box() mesh
-    @location(3) world0: vec4f,   // instance stream: world matrix columns
-    @location(4) world1: vec4f,
-    @location(5) world2: vec4f,
-    @location(6) world3: vec4f,
-    @location(7) tint: vec3f,     // "tint": "float32x3"
-    @location(8) kind: u32,       // "kind": "uint32" — unused, but must be declared
-  }
-
-  struct VertexOut {
-    @builtin(position) clip: vec4f,
-    @location(0) normal: vec3f,
-    @location(1) tint: vec3f,
-  }
-
-  @vertex fn vs_main(input: VertexIn) -> VertexOut {
-    let world = mat4x4f(input.world0, input.world1, input.world2, input.world3);
-    var out: VertexOut;
-    out.clip = camera.viewProjection * world * vec4f(input.position, 1.0);
-    out.normal = (world * vec4f(input.normal, 0.0)).xyz;
-    out.tint = input.tint;
-    return out;
-  }
-
-  @fragment fn fs_main(input: VertexOut) -> @location(0) vec4f {
-    let light = max(dot(normalize(input.normal), normalize(vec3f(0.4, 1.0, 0.3))), 0.0);
-    return vec4f(input.tint * (0.2 + 0.8 * light), 1.0);
-  }
-`;
-
 const crates = instances({ capacity: 256, attributes: { tint: "float32x3", kind: "uint32" } });
 const firstCrate = crates.add({ tint: [0.9, 0.5, 0.1], kind: 0 });
 const secondCrate = crates.add({ tint: [0.2, 0.6, 0.9], kind: 1 });
@@ -121,8 +123,8 @@ Every frame follows the same order: update your state, write the worlds, compute
 import { clock, draw, frameLoop, geometry, init, surface, target } from "vgpu";
 import { box, instances, type InstanceId } from "vgpu/scene";
 import { instanceGeometry } from "vgpu/scene/gpu";
+import crateShader from "./crates.wgsl";
 
-declare const crateShader: string; // the shader from the first example
 declare function stepSimulation(deltaTime: number, worldRows: Float32Array): void; // your physics or ECS
 declare function writeViewProjection(out: Float32Array): void; // your camera
 
@@ -164,8 +166,8 @@ A render bundle records the count it was given. Record a new bundle when `publis
 import { bundle, draw, frameLoop, geometry, init, surface, type Bundle } from "vgpu";
 import { box, instances } from "vgpu/scene";
 import { instanceGeometry } from "vgpu/scene/gpu";
+import crateShader from "./crates.wgsl";
 
-declare const crateShader: string; // the shader from the first example
 declare function moveCrates(collection: typeof crates): void; // your per-frame world updates
 
 const gpu = await init();

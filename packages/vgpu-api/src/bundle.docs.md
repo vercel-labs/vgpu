@@ -62,16 +62,17 @@ interface Bundle {
 
 ```ts
 import { init, bundle, draw, frame, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const colorTarget = target(gpu, { size: [64, 64] });
-const drawable = draw(gpu, { shader: `
+const drawable = draw(gpu, { shader: prepareShader(`
   @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
     var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
     return vec4f(p[vi], 0, 1);
   }
   @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1, 1, 0, 1); }
-` });
+`) });
 
 const statics = bundle(gpu, { target: colorTarget, label: "static" }, (recorded) => {
   recorded.draw(drawable);
@@ -84,12 +85,18 @@ frame(gpu, (currentFrame) => {
 
 Record for a canvas during loading by passing the live surface as the target, then replay inside a frame. The bundle keeps replaying after the canvas resizes, because the signature does not include size:
 
+```wgsl
+// surface-background.wgsl
+@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.1, 0.2, 0.4, 1); }
+```
+
 ```ts
 import { init, bundle, effect, frameLoop, surface } from "vgpu";
+import backgroundShader from "./surface-background.wgsl";
 
 const gpu = await init();
 const canvasSurface = surface(gpu, document.querySelector("canvas")!);
-const background = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.1, 0.2, 0.4, 1); }`);
+const background = effect(gpu, backgroundShader);
 
 // ---cut---
 const statics = bundle(gpu, { target: canvasSurface, label: "surfaceStatics" }, (recorded) => {
@@ -105,20 +112,24 @@ Recording reads the surface's configured signature only. It does not acquire the
 
 Replace a bundle when something it samples changes. Record the next bundle first, swap your reference, then dispose the old one — if recording throws, the old bundle is still in place:
 
+```wgsl
+// post.wgsl
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return vec4f(1.0 - textureSampleLevel(src, samp, uv, 0.0).rgb, 1.0);
+}
+```
+
 ```ts
 import { init, bundle, effect, frameLoop, sampler, surface, target, type Bundle } from "vgpu";
+import postShader from "./post.wgsl";
 
 const gpu = await init();
 const canvasSurface = surface(gpu, document.querySelector("canvas")!);
 const sceneTarget = target(gpu, { size: [canvasSurface.size[0], canvasSurface.size[1]] });
-const postEffect = effect(gpu, `
-  @group(0) @binding(0) var src: texture_2d<f32>;
-  @group(0) @binding(1) var samp: sampler;
-
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(1.0 - textureSampleLevel(src, samp, uv, 0.0).rgb, 1.0);
-  }
-`);
+const postEffect = effect(gpu, postShader);
 postEffect.set({ src: sceneTarget, samp: sampler(gpu, { minFilter: "linear", magFilter: "linear" }) });
 
 // ---cut---
@@ -141,10 +152,11 @@ frameLoop(gpu, (currentFrame) => {
 
 ```ts
 import { init, bundle, clock, effect, frame, pingPong } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const ping = pingPong(gpu, 32, 32);
-const shader = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const shader = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`));
 const even = bundle(gpu, { target: ping.write }, (b) => b.draw(shader));
 ping.swap();
 const odd = bundle(gpu, { target: ping.write }, (b) => b.draw(shader));
@@ -158,11 +170,12 @@ frame(gpu, (currentFrame) => {
 Dispose on teardown. Disposal does not cancel a frame that already replayed the bundle, and it leaves the recorded effect usable:
 
 ```ts
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { init, bundle, effect, frame, target } from "vgpu/mock";
 
 const gpu = await init();
 const colorTarget = target(gpu, { size: [64, 64] });
-const shader = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const shader = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`));
 
 // ---cut---
 const statics = bundle(gpu, { target: colorTarget, label: "statics" }, (recorded) => recorded.draw(shader));

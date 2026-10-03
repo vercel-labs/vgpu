@@ -9,29 +9,37 @@ A frame is one unit of GPU work. Inside it you open render passes with explicit 
 
 [`frame(gpu)`](/reference/vgpu/frame#framerunner) runs synchronously and renders immediately — every pass inside is encoded into one command encoder and submitted once. That single submit is what the frame is for:
 
+```wgsl
+// pulse.wgsl
+struct Params { time: f32 }
+@group(0) @binding(0) var<uniform> params: Params;
+
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return vec4f(uv, sin(params.time) * 0.5 + 0.5, 1.0);
+}
+```
+
+```wgsl
+// post.wgsl
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  let base = textureSampleLevel(src, samp, uv, 0.0);
+  return vec4f(1.0 - base.rgb, 1.0);
+}
+```
+
 ```ts
 import { init, effect, frame, sampler, surface, target } from "vgpu";
+import pulseShader from "./pulse.wgsl";
+import postShader from "./post.wgsl";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
 const canvasTarget = surface(gpu, canvas);
-const pulseEffect = effect(gpu, `
-  struct Params { time: f32 }
-  @group(0) @binding(0) var<uniform> params: Params;
-
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(uv, sin(params.time) * 0.5 + 0.5, 1.0);
-  }
-`, { set: { params: { time: 0 } } });
-const postEffect = effect(gpu, `
-  @group(0) @binding(0) var src: texture_2d<f32>;
-  @group(0) @binding(1) var samp: sampler;
-
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    let base = textureSampleLevel(src, samp, uv, 0.0);
-    return vec4f(1.0 - base.rgb, 1.0);
-  }
-`);
+const pulseEffect = effect(gpu, pulseShader, { set: { params: { time: 0 } } });
+const postEffect = effect(gpu, postShader);
 
 // ---cut---
 const sceneTarget = target(gpu, { size: [canvasTarget.size[0], canvasTarget.size[1]] });
@@ -85,18 +93,12 @@ For animation, use [`frameLoop(gpu)`](/reference/vgpu/frame#framerunner) — it 
 
 ```ts
 import { clock, init, effect, frameLoop, surface } from "vgpu";
+import pulseShader from "./pulse.wgsl";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
 const canvasTarget = surface(gpu, canvas);
-const pulseEffect = effect(gpu, `
-  struct Params { time: f32 }
-  @group(0) @binding(0) var<uniform> params: Params;
-
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(uv, sin(params.time) * 0.5 + 0.5, 1.0);
-  }
-`, { set: { params: { time: 0 } } });
+const pulseEffect = effect(gpu, pulseShader, { set: { params: { time: 0 } } });
 
 // ---cut---
 const time = clock(gpu);
@@ -116,18 +118,12 @@ This is what the same loop looks like by hand with `requestAnimationFrame`:
 
 ```ts
 import { init, effect, surface } from "vgpu";
+import pulseShader from "./pulse.wgsl";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
 const canvasTarget = surface(gpu, canvas);
-const pulseEffect = effect(gpu, `
-  struct Params { time: f32 }
-  @group(0) @binding(0) var<uniform> params: Params;
-
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(uv, sin(params.time) * 0.5 + 0.5, 1.0);
-  }
-`, { set: { params: { time: 0 } } });
+const pulseEffect = effect(gpu, pulseShader, { set: { params: { time: 0 } } });
 
 // ---cut---
 function tick() {
@@ -154,20 +150,32 @@ Direct draws and dispatches capture their current managed uniform values. Storag
 
 `frame(gpu, cb)` submits the moment the callback returns. An `async` callback returns its promise at the first `await`, so the frame would submit before the rest of the callback encoded anything. Do the asynchronous work — compiling pipelines, loading textures, fetching data — before you call `frame(gpu)` or register `frameLoop(gpu)`, keep the encoding synchronous, and tear down outside the callback. The loop from the previous sections, with its preparation and teardown spelled out:
 
+```wgsl
+// simulation.wgsl
+@group(0) @binding(0) var<storage, read_write> particles: array<vec4f>;
+@compute @workgroup_size(64) fn main(@builtin(global_invocation_id) id: vec3u) {
+  particles[id.x] += vec4f(0.0, -0.01, 0.0, 0.0);
+}
+```
+
+```wgsl
+// shade.wgsl
+@fragment fn fs_main() -> @location(0) vec4f {
+  return vec4f(0.1, 0.2, 0.4, 1.0);
+}
+```
+
 ```ts
 import { init, compute, effect, frameLoop, storage, surface } from "vgpu";
+import shadeShader from "./shade.wgsl";
+import simulationShader from "./simulation.wgsl";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
 const canvasTarget = surface(gpu, canvas);
 const particles = storage(gpu, 64 * 16);
-const simulation = compute(gpu, `
-  @group(0) @binding(0) var<storage, read_write> particles: array<vec4f>;
-  @compute @workgroup_size(64) fn main(@builtin(global_invocation_id) id: vec3u) {
-    particles[id.x] += vec4f(0.0, -0.01, 0.0, 0.0);
-  }
-`, { set: { particles } });
-const shade = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.1, 0.2, 0.4, 1.0); }`);
+const simulation = compute(gpu, simulationShader, { set: { particles } });
+const shade = effect(gpu, shadeShader);
 
 // ---cut---
 await simulation.compile(); // async preparation, before the loop exists
@@ -213,23 +221,18 @@ The loop from the previous section, restarted after loss:
 
 ```ts
 import { init, compute, effect, frameLoop, storage, surface } from "vgpu";
+import shadeShader from "./shade.wgsl";
+import simulationShader from "./simulation.wgsl";
 
 const canvas = document.querySelector("canvas")!;
-const simulationSource = `
-  @group(0) @binding(0) var<storage, read_write> particles: array<vec4f>;
-  @compute @workgroup_size(64) fn main(@builtin(global_invocation_id) id: vec3u) {
-    particles[id.x] += vec4f(0.0, -0.01, 0.0, 0.0);
-  }
-`;
-const shadeSource = `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.1, 0.2, 0.4, 1.0); }`;
 
 // ---cut---
 async function start(): Promise<void> {
   const gpu = await init(); // a new device every time
   const canvasTarget = surface(gpu, canvas);
   const particles = storage(gpu, 64 * 16);
-  const simulation = compute(gpu, simulationSource, { set: { particles } });
-  const shade = effect(gpu, shadeSource);
+  const simulation = compute(gpu, simulationShader, { set: { particles } });
+  const shade = effect(gpu, shadeShader);
   await simulation.compile();
 
   frameLoop(gpu, (currentFrame) => {

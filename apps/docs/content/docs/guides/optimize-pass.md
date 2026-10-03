@@ -30,7 +30,7 @@ frameLoop(gpu, (f) => f.pass(target, (p) => p.bundles(effectBundle)));
 Keep the pass object and write values in place:
 
 ```text
-const effect = effect(gpu, WGSL, { set: { time: 0, exposure: 1 } });
+const effect = effect(gpu, exposureShader, { set: { time: 0, exposure: 1 } }); // a prepared .wgsl import
 const time = clock(gpu);
 frameLoop(gpu, (f) => {
   effect.set({ time: time.time });

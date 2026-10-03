@@ -1,13 +1,14 @@
 import { compute, type Buffer, type Gpu } from "vgpu";
+import { prepareShader } from "../../../packages/wgsl/dist/prepare.js";
 import { COUNT, EXPECTED, numericMatch } from "./fixtures.ts";
 
-const WGSL = `
+const SHADER = prepareShader(`
 @group(0) @binding(0) var<storage, read> source: array<f32>;
 @group(0) @binding(1) var<storage, read_write> destination: array<f32>;
 @compute @workgroup_size(16)
 fn main(@builtin(global_invocation_id) id: vec3<u32>) {
   if (id.x < 16u) { destination[id.x] = source[id.x] * 2.0 + 0.25; }
-}`;
+}`, "ort-init-device/shared/pipeline.ts");
 export type Mode = "snapshot" | "reference";
 export interface PipelineEvidence { mode: Mode; actual: number[]; expected: number[]; numericMatch: boolean; rawIdentity: boolean; copyCount: number; lifecycle: string[] }
 
@@ -32,7 +33,7 @@ export async function runPipeline(gpu: Gpu, raw: GPUBuffer, mode: Mode): Promise
     }
     const destination = gpu.device.createBuffer({ size: bytes, usage: ["storage", "copy_src"], label: `ort-${mode}-result` });
     try {
-      const consumer = compute(gpu, WGSL, { label: `ort-${mode}-consumer` });
+      const consumer = compute(gpu, SHADER, { label: `ort-${mode}-consumer` });
       consumer.set({ source, destination });
       consumer.dispatch(1);
       lifecycle.push("consumer-submitted");

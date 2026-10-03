@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { describe, expect, test } from "vitest";
 import { compute, draw, effect, frame, init, storage, target } from "../../src/node.ts";
 
@@ -19,7 +20,7 @@ describe.skipIf(!native)("native stage entry selection", () => {
       ];
       for (const { source, entry, expected } of cases) {
         const output = target(gpu, { size: [2, 2], format: "rgba8unorm" });
-        const fx = effect(gpu, source, { entry });
+        const fx = effect(gpu, prepareShader(source), { entry });
         await fx.compile(output);
         await frame(gpu, f => f.pass(output, fx)).done;
         expect([...(await output.color.read({ mipLevel: 0, region: "all" })).slice(0, 4)]).toEqual(expected);
@@ -45,7 +46,7 @@ describe.skipIf(!native)("native stage entry selection", () => {
         [{ vertex: "offscreen" }, [0, 0, 0, 0]],
       ] as const) {
         const output = target(gpu, { size: [2, 2], format: "rgba8unorm" });
-        const render = draw(gpu, { shader, entry });
+        const render = draw(gpu, { shader: prepareShader(shader), entry });
         await render.compile(output);
         await frame(gpu, f => f.pass({ target: output, clear: [0, 0, 0, 0] }, render)).done;
         expect([...(await output.color.read({ mipLevel: 0, region: "all" })).slice(0, 4)]).toEqual(expected);
@@ -68,7 +69,7 @@ describe.skipIf(!native)("native stage entry selection", () => {
         { entries: `${custom}\n${alternate}`, expected: 17 },
       ]) {
         const output = storage(gpu, 4);
-        const kernel = compute(gpu, `${binding}\n${entries}`, { entry, set: { output } });
+        const kernel = compute(gpu, prepareShader(`${binding}\n${entries}`), { entry, set: { output } });
         await kernel.compile();
         kernel.dispatch(1);
         await gpu.settled();

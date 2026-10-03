@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { compute, effect, frame, init, sampler, target, texture } from "../src/mock.ts";
 import type { VGPUError } from "../src/errors.ts";
@@ -88,7 +89,7 @@ describe("storage texture bindings", () => {
     const device = gpu.device.gpu as GPUDevice;
     const layoutSpy = vi.spyOn(device, "createBindGroupLayout");
     const out = texture(gpu, { kind: "2d", usage: ["texture_binding", "storage_binding", "copy_src", "copy_dst"], size: [16, 16], format: "rgba8unorm" });
-    const fill = compute(gpu, STORAGE_2D, { label: "fill" });
+    const fill = compute(gpu, prepareShader(STORAGE_2D), { label: "fill" });
     fill.set({ out });
     expect(() => fill.dispatch(2, 2)).not.toThrow();
     const descriptor = layoutSpy.mock.calls.find(([desc]) => desc?.label?.includes("fill.group0"))?.[0];
@@ -101,10 +102,10 @@ describe("storage texture bindings", () => {
   test("a 3D storage texture binds to texture_storage_3d and to texture_3d", async () => {
     gpu = await init();
     const lut = texture(gpu, { kind: "3d", usage: ["texture_binding", "storage_binding", "copy_src", "copy_dst"], size: [8, 8, 8], format: "rgba16float",  });
-    const fill = compute(gpu, STORAGE_3D, { label: "fill-3d", set: { lut } });
+    const fill = compute(gpu, prepareShader(STORAGE_3D), { label: "fill-3d", set: { lut } });
     expect(() => fill.dispatch(2, 2, 2)).not.toThrow();
     const output = target(gpu, { size: [8, 8], format: "rgba8unorm" });
-    const view = effect(gpu, SAMPLE_3D, { label: "view-3d", set: { lut, linear: sampler(gpu) } });
+    const view = effect(gpu, prepareShader(SAMPLE_3D), { label: "view-3d", set: { lut, linear: sampler(gpu) } });
     expect(() => frame(gpu, (current) => current.pass({ target: output }, (pass) => pass.draw(view)))).not.toThrow();
   });
 
@@ -112,7 +113,7 @@ describe("storage texture bindings", () => {
     gpu = await init();
     const mipped = texture(gpu, { kind: "2d", usage: ["texture_binding", "storage_binding", "copy_src", "copy_dst"], size: [16, 16], format: "rgba8unorm", mipLevelCount: 3 });
     const spy = vi.spyOn(mipped.gpu, "createView");
-    compute(gpu, STORAGE_2D, { label: "fill-mips", set: { out: mipped } });
+    compute(gpu, prepareShader(STORAGE_2D), { label: "fill-mips", set: { out: mipped } });
     const desc = spy.mock.calls.at(-1)?.[0];
     expect(desc?.mipLevelCount).toBe(1);
     expect(desc?.baseMipLevel ?? 0).toBe(0);
@@ -122,7 +123,7 @@ describe("storage texture bindings", () => {
   test("rejects a Target for a storage texture binding", async () => {
     gpu = await init();
     const output = target(gpu, { size: [16, 16], format: "rgba8unorm" });
-    const fill = compute(gpu, STORAGE_2D, { label: "fill" });
+    const fill = compute(gpu, prepareShader(STORAGE_2D), { label: "fill" });
     expect(codeOf(() => fill.set({ out: output }))).toBe("VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE");
     expect(messageOf(() => fill.set({ out: output }))).toMatch(/texture\(gpu/);
   });
@@ -130,7 +131,7 @@ describe("storage texture bindings", () => {
   test("rejects a texture without storage_binding usage", async () => {
     gpu = await init();
     const sampledOnly = texture(gpu, { kind: "2d", size: [16, 16], format: "rgba8unorm", usage: ["texture_binding"] });
-    const fill = compute(gpu, STORAGE_2D, { label: "fill" });
+    const fill = compute(gpu, prepareShader(STORAGE_2D), { label: "fill" });
     expect(codeOf(() => fill.set({ out: sampledOnly }))).toBe("VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE");
     expect(messageOf(() => fill.set({ out: sampledOnly }))).toMatch(/storage_binding/);
   });
@@ -138,7 +139,7 @@ describe("storage texture bindings", () => {
   test("rejects a format that differs from the WGSL declaration", async () => {
     gpu = await init();
     const wrongFormat = texture(gpu, { kind: "2d", usage: ["texture_binding", "storage_binding", "copy_src", "copy_dst"], size: [16, 16], format: "rgba16float" });
-    const fill = compute(gpu, STORAGE_2D, { label: "fill" });
+    const fill = compute(gpu, prepareShader(STORAGE_2D), { label: "fill" });
     expect(codeOf(() => fill.set({ out: wrongFormat }))).toBe("VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE");
     expect(messageOf(() => fill.set({ out: wrongFormat }))).toMatch(/rgba8unorm/);
   });
@@ -146,7 +147,7 @@ describe("storage texture bindings", () => {
   test("rejects a dimension that differs from the WGSL declaration", async () => {
     gpu = await init();
     const flat = texture(gpu, { kind: "2d", usage: ["texture_binding", "storage_binding", "copy_src", "copy_dst"], size: [8, 8], format: "rgba16float" });
-    const fill = compute(gpu, STORAGE_3D, { label: "fill-3d" });
+    const fill = compute(gpu, prepareShader(STORAGE_3D), { label: "fill-3d" });
     expect(codeOf(() => fill.set({ lut: flat }))).toBe("VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE");
     expect(messageOf(() => fill.set({ lut: flat }))).toMatch(/"3d"/);
   });
@@ -154,7 +155,7 @@ describe("storage texture bindings", () => {
   test("destroying a bound storage texture evicts its bind group identity", async () => {
     gpu = await init();
     const out = texture(gpu, { kind: "2d", usage: ["texture_binding", "storage_binding", "copy_src", "copy_dst"], size: [16, 16], format: "rgba8unorm" });
-    const fill = compute(gpu, STORAGE_2D, { label: "fill", set: { out } });
+    const fill = compute(gpu, prepareShader(STORAGE_2D), { label: "fill", set: { out } });
     fill.dispatch(1);
     out.destroy();
     const replacement = texture(gpu, { kind: "2d", usage: ["texture_binding", "storage_binding", "copy_src", "copy_dst"], size: [16, 16], format: "rgba8unorm" });

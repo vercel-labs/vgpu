@@ -92,14 +92,20 @@ A live surface is a valid preparation target outside a frame. `draw.compile(surf
 
 ## Examples
 
+```wgsl
+// surface-color.wgsl
+@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.2, 0.6, 1, 1); }
+```
+
 ```ts
 import { init, effect, frame, surface } from "vgpu";
+import surfaceColorShader from "./surface-color.wgsl";
 
 declare const canvas: HTMLCanvasElement;
 
 const gpu = await init();
 const canvasSurface = surface(gpu, canvas, { dpr: [1, 2] });
-const wave = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.2, 0.6, 1, 1); }`);
+const wave = effect(gpu, surfaceColorShader);
 
 frame(gpu, (currentFrame) => {
   currentFrame.pass({ target: canvasSurface }, (pass) => pass.draw(wave));
@@ -110,10 +116,35 @@ frame(gpu, (currentFrame) => {
 
 With `depth` and `msaa`, depth-tested and antialiased geometry needs no offscreen target. This draws two published scene instances straight to the canvas:
 
+```wgsl
+// crates.wgsl
+struct CameraData { viewProjection: mat4x4f }
+@group(0) @binding(0) var<uniform> camera: CameraData;
+struct VertexOut { @builtin(position) clip: vec4f, @location(0) normal: vec3f }
+
+@vertex fn vs_main(
+  @location(0) position: vec3f, @location(1) normal: vec3f,
+  @location(3) world0: vec4f, @location(4) world1: vec4f,
+  @location(5) world2: vec4f, @location(6) world3: vec4f,
+) -> VertexOut {
+  let world = mat4x4f(world0, world1, world2, world3);
+  var out: VertexOut;
+  out.clip = camera.viewProjection * world * vec4f(position, 1.0);
+  out.normal = (world * vec4f(normal, 0.0)).xyz;
+  return out;
+}
+
+@fragment fn fs_main(@location(0) normal: vec3f) -> @location(0) vec4f {
+  let light = max(dot(normalize(normal), normalize(vec3f(1.0, 1.0, 1.0))), 0.15);
+  return vec4f(vec3f(0.9, 0.5, 0.1) * light, 1.0);
+}
+```
+
 ```ts
 import { draw, frameLoop, geometry, init, surface } from "vgpu";
 import { box, composeMatrix, instances, orbitRig, perspective, rigPose, viewMatrices } from "vgpu/scene";
 import { instanceGeometry } from "vgpu/scene/gpu";
+import crateShader from "./crates.wgsl";
 
 declare const canvas: HTMLCanvasElement;
 
@@ -128,28 +159,7 @@ const crateBridge = instanceGeometry(gpu, crates, { mesh: geometry(gpu, box()) }
 const crateDraw = draw(gpu, {
   geometry: crateBridge.geometry,
   cull: "back",
-  shader: `
-    struct CameraData { viewProjection: mat4x4f }
-    @group(0) @binding(0) var<uniform> camera: CameraData;
-    struct VertexOut { @builtin(position) clip: vec4f, @location(0) normal: vec3f }
-
-    @vertex fn vs_main(
-      @location(0) position: vec3f, @location(1) normal: vec3f,
-      @location(3) world0: vec4f, @location(4) world1: vec4f,
-      @location(5) world2: vec4f, @location(6) world3: vec4f,
-    ) -> VertexOut {
-      let world = mat4x4f(world0, world1, world2, world3);
-      var out: VertexOut;
-      out.clip = camera.viewProjection * world * vec4f(position, 1.0);
-      out.normal = (world * vec4f(normal, 0.0)).xyz;
-      return out;
-    }
-
-    @fragment fn fs_main(@location(0) normal: vec3f) -> @location(0) vec4f {
-      let light = max(dot(normalize(normal), normalize(vec3f(1.0, 1.0, 1.0))), 0.15);
-      return vec4f(vec3f(0.9, 0.5, 0.1) * light, 1.0);
-    }
-  `,
+  shader: crateShader,
 });
 
 const rig = orbitRig({ yaw: 0.6, pitch: 0.4, distance: 4 });
@@ -177,24 +187,32 @@ The pass clears depth to `1` and stencil to `0` unless you pass `clearDepth` / `
 
 To sample a rendered image — post-processing, feedback, compositing — render it into an offscreen `Target` first, bind that target, and present the result to the surface:
 
+```wgsl
+// scene.wgsl
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f { return vec4f(uv, 0.5, 1); }
+```
+
+```wgsl
+// present.wgsl
+@group(0) @binding(0) var sceneTexture: texture_2d<f32>;
+@group(0) @binding(1) var sceneSampler: sampler;
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return textureSample(sceneTexture, sceneSampler, uv);
+}
+```
+
 ```ts
 import { init, effect, frame, sampler, surface, target } from "vgpu";
+import presentShader from "./present.wgsl";
+import sceneShader from "./scene.wgsl";
 
 declare const canvas: HTMLCanvasElement;
 
 const gpu = await init();
 const canvasSurface = surface(gpu, canvas);
 const sceneTarget = target(gpu, { size: canvasSurface.size }); // offscreen, sampleable, same size as the canvas
-const scene = effect(gpu, `
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f { return vec4f(uv, 0.5, 1); }
-`);
-const present = effect(gpu, `
-  @group(0) @binding(0) var sceneTexture: texture_2d<f32>;
-  @group(0) @binding(1) var sceneSampler: sampler;
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return textureSample(sceneTexture, sceneSampler, uv);
-  }
-`, { set: { sceneTexture: sceneTarget, sceneSampler: sampler(gpu) } }); // bind the Target, never the Surface
+const scene = effect(gpu, sceneShader);
+const present = effect(gpu, presentShader, { set: { sceneTexture: sceneTarget, sceneSampler: sampler(gpu) } }); // bind the Target, never the Surface
 
 canvasSurface.onResize(({ width, height }) => sceneTarget.resize([width, height])); // the binding follows the new attachment
 
@@ -210,32 +228,45 @@ The surface appears only as a pass `target`. Because `present` binds `sceneTarge
 
 A single-sample depth surface stores its depth, so a later pass in the same frame can depth-test against it and read it. Bind `surface.depth` explicitly and rebind it after every resize:
 
+```wgsl
+// opaque.wgsl
+@vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
+  var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
+  return vec4f(p[vi], 0.25, 1);
+}
+
+@fragment fn fs_main() -> @location(0) vec4f {
+  return vec4f(0.2, 0.5, 0.2, 1);
+}
+```
+
+```wgsl
+// haze.wgsl
+@group(0) @binding(0) var sceneDepth: texture_2d<f32>; // unfilterable float view, compatibility-safe
+
+@vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
+  var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
+  return vec4f(p[vi], 0.0, 1);
+}
+
+@fragment fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
+  let depth = textureLoad(sceneDepth, vec2i(position.xy), 0).x;
+  return vec4f(0.7, 0.8, 0.9, 1.0) * depth * 0.3;
+}
+```
+
 ```ts
 import { draw, frame, init, surface } from "vgpu";
+import hazeShader from "./haze.wgsl";
+import opaqueShader from "./opaque.wgsl";
 
 declare const canvas: HTMLCanvasElement;
 
 const gpu = await init();
 const canvasSurface = surface(gpu, canvas, { depth: true }); // no msaa: depth is stored and readable
-const opaque = draw(gpu, { shader: `
-  @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
-    var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
-    return vec4f(p[vi], 0.25, 1);
-  }
-  @fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.2, 0.5, 0.2, 1); }
-` });
+const opaque = draw(gpu, { shader: opaqueShader });
 const haze = draw(gpu, {
-  shader: `
-    @group(0) @binding(0) var sceneDepth: texture_2d<f32>; // unfilterable float view, compatibility-safe
-    @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
-      var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
-      return vec4f(p[vi], 0.0, 1);
-    }
-    @fragment fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
-      let depth = textureLoad(sceneDepth, vec2i(position.xy), 0).x;
-      return vec4f(0.7, 0.8, 0.9, 1.0) * depth * 0.3;
-    }
-  `,
+  shader: hazeShader,
   depth: { write: false }, // depth-test without writing the read-only depth
   blend: "additive",
 });
@@ -254,6 +285,7 @@ frame(gpu, (currentFrame) => {
 
 ```ts
 import { init, effect, frame, surface, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 declare const canvas: HTMLCanvasElement;
@@ -261,12 +293,12 @@ const canvasSurface = surface(gpu, canvas);
 
 const bloomSize = (w: number, h: number): [number, number] => [w / 2, h / 2];
 const bloom = target(gpu, { size: bloomSize(canvasSurface.size[0], canvasSurface.size[1]) });
-const brightPass = effect(gpu, `
+const brightPass = effect(gpu, prepareShader(`
   struct Params { resolution: vec2f }
   @group(0) @binding(0) var<uniform> params: Params;
   @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }
-`, { set: { params: { resolution: bloom.size } } });
-const composite = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+`), { set: { params: { resolution: bloom.size } } });
+const composite = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`));
 
 canvasSurface.onResize(({ width, height }) => {
   bloom.resize(bloomSize(width, height));
@@ -279,8 +311,14 @@ frame(gpu, (currentFrame) => {
 });
 ```
 
+```wgsl
+// shared.wgsl
+@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }
+```
+
 ```ts
 import { init, effect, frame, surface } from "vgpu";
+import sharedShader from "./shared.wgsl";
 
 declare const canvasA: HTMLCanvasElement;
 declare const canvasB: HTMLCanvasElement;
@@ -288,7 +326,7 @@ declare const canvasB: HTMLCanvasElement;
 const gpu = await init();
 const main = surface(gpu, canvasA);
 const preview = surface(gpu, canvasB, { autoResize: false, size: [320, 180] });
-const shader = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const shader = effect(gpu, sharedShader);
 
 frame(gpu, (currentFrame) => {
   currentFrame.pass({ target: main }, (p) => p.draw(shader));
@@ -318,14 +356,20 @@ canvasSurface.resize([640, 360]);
 
 Prepare pipelines and bundles for the surface during loading, then render inside the frame loop:
 
+```wgsl
+// prewarm-background.wgsl
+@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.1, 0.2, 0.4, 1); }
+```
+
 ```ts
 import { init, bundle, effect, frameLoop, surface } from "vgpu";
+import backgroundShader from "./prewarm-background.wgsl";
 
 declare const canvas: HTMLCanvasElement;
 
 const gpu = await init();
 const canvasSurface = surface(gpu, canvas, { depth: true, msaa: true });
-const background = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.1, 0.2, 0.4, 1); }`);
+const background = effect(gpu, backgroundShader);
 
 await background.compile(canvasSurface); // outside a frame: format + depth24plus + 4 samples, no canvas texture acquired
 const statics = bundle(gpu, { target: canvasSurface }, (recorded) => recorded.draw(background)); // also outside a frame

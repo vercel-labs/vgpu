@@ -31,17 +31,18 @@ interface SharedUniforms<T extends Record<string, unknown> = Record<string, unkn
 
 ```ts
 import { init, clock, effect, frame, target, uniforms } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const colorTarget = target(gpu, { size: [64, 64] });
 const globals = uniforms(gpu, { time: 0, mouse: [0, 0] });
-const wave = effect(gpu, `
+const wave = effect(gpu, prepareShader(`
   struct Globals { time: f32, mouse: vec2f }
   @group(0) @binding(0) var<uniform> globals: Globals;
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     return vec4f(uv, sin(globals.time) * 0.5 + 0.5, 1);
   }
-`, { set: { globals } });
+`), { set: { globals } });
 
 globals.set({ time: clock(gpu).time });
 frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (pass) => pass.draw(wave)));
