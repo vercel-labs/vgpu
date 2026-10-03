@@ -7,8 +7,10 @@ import { dirname, join, relative } from "node:path";
 import {
   acquirePackageArchives,
   appendMutation,
+  assertCandidateStd,
   assertHistoricalV1,
   assertPreparedV2,
+  candidatePackageOverrides,
   createArtifactRun,
   createFixtureRoot,
   disposeFixture,
@@ -379,10 +381,20 @@ async function createNextConsumer(prefix, versions, archives, initial) {
     ...(versions.typesReactDom ? { "@types/react-dom": versions.typesReactDom } : {}),
     ...(versions.typesNode ? { "@types/node": versions.typesNode } : {}),
   };
-  const { storeDir } = await installExternalConsumer({ root, packageJson: { private: true, type: "module", dependencies }, logPath: runContext.logPath });
+  const { storeDir } = await installExternalConsumer({
+    root,
+    packageJson: {
+      private: true,
+      type: "module",
+      dependencies,
+      ...(initial === "candidate" ? { pnpm: candidatePackageOverrides(archives) } : {}),
+    },
+    logPath: runContext.logPath,
+  });
   await rm(storeDir, { recursive: true, force: true });
   const wgsl = await packageRoot(root, "@vgpu/wgsl");
   const std = await packageRoot(root, "@vgpu/wgsl-std");
+  if (initial === "candidate") await assertCandidateStd(root, archives);
   const nextBinary = join(root, "node_modules/next/dist/bin/next");
   const fixture = { root, wgsl, std, nextBinary, versions };
   return fixture;
