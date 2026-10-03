@@ -65,9 +65,14 @@ frame(gpu, (currentFrame) => {
 });
 ```
 
+```wgsl
+// surface-white.wgsl
+@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }
+```
+
 ```ts
 import { init, effect, frame, surface } from "vgpu";
-import { prepareShader } from "@vgpu/wgsl/prepare";
+import whiteShader from "./surface-white.wgsl";
 
 declare const canvas: HTMLCanvasElement;
 
@@ -76,7 +81,7 @@ const gpu = await init({
   requiredLimits: { maxStorageBuffersInVertexStage: 1 },
 });
 const canvasSurface = surface(gpu, canvas, { dpr: [1, 2] });
-const shader = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`));
+const shader = effect(gpu, whiteShader);
 
 frame(gpu, (currentFrame) => {
   currentFrame.pass({ target: canvasSurface }, (p) => p.draw(shader));

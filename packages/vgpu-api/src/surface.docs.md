@@ -92,15 +92,20 @@ A live surface is a valid preparation target outside a frame. `draw.compile(surf
 
 ## Examples
 
+```wgsl
+// surface-color.wgsl
+@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.2, 0.6, 1, 1); }
+```
+
 ```ts
 import { init, effect, frame, surface } from "vgpu";
-import { prepareShader } from "@vgpu/wgsl/prepare";
+import surfaceColorShader from "./surface-color.wgsl";
 
 declare const canvas: HTMLCanvasElement;
 
 const gpu = await init();
 const canvasSurface = surface(gpu, canvas, { dpr: [1, 2] });
-const wave = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.2, 0.6, 1, 1); }`));
+const wave = effect(gpu, surfaceColorShader);
 
 frame(gpu, (currentFrame) => {
   currentFrame.pass({ target: canvasSurface }, (pass) => pass.draw(wave));
@@ -182,25 +187,32 @@ The pass clears depth to `1` and stencil to `0` unless you pass `clearDepth` / `
 
 To sample a rendered image — post-processing, feedback, compositing — render it into an offscreen `Target` first, bind that target, and present the result to the surface:
 
+```wgsl
+// scene.wgsl
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f { return vec4f(uv, 0.5, 1); }
+```
+
+```wgsl
+// present.wgsl
+@group(0) @binding(0) var sceneTexture: texture_2d<f32>;
+@group(0) @binding(1) var sceneSampler: sampler;
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return textureSample(sceneTexture, sceneSampler, uv);
+}
+```
+
 ```ts
-import { prepareShader } from "@vgpu/wgsl/prepare";
 import { init, effect, frame, sampler, surface, target } from "vgpu";
+import presentShader from "./present.wgsl";
+import sceneShader from "./scene.wgsl";
 
 declare const canvas: HTMLCanvasElement;
 
 const gpu = await init();
 const canvasSurface = surface(gpu, canvas);
 const sceneTarget = target(gpu, { size: canvasSurface.size }); // offscreen, sampleable, same size as the canvas
-const scene = effect(gpu, prepareShader(`
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f { return vec4f(uv, 0.5, 1); }
-`));
-const present = effect(gpu, prepareShader(`
-  @group(0) @binding(0) var sceneTexture: texture_2d<f32>;
-  @group(0) @binding(1) var sceneSampler: sampler;
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return textureSample(sceneTexture, sceneSampler, uv);
-  }
-`), { set: { sceneTexture: sceneTarget, sceneSampler: sampler(gpu) } }); // bind the Target, never the Surface
+const scene = effect(gpu, sceneShader);
+const present = effect(gpu, presentShader, { set: { sceneTexture: sceneTarget, sceneSampler: sampler(gpu) } }); // bind the Target, never the Surface
 
 canvasSurface.onResize(({ width, height }) => sceneTarget.resize([width, height])); // the binding follows the new attachment
 
@@ -299,9 +311,14 @@ frame(gpu, (currentFrame) => {
 });
 ```
 
+```wgsl
+// shared.wgsl
+@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }
+```
+
 ```ts
 import { init, effect, frame, surface } from "vgpu";
-import { prepareShader } from "@vgpu/wgsl/prepare";
+import sharedShader from "./shared.wgsl";
 
 declare const canvasA: HTMLCanvasElement;
 declare const canvasB: HTMLCanvasElement;
@@ -309,7 +326,7 @@ declare const canvasB: HTMLCanvasElement;
 const gpu = await init();
 const main = surface(gpu, canvasA);
 const preview = surface(gpu, canvasB, { autoResize: false, size: [320, 180] });
-const shader = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`));
+const shader = effect(gpu, sharedShader);
 
 frame(gpu, (currentFrame) => {
   currentFrame.pass({ target: main }, (p) => p.draw(shader));
@@ -339,15 +356,20 @@ canvasSurface.resize([640, 360]);
 
 Prepare pipelines and bundles for the surface during loading, then render inside the frame loop:
 
+```wgsl
+// prewarm-background.wgsl
+@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.1, 0.2, 0.4, 1); }
+```
+
 ```ts
-import { prepareShader } from "@vgpu/wgsl/prepare";
 import { init, bundle, effect, frameLoop, surface } from "vgpu";
+import backgroundShader from "./prewarm-background.wgsl";
 
 declare const canvas: HTMLCanvasElement;
 
 const gpu = await init();
 const canvasSurface = surface(gpu, canvas, { depth: true, msaa: true });
-const background = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.1, 0.2, 0.4, 1); }`));
+const background = effect(gpu, backgroundShader);
 
 await background.compile(canvasSurface); // outside a frame: format + depth24plus + 4 samples, no canvas texture acquired
 const statics = bundle(gpu, { target: canvasSurface }, (recorded) => recorded.draw(background)); // also outside a frame
