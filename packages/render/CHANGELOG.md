@@ -1,5 +1,19 @@
 # @vgpu/render
 
+## 0.6.0-rc.0
+
+### Minor Changes
+
+- a76b090: Change `canvasMouseTracker` to expose both normalized and canvas-pixel coordinates on every reading. The removed `normalize` option is replaced by `position.normalized` and `position.canvasPixels`, and both outputs now account for the difference between CSS layout size and drawing-buffer resolution.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.6.0-rc.0/docs/migrations/0.6.0.docs.md).
+
+### Patch Changes
+
+- Updated dependencies [7cb11d3]
+- Updated dependencies [333ccf3]
+  - @vgpu/core@0.6.0-rc.0
+
 ## 0.5.0
 
 ### Minor Changes

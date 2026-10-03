@@ -1,5 +1,26 @@
 # @vgpu/core
 
+## 0.6.0-rc.0
+
+### Patch Changes
+
+- 7cb11d3: Unify compute and render pipeline preparation with lazy compute compilation, `Compute.compile()` / `compileSync()`, and frame-owned `computePass()` dispatches. Capture managed uniform values per direct frame draw/dispatch. Surface native compute validation, validate dispatch counts and workgroup limits, and wait for synchronous pipeline validation before resolving asynchronous preparation.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.6.0-rc.0/docs/migrations/0.6.0.docs.md).
+
+- 333ccf3: `Gpu` now exposes `readonly lost: Promise<GPUDeviceLostInfo>`, a loss-only notification. The promise keeps one identity, never rejects, and resolves once with the native `GPUDeviceLostInfo` when vgpu observes native device loss while the gpu is active. vgpu stops every running `frameLoop` before `gpu.lost` handlers run, so no tick runs or throws after vgpu observes the loss. Loss does not dispose the gpu, destroy its resources, deliver anything to `gpu.onError`, or recover the device: create a new `Gpu` with `init()`, recreate its resources, and restart the loop.
+
+  `gpu.dispose()` remains your own teardown, not a loss. Disposing before vgpu observes a loss leaves `gpu.lost` pending; disposing after keeps its resolved value; disposing a gpu from `initFromDevice(device)` still never destroys the borrowed device. A borrowed device destroyed by its owner while the wrapper is active counts as a loss, with `reason: "destroyed"`. `gpu.settled()` never waits for `gpu.lost`.
+
+  After an observed loss, every factory, `clock(gpu)`, `frame(gpu)`, and `frameLoop(gpu, cb)` throw `VGPU-DEVICE-LOST` at the call, before the frame clock advances or surface auto-resize runs. A manual `frame(gpu)` that was open at the time is not canceled: its `submit()` still throws `VGPU-DEVICE-LOST` until `gpu.dispose()` cancels it. The `VGPU-DEVICE-LOST` error raised by `@vgpu/core` now carries the fix "Create a new Gpu with init(), then recreate its resources and restart the loop."
+
+  The implicit submit of `frame(gpu, cb)` and `frameLoop` ticks no longer swallows `VGPU-DEVICE-LOST` or `VGPU-DEVICE-DISPOSED`: any error it throws now escapes the call, and a loop tick that fails this way stops the loop and rethrows. Calling `gpu.dispose()` inside a callback still cancels the open frame, so its implicit submit stays a no-op.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.6.0-rc.0/docs/migrations/0.6.0.docs.md).
+
+- Updated dependencies [a617198]
+  - @vgpu/wgsl@0.6.0-rc.0
+
 ## 0.5.0
 
 ### Minor Changes

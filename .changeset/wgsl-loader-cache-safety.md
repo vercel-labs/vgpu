@@ -48,6 +48,11 @@ defaults, and replace the previous blanket `addDependency()` claim with Next 16.
 
 ### Affected usage
 
+The prepared-v2 upgrade applies to both stable 0.5.0 users and 0.6.0-rc.0 users: that RC still
+emits v1 shader artifacts and does not export `@vgpu/wgsl/next`. Install the later release that
+includes this helper before changing the config. The authentic retained-cache upgrade evidence
+below uses the published 0.5.0 package.
+
 - Next.js apps that build `.wgsl` files with Turbopack, restore `.next/cache` between builds, and
   upgrade from `@vgpu/wgsl` 0.5.0 while keeping the previously documented bare-string rule
   `loaders: ["@vgpu/wgsl/loader-webpack"]`. That unchanged rule is not protected on this first

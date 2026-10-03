@@ -57,8 +57,8 @@ calls still take strings, and `vgpu/three` still accepts raw strings, structural
 
 ### Affected usage
 
-Code using `vgpu` 0.5.0 or earlier (or a canary build before this change) that passes any of the
-following to `draw(gpu, { shader })`, `effect(gpu, source)`, or `compute(gpu, source)`:
+Code using `vgpu` 0.5.0 or earlier, 0.6.0-rc.0, or another build before prepared v2 support that
+passes any of the following to `draw(gpu, { shader })`, `effect(gpu, source)`, or `compute(gpu, source)`:
 
 - a raw WGSL string, including template literals, `readFileSync()` text, `resolveShader().wgsl`, or
   `compile().wgsl`;

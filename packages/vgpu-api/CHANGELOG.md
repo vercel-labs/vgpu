@@ -1,5 +1,81 @@
 # vgpu
 
+## 0.6.0-rc.0
+
+### Minor Changes
+
+- b2d4038: Stop draws and captured-resource subscriptions from retaining abandoned render bundles, detach stale or failed recordings, and add synchronous idempotent `Bundle.dispose()` for deterministic facade release. Disposal does not destroy borrowed resources or revoke a native render bundle handle saved before disposal.
+- 7cb11d3: Unify compute and render pipeline preparation with lazy compute compilation, `Compute.compile()` / `compileSync()`, and frame-owned `computePass()` dispatches. Capture managed uniform values per direct frame draw/dispatch. Surface native compute validation, validate dispatch counts and workgroup limits, and wait for synchronous pipeline validation before resolving asynchronous preparation.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.6.0-rc.0/docs/migrations/0.6.0.docs.md).
+
+- bc81b4e: Reject async and thenable `frame` / `frameLoop` callbacks before their frame is implicitly submitted. Inferred Promise and PromiseLike returns are rejected by the public types, while runtime checks protect JavaScript and callbacks whose return type was erased.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.6.0-rc.0/docs/migrations/0.6.0.docs.md).
+
+- 333ccf3: `Gpu` now exposes `readonly lost: Promise<GPUDeviceLostInfo>`, a loss-only notification. The promise keeps one identity, never rejects, and resolves once with the native `GPUDeviceLostInfo` when vgpu observes native device loss while the gpu is active. vgpu stops every running `frameLoop` before `gpu.lost` handlers run, so no tick runs or throws after vgpu observes the loss. Loss does not dispose the gpu, destroy its resources, deliver anything to `gpu.onError`, or recover the device: create a new `Gpu` with `init()`, recreate its resources, and restart the loop.
+
+  `gpu.dispose()` remains your own teardown, not a loss. Disposing before vgpu observes a loss leaves `gpu.lost` pending; disposing after keeps its resolved value; disposing a gpu from `initFromDevice(device)` still never destroys the borrowed device. A borrowed device destroyed by its owner while the wrapper is active counts as a loss, with `reason: "destroyed"`. `gpu.settled()` never waits for `gpu.lost`.
+
+  After an observed loss, every factory, `clock(gpu)`, `frame(gpu)`, and `frameLoop(gpu, cb)` throw `VGPU-DEVICE-LOST` at the call, before the frame clock advances or surface auto-resize runs. A manual `frame(gpu)` that was open at the time is not canceled: its `submit()` still throws `VGPU-DEVICE-LOST` until `gpu.dispose()` cancels it. The `VGPU-DEVICE-LOST` error raised by `@vgpu/core` now carries the fix "Create a new Gpu with init(), then recreate its resources and restart the loop."
+
+  The implicit submit of `frame(gpu, cb)` and `frameLoop` ticks no longer swallows `VGPU-DEVICE-LOST` or `VGPU-DEVICE-DISPOSED`: any error it throws now escapes the call, and a loop tick that fails this way stops the loop and rethrows. Calling `gpu.dispose()` inside a callback still cancels the open frame, so its implicit submit stays a no-op.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.6.0-rc.0/docs/migrations/0.6.0.docs.md).
+
+- a332125: Rebuild `vgpu/scene` around material-independent scene composition: CPU transform math, parent/child groups, external hierarchy evaluation, fixed-capacity typed instances, and camera functions that operate on application-owned state. Geometry recipes remain available.
+
+  Add `vgpu/scene/gpu` to publish instance matrices and custom attributes as an instanced vertex stream, borrowing an existing mesh. Add pure `@vgpu/wgsl-std/scene` helpers for world matrices, positions, directions, and normals. Shaders own their resources and binding locations; applications connect uniforms by name and choose their own shading and passes.
+
+  Remove the previous mesh, material, light, camera-node, and orbit-control abstractions. This is a breaking pre-1.0 API revision.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.6.0-rc.0/docs/migrations/0.6.0.docs.md).
+
+- 7d51e9d: Make automatic shader entry selection consistent across vertex, fragment, and compute stages.
+  Explicit selections are validated and take priority. A sole entry works with any name. With
+  multiple entries of a stage, prefer `vs_main`, `fs_main`, or `cs_main` respectively; if that name
+  is absent, retain the first entry of the stage. These are vgpu conventions, not WGSL requirements.
+
+  Add `effect(gpu, source, { entry: { fragment: "name" } })` to select a fragment explicitly.
+  Selection is fixed at construction and determines resource layouts as well as the compiled entry.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.6.0-rc.0/docs/migrations/0.6.0.docs.md).
+
+- 13aa182: Reject canvas `Surface` objects passed to Draw, Effect, or Compute input bindings. Constructor `set` options and later `set()` calls now throw `VGPU-SURFACE-NOT-BINDABLE` before acquiring the current presentation texture; surfaces remain supported as render destinations.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.6.0-rc.0/docs/migrations/0.6.0.docs.md).
+
+- e843185: Add opt-in depth and MSAA to canvas surfaces, so depth-tested, antialiased 3D — including `vgpu/scene` instance geometry — renders straight to the canvas without an offscreen target and present pass. `surface(gpu, canvas, { depth, msaa })` accepts `depth: true` (`"depth24plus"`) or an explicit depth-aspect format (`"depth16unorm"`, `"depth24plus"`, `"depth24plus-stencil8"`, `"depth32float"`, `"depth32float-stencil8"`, subject to native features), and `msaa: true` or `4` for four samples. Invalid values throw the new `VGPU-SURFACE-DEPTH-INVALID` and `VGPU-SURFACE-MSAA-INVALID`. `surface.depth` is an owned texture, stable until resize or dispose; the MSAA color attachment is private and resolves into `surface.color`, which remains the single-sample current canvas texture. `compile(surface)`, `compileSync(surface)`, Draw `targets`, and `bundle(gpu, { target: surface }, ...)` prepare against the configured format, depth format, and sample count without acquiring a canvas texture.
+
+  Surface resize now prepares replacement attachments before committing the new canvas size, DPR, and attachments together, then notifies and destroys the old attachments. A synchronous allocation failure destroys partial replacements and leaves the previous size, DPR, and attachments in place; a throwing listener no longer stops later listeners or the old-attachment cleanup, and its error is rethrown afterwards. Resizing the same surface from any replacement notification throws `VGPU-SURFACE-RESIZE-REENTRANT`. Direct `canvas.width`/`height` writes between frames reconcile owned attachments at the next frame boundary before user encoding, without public `onResize` callbacks; the pass descriptor also reconciles later writes before acquiring the canvas texture. Resize before encoding commands that use the attachments. `dispose()` destroys owned attachments even when an `onDestroy` listener throws.
+
+- 21026b7: Prepare pipelines and render bundles against a live `Surface` outside a frame. `Draw`/`Effect` `compile()` and `compileSync()`, Draw constructor `targets`, and `bundle(gpu, { target: surface }, ...)` now read the surface's configured render signature — its `format`, configured depth format, and sample count — without acquiring a canvas texture, reading or allocating attachments, resizing the canvas, or submitting work. A surface and the equivalent explicit signature share cached pipelines, and size-only resizes keep compiled pipelines and recorded bundles valid. Preparing against a disposed surface still throws `VGPU-SURFACE-DISPOSED`; drawing to a surface outside a frame still throws `VGPU-SURFACE-NOT-IN-FRAME`, now with a fix that points to the accepted preparation calls.
+
+### Patch Changes
+
+- eedcb29: Preserve authored Blender skill resources during documentation generation and route the vgpu skill to portable modeling, baking, and runtime validation guidance.
+- b617aa8: Avoid redundant persistent-buffer uploads for managed uniforms used by frame draws and compute dispatches. `set()` still validates and packs values immediately; frames upload their captured values in batches, and one-shot draws/dispatches upload pending persistent values only when needed. Uniforms recorded in render bundles remain live, as do shared uniform buffers whose implementation-level buffer handles have been exposed. Storage and explicit buffer writes keep their existing behavior.
+- b6ec97a: Guide agents to consider an optional numerical library for quaternion interpolation, spatial
+  queries and procedural motion when using vgpu. The skill preserves existing project dependencies
+  and routes integration examples through the installed CLI's documentation.
+- 668aa6e: Correct the compilation and render-bundle guides to query the preferred canvas format before surface creation and use the actual format of existing surfaces. Update examples to pre-warm and record with signatures outside frames, then render canvas content inside frames.
+- 929b97f: Document the boundary between scene composition and general CPU math, with checked examples for
+  using pmndrs/math matrices in instance collections, external hierarchies, and camera uniforms.
+  The CLI documentation explains representation, projection, ownership, and explicit update rules.
+- e21ecee: Route 3D scene tasks from the public skill to a dedicated `scene.md` reference. Keep scene
+  composition and optional numerical-library guidance in that reference so it can evolve
+  independently of the main skill. Preserve the authored reference during skill regeneration.
+- f8f9f7e: `gpu.settled()` now snapshots queue work already submitted when it is called while preserving its resolve-only result and existing tracked error deliveries. Fulfillment can take longer and remains a completion signal, not a successful-execution guarantee. If a queue's `onSubmittedWorkDone()` throws synchronously, `compute.dispatch()` has already submitted its work and now reports one `VGPU-COMPUTE-VALIDATION` with `where: "<label>.completion"` through `gpu.onError` instead of throwing after submission.
+- Updated dependencies [a617198]
+- Updated dependencies [7cb11d3]
+- Updated dependencies [333ccf3]
+- Updated dependencies [a332125]
+  - @vgpu/wgsl@0.6.0-rc.0
+  - @vgpu/core@0.6.0-rc.0
+  - @vgpu/wgsl-std@0.6.0-rc.0
+  - @vgpu/adapter-mock@0.6.0-rc.0
+  - @vgpu/adapter-node@0.6.0-rc.0
+
 ## 0.5.0
 
 ### Minor Changes

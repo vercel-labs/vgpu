@@ -18,4 +18,5 @@ pnpm exec vgpu docs ls /migrations
 
 ## Available guides
 
+- [0.6.0](/docs/migrations/0.6.0) — `vgpu docs cat /migrations/0.6.0.docs.md`
 - [0.5.0](/docs/migrations/0.5.0) — `vgpu docs cat /migrations/0.5.0.docs.md`
