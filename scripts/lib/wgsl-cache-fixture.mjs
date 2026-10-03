@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { appendFile, cp, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -242,6 +243,31 @@ export async function createCandidateVersionControlArchives({ archives, outputRo
   }
 }
 
+// Candidate companion packages may not be published yet (for example a prepared RC).
+// Route only this candidate compiler's std dependency to the unmodified packed std;
+// authentic historical installs continue to resolve their published dependencies.
+export function candidatePackageOverrides(archives) {
+  return {
+    overrides: {
+      [`@vgpu/wgsl@${archives.manifests.candidate.version}>@vgpu/wgsl-std`]: `file:${archives.candidateStdArchive}`,
+    },
+  };
+}
+
+export async function assertCandidateStd(root, archives) {
+  const consumerRequire = createRequire(join(root, "package.json"));
+  const compiler = await packageRoot(root, "@vgpu/wgsl");
+  const compilerRequire = createRequire(join(compiler.resolved, "package.json"));
+  assert.equal(
+    await realpath(compilerRequire.resolve("@vgpu/wgsl-std/math")),
+    await realpath(consumerRequire.resolve("@vgpu/wgsl-std/math")),
+    "Candidate compiler must use the packed std companion, not a registry copy.",
+  );
+  const std = await packageRoot(root, "@vgpu/wgsl-std");
+  const manifest = JSON.parse(await readFile(join(std.path, "package.json"), "utf8"));
+  assert.equal(manifest.version, archives.manifests.candidateStd.version);
+}
+
 export async function installExternalConsumer({ root, packageJson, logPath }) {
   await mkdir(root, { recursive: true });
   await writeJson(join(root, "package.json"), packageJson);
@@ -298,6 +324,7 @@ export async function isolatedPackageManagerUpgrade({ root, archives, logPath })
 
     await writeJson(join(root, "package.json"), {
       ...base,
+      pnpm: candidatePackageOverrides(archives),
       dependencies: {
         "@vgpu/wgsl": `file:${archives.candidateArchive}`,
         "@vgpu/wgsl-std": `file:${archives.candidateStdArchive}`,
@@ -316,6 +343,7 @@ export async function isolatedPackageManagerUpgrade({ root, archives, logPath })
       "--config.package-import-method=copy",
       "--strict-peer-dependencies=false",
     ], { logPath, label: "isolated pnpm old-to-candidate upgrade" });
+    await assertCandidateStd(root, archives);
     const candidate = await packageRoot(root, "@vgpu/wgsl");
     const candidateManifest = JSON.parse(await readFile(join(candidate.path, "package.json"), "utf8"));
     assert.equal(candidateManifest.name, archives.manifests.candidate.name);
@@ -345,6 +373,7 @@ export async function verifyCandidateExports({ root, archives, logPath }) {
     packageJson: {
       private: true,
       type: "module",
+      pnpm: candidatePackageOverrides(archives),
       dependencies: {
         "@vgpu/wgsl": `file:${archives.candidateArchive}`,
         "@vgpu/wgsl-std": `file:${archives.candidateStdArchive}`,
@@ -352,6 +381,7 @@ export async function verifyCandidateExports({ root, archives, logPath }) {
     },
   });
   await rm(storeDir, { recursive: true, force: true, maxRetries: 3 });
+  await assertCandidateStd(root, archives);
   const packageLocation = await packageRoot(root, "@vgpu/wgsl");
   const esm = await run(process.execPath, ["--input-type=module", "--eval", `
     import { wgslTurbopackRule } from "@vgpu/wgsl/next";
