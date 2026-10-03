@@ -1,0 +1,38 @@
+{
+  "mode": "pre",
+  "tag": "rc",
+  "initialVersions": {
+    "@vgpu/agent-evals": "0.0.0",
+    "docs": "0.1.8",
+    "@vgpu/factory": "0.0.0",
+    "@vgpu/adapter-mock": "0.5.0",
+    "@vgpu/adapter-node": "0.5.0",
+    "@vgpu/core": "0.5.0",
+    "@vgpu/native": "0.5.0",
+    "@vgpu/render": "0.5.0",
+    "@vgpu/cli": "0.2.3",
+    "vgpu": "0.5.0",
+    "@vgpu/wgsl": "0.5.0",
+    "@vgpu/wgsl-std": "0.5.0"
+  },
+  "changesets": [
+    "accurate-runtime-entry-points",
+    "blender-skill-resources",
+    "bundle-retention",
+    "compute-frame-passes",
+    "defer-unused-uniform-uploads",
+    "frame-async-callbacks",
+    "gpu-device-loss",
+    "optional-scene-math-skill",
+    "preferred-canvas-format-docs",
+    "scene-composition-utilities",
+    "scene-math-boundary",
+    "scene-skill-reference",
+    "settled-queue-completion",
+    "soft-cats-point",
+    "stage-entry-selection",
+    "surface-binding-rejection",
+    "surface-depth-msaa",
+    "surface-signature-compile"
+  ]
+}

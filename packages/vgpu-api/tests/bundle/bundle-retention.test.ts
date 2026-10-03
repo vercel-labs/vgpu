@@ -7,6 +7,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bundle, effect, frame, init, target } from "../../src/mock.ts";
+import { bindGroupCacheTestState } from "../../src/bind-cache.ts";
+import { kernelOf } from "../../src/kernel.ts";
+import { renderService } from "../../src/render-service.ts";
 
 const SOLID = `
 @fragment fn main() -> @location(0) vec4f { return vec4f(1); }
@@ -83,13 +86,15 @@ test("the first permanent stale event detaches a bundle from every draw and reso
   }
 });
 
-test("failed recording releases every captured resource subscription", async () => {
+test("failed recording releases captured reverse records without per-bundle resource listeners", async () => {
   const gpu = await init();
   try {
     const output = target(gpu, { size: [4, 4] });
     const source = target(gpu, { size: [4, 4] });
     const replacement = target(gpu, { size: [4, 4] });
     const sampled = effect(gpu, prepareShader(SAMPLED), { set: { source: source.color } });
+    const cache = bindGroupCacheTestState(renderService(kernelOf(gpu)).binds);
+    const recordsBefore = cache.lifetime.records;
     const subscribe = source.color.onDestroy.bind(source.color);
     const offs: ReturnType<typeof vi.fn>[] = [];
     vi.spyOn(source.color, "onDestroy").mockImplementation((callback) => {
@@ -102,15 +107,54 @@ test("failed recording releases every captured resource subscription", async () 
       recorder.draw(sampled);
       throw new Error("recording failed");
     })).toThrow("recording failed");
-    expect(offs).toHaveLength(1);
-    expect(offs[0]).toHaveBeenCalledTimes(1);
+    expect(offs).toHaveLength(0);
+    expect(cache.lifetime.records).toBe(recordsBefore + 1);
 
     sampled.set({ source: replacement.color });
     source.color.destroy();
-    expect(offs[0]).toHaveBeenCalledTimes(1);
+    expect(cache.lifetime.records).toBe(recordsBefore);
   } finally {
     gpu.dispose();
   }
+});
+
+test("disposed, stale, and swept bundle snapshots release their reverse records", async () => {
+  const gpu = await init();
+  try {
+    const output = target(gpu, { size: [4, 4] });
+    const source = target(gpu, { size: [4, 4] });
+    const replacement = target(gpu, { size: [4, 4] });
+    const sampled = effect(gpu, SAMPLED, { set: { source: source.color } });
+    frame(gpu, current => current.pass(output, pass => pass.draw(sampled)));
+    const cache = bindGroupCacheTestState(renderService(kernelOf(gpu)).binds);
+    const baselineRecords = cache.lifetime.records;
+    const baselineBuckets = cache.lifetime.dependencyBuckets;
+
+    const disposed = bundle(gpu, { target: output }, recorder => recorder.draw(sampled));
+    expect(cache.lifetime.records).toBe(baselineRecords + 1);
+    disposed.dispose();
+    expect(cache.lifetime.records).toBe(baselineRecords);
+    expect(cache.lifetime.dependencyBuckets).toBe(baselineBuckets);
+
+    const stale = bundle(gpu, { target: output }, recorder => recorder.draw(sampled));
+    expect(cache.lifetime.records).toBe(baselineRecords + 1);
+    sampled.set({ source: replacement.color });
+    expect(cache.lifetime.records).toBe(baselineRecords);
+    expect(cache.lifetime.dependencyBuckets).toBe(baselineBuckets);
+
+    frame(gpu, current => current.pass(output, pass => pass.draw(sampled)));
+    const sweepBaselineRecords = cache.lifetime.records;
+    const sweepBaselineBuckets = cache.lifetime.dependencyBuckets;
+    const recordIdsBeforeSweep = new Set(cache.lifetime.recordIds);
+    const swept = bundle(gpu, { target: output }, recorder => recorder.draw(sampled));
+    const sweptRecord = cache.lifetime.recordIds.find((id) => !recordIdsBeforeSweep.has(id));
+    expect(cache.lifetime.records).toBe(sweepBaselineRecords + 1);
+    cache.lifetime.forceDead(sweptRecord!);
+    cache.lifetime.maintain();
+    expect(cache.lifetime.records).toBe(sweepBaselineRecords);
+    expect(cache.lifetime.dependencyBuckets).toBe(sweepBaselineBuckets);
+    swept.dispose();
+  } finally { gpu.dispose(); }
 });
 
 test("abandoned valid bundles are collectable through draw and resource reverse references", async () => {
@@ -132,9 +176,23 @@ test("abandoned valid bundles are collectable through draw and resource reverse 
       collected: 128,
       registryEntries: 1,
       retained: true,
+      retainedEffectCollected: true,
+      retainedDrawCollected: true,
+      retainedOwnerShardCollected: true,
+      followedEffectCollected: true,
+      followedDrawCollected: true,
+      geometryDrawCollected: true,
+      replayAfterCollection: true,
+      staleAfterDestroy: "VGPU-R3-BUNDLE-STALE",
+      staleAfterTargetGeneration: "VGPU-R3-BUNDLE-STALE",
+      staleAfterGeometryDestroy: "VGPU-MESH-LAYOUT-INVALID",
       staleBundle: "retained-stale",
       lateDrawCollected: true,
-      activeBundleSubscriptions: 0,
+      resourceSubscriptionCalls: 1,
+      recordsAfterDropped: 3,
+      bucketsAfterDropped: 3,
+      recordsAfterStale: 0,
+      bucketsAfterStale: 0,
     });
   } finally {
     rmSync(directory, { recursive: true, force: true });

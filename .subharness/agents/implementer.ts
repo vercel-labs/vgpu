@@ -26,18 +26,18 @@ Workflow:
 
 Reply with: status (done/blocked), commit SHAs, checks and results, reviewer verdict, and open issues.`,
   harness: [
+    claudeCode({
+      model: "claude-opus-5.5",
+      effort: "high",
+      permissionMode: "dontAsk",
+      allowedTools: ["Read", "Glob", "Grep", "Bash", "Write", "Edit"],
+    }),
     codex({
       model: "gpt-5.6-sol",
       effort: "high",
       approvalPolicy: "never",
       sandboxMode: "workspace-write",
       networkAccessEnabled: true,
-    }),
-    claudeCode({
-      model: "claude-opus-5.5",
-      effort: "high",
-      permissionMode: "dontAsk",
-      allowedTools: ["Read", "Glob", "Grep", "Bash", "Write", "Edit"],
     }),
   ],
   subagents: { reviewer, writer },

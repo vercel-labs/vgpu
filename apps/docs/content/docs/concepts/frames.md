@@ -144,7 +144,7 @@ Use `f.computePass(pass => pass.dispatch(simulation, workgroups))` between rende
 
 Prepare pipelines with `await simulation.compile()` before opening a frame. Compute-pass callbacks are synchronous and cannot nest other passes. Cancellation discards both render and compute commands belonging to the frame.
 
-Direct draws and dispatches capture their current managed uniform values. Storage buffers stay live for GPU-to-GPU dataflow. Explicit host writes, raw resources and render bundles keep their existing buffer semantics; later host writes are not inserted between encoded commands.
+Direct draws and dispatches capture their current managed uniform values, and a `set()` that leaves the packed bytes unchanged keeps the snapshot already captured for later commands in the frame. Captures live in pooled uniform pages that return for reuse once the frame's GPU work completes or the frame is canceled, so frames that repeat the same draws in the same order reuse their bind groups. Storage buffers stay live for GPU-to-GPU dataflow. Explicit host writes, raw resources and render bundles keep their existing buffer semantics; later host writes are not inserted between encoded commands.
 
 ## Await before the frame, not inside it
 

@@ -1,5 +1,34 @@
 # docs
 
+## 0.1.9-rc.0
+
+### Patch Changes
+
+- Updated dependencies [a617198]
+- Updated dependencies [eedcb29]
+- Updated dependencies [b2d4038]
+- Updated dependencies [7cb11d3]
+- Updated dependencies [b617aa8]
+- Updated dependencies [bc81b4e]
+- Updated dependencies [333ccf3]
+- Updated dependencies [b6ec97a]
+- Updated dependencies [668aa6e]
+- Updated dependencies [a332125]
+- Updated dependencies [929b97f]
+- Updated dependencies [e21ecee]
+- Updated dependencies [f8f9f7e]
+- Updated dependencies [7d51e9d]
+- Updated dependencies [13aa182]
+- Updated dependencies [e843185]
+- Updated dependencies [21026b7]
+  - @vgpu/wgsl@0.6.0-rc.0
+  - vgpu@0.6.0-rc.0
+  - @vgpu/core@0.6.0-rc.0
+  - @vgpu/wgsl-std@0.6.0-rc.0
+  - @vgpu/cli@0.2.4-rc.0
+  - @vgpu/adapter-mock@0.6.0-rc.0
+  - @vgpu/adapter-node@0.6.0-rc.0
+
 ## 0.1.8
 
 ### Patch Changes

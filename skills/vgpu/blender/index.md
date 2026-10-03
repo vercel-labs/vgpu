@@ -32,7 +32,7 @@ For a new asset, capture the first blockout as the implementation baseline. Reso
 | Changing contacts between moving parts and directional shadows | Runtime lighting or shadows |
 | Repeating surface grain or microtexture | A reusable material layer with its own scale |
 
-Do not default to uniformly decimating a high-poly mesh. Shared profiles, deliberate retopology, and region-specific sampling can preserve hard-surface shapes, pivots, and openings more efficiently. A simple prop may need only authored low-poly bevels and AO; create a high-poly source or normal map only when it adds useful detail.
+Choose the representation before reducing polygons: audit which part families need volume and which can become continuous surfaces with material detail. Use the [surface reduction examples](references/shape-and-assembly.md#reduce-geometry-by-visible-surface) before decimating individual pieces. Shared profiles, deliberate retopology, and region-specific sampling can preserve hard-surface shapes, pivots, and openings efficiently. Create a high-poly source or normal map only when it adds useful detail.
 
 ## 3. Keep authoring reproducible
 
@@ -68,6 +68,8 @@ Do not default to uniformly decimating a high-poly mesh. Shared profiles, delibe
 When a defect could come from either the asset or its rendering, use [runtime parity and diagnostics](references/runtime-parity-and-diagnostics.md) to isolate the contribution before editing or rebaking. It covers cross-surface consistency, isolated production-shader probes and evidence tied to the version actually rendered.
 
 Compare the original, HIGH, unbaked LOW, and baked LOW under matched conditions where those versions exist. Review at close range and gameplay distance, from behind and during movement. Toggle normal maps and AO to confirm their visible contribution; a loaded texture does not prove the material uses it.
+
+For geometry optimization, also compare the final material alone, neutral solid with wireframe, and final material with wireframe. Overlay the actual exported/runtime LOW topology with depth testing, without hidden-edge clutter or coplanar z-fighting. Keep the same cameras and render settings across candidates and justify subdivisions by visible, structural, or shading needs. These are review views; they do not require shipping a wireframe mode.
 
 For Blender/runtime parity, match world camera pose, projection, framing, light direction and environment, and record exposure and tone mapping. Save actual captures from both renderers; generated references guide design but do not certify implementation. Inspect the whole frame and defect crops at each delivered LOD. Toggle lightmaps independently when present, and distinguish intended renderer differences from missing or doubled lighting. Freeze animation at a recorded time for still comparisons, then verify motion separately; a settled frame does not mean animation is paused.
 

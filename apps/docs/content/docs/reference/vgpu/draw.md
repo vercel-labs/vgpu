@@ -132,7 +132,7 @@ interface Draw {
 | opts.multisample | `{ alphaToCoverage?, mask? }` | ✖ | `{ alphaToCoverage: false, mask: 0xFFFFFFFF }` | MSAA state. `alphaToCoverage`: turns fragment alpha into a per-sample coverage mask, so alpha-tested foliage antialiases in any draw order — no blending, no transparency sorting; requires an `msaa: true` target. `mask`: bitmask of samples the draw may write — a niche debugging tool most draws never set. Only the low `sampleCount` bits matter; higher bits are legal and ignored. |
 | opts.constants | `Readonly<Record<string, number \| boolean>>` | ✖ | the WGSL defaults | Values for WGSL `override` constants, fixed at pipeline creation. Use them to specialize one shader — quality tiers, feature toggles, workgroup-size tuning — without string-templating the WGSL. Key by override name, or by the decimal string of `N` when the declaration has `@id(N)` (the name is not usable then). Booleans become `1`/`0`; every override declared without a default must be provided. |
 | opts.entry | `{ vertex?: string; fragment?: string }` | ✖ | `vs_main` / `fs_main` when declared, otherwise first in each stage | Selects which `@vertex`/`@fragment` functions to compile when one WGSL module declares several — variants of one technique sharing helpers, such as depth-only and shaded passes from the same source. Names must exist in the shader with the matching stage. Omitted fields select the sole entry of that stage, or prefer its conventional name when several exist, falling back to the first. Explicit names always take priority and must be valid. |
-| draw.set.values | `Record<string, unknown>` | ✔ | — | Values keyed by WGSL binding variable name. JS objects/numbers are packed; resources are bound by identity. A `Target` follows its attachment across resizes; a `Texture` stays bound to that exact texture. A `Surface` is rejected in every slot with `VGPU-SURFACE-NOT-BINDABLE`. |
+| draw.set.values | `Record<string, unknown>` | ✔ | — | Values keyed by WGSL binding variable name. JS objects/numbers are packed; resources, including a raw `GPUBuffer` or `GPUBufferBinding` (`{ buffer, offset?, size? }`) on a uniform or storage buffer binding, are bound by identity (see "Raw buffer bindings"). A `Target` follows its attachment across resizes; a `Texture` stays bound to that exact texture. A `Surface` is rejected in every slot with `VGPU-SURFACE-NOT-BINDABLE`. |
 | draw.group.n | `number` | ✔ | — | Bind group index to claim for manual bind-group binding (`group(n, bindGroup)`). |
 | draw.group.bindGroup | `GPUBindGroup` | ✔ | — | Must be compatible with `draw.layout(n)` or `draw.layout(n, { dynamicOffsets: true })`. |
 | draw.layout.n | `number` | ✔ | — | Reflected bind group index. |
@@ -539,4 +539,31 @@ Each color/depth/sample-count variant is a different pipeline. A missed variant 
 
 Direct frame draws capture managed uniform values when encoded, matching compute dispatches. Later `set()` calls do not alter earlier commands. Storage bindings, raw/low-level buffers, claimed bind groups, and render bundles retain their live buffer contents.
 
-Managed uniform `set()` calls validate and pack on the CPU. Frame-only values upload through captured frame pages; one-shot draws upload pending values when used. Uniforms recorded in bundles continue receiving immediate stable-buffer updates so replay remains live.
+Managed uniforms are JS values on a `var<uniform>` binding and `uniforms(gpu)` objects adopted as uniform. `set()` validates, packs and stores the CPU value on every call. Frame-only values upload through captured frame pages; one-shot draws upload pending values when used. When the packed bytes equal the previous ones (bitwise: an in-place typed-array change is detected, `+0` and `-0` differ), the update is not a new revision: later commands in the same frame reuse its snapshot, and a pending upload stays pending. You never need to compare values yourself; skipping a redundant `set()` saves only CPU work. Storage bindings and live uniforms (recorded into a bundle, or exposed through `.buffer`/`.gpu`) still write on every `set()`.
+
+Captures live in pooled uniform pages. A page belongs to one frame until its GPU work completes or the frame is canceled, so frames in flight never share pages. Bind groups follow the physical page range, so frames that repeat the same draws in the same order reuse them; reordering or culling draws can create some again. Idle retention is bounded and `gpu.dispose()` frees the pages. Each frame still uploads its own captured pages.
+
+## Raw buffer bindings
+
+A raw `GPUBuffer` or `GPUBufferBinding` (`{ buffer, offset?, size? }`) set on a uniform or storage buffer binding is a user-owned live resource: vgpu never packs, captures or uploads it, and later submissions see your `queue.writeBuffer` writes.
+
+```ts
+import { init, effect, frame, target } from "vgpu/mock";
+
+const gpu = await init();
+const colorTarget = target(gpu, { size: [8, 8] });
+const tint = effect(gpu, `
+  struct Tint { color: vec4f }
+  @group(0) @binding(0) var<uniform> tint: Tint;
+  @fragment fn fs_main() -> @location(0) vec4f { return tint.color; }
+`);
+
+const UNIFORM_COPY_DST = 0x40 | 0x08; // GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+const paletteBuffer = gpu.gpu.createBuffer({ size: 512, usage: UNIFORM_COPY_DST });
+
+tint.set({ tint: { buffer: paletteBuffer, offset: 256, size: 16 } }); // bind the second palette entry
+gpu.gpu.queue.writeBuffer(paletteBuffer, 256, new Float32Array([1, 0.5, 0, 1])); // host write, seen by later frames
+frame(gpu, (currentFrame) => currentFrame.pass(colorTarget, tint));
+```
+
+The binding is keyed by buffer, offset (default `0`) and size (default: the rest of the buffer), so `buffer` and `{ buffer, offset: 0 }` are the same binding. Another offset or size creates a new bind group, and a bundle recorded with the old range throws `VGPU-R3-BUNDLE-STALE`. The descriptor is read at `set()` time. Native WebGPU validates alignment, size and usage. A JS struct with a member named `buffer` still packs as a struct.

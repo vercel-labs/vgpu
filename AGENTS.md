@@ -33,11 +33,16 @@ Normal development targets `canary`. The linked production/release workflows def
 
 ## Agent team
 
-Repository specialists (researchers, API designer, planner, implementer, writer, reviewer, builder)
-are defined in `.subharness/agents/` and run through the `subharness` CLI. The lead workflow —
+Repository specialists (researchers, API designer, planner, implementer, implementer-simple, writer,
+PR writer, reviewer, fixer) are defined in `.subharness/agents/` and run through the `subharness` CLI. The lead workflow —
 research, API design, human-validated decisions, planning, parallel implementation, integration —
 is in `.claude/skills/vgpu-agent-flow/SKILL.md`. Pipeline artifacts live in the gitignored
 `.context/work/<topic>/`.
+
+When the user asks to explain a problem, issue, PR, or feature as an infographic, use
+[visual-explainer](.claude/skills/visual-explainer/SKILL.md). It defines the shared narrative and
+visual style for personal PDF explanations and PR descriptions composed of Markdown and small
+SVGs. The PR writer also reads this skill; it owns PR-specific structure, while the lead publishes.
 
 For Blender assets, `asset-author` (Astra) delegates runtime integration and visual critique to
 `asset-runtime` and `asset-critic` (Opus 5.5). Follow the

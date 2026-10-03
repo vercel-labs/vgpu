@@ -1,5 +1,17 @@
 # @vgpu/wgsl-std
 
+## 0.6.0-rc.0
+
+### Minor Changes
+
+- a332125: Rebuild `vgpu/scene` around material-independent scene composition: CPU transform math, parent/child groups, external hierarchy evaluation, fixed-capacity typed instances, and camera functions that operate on application-owned state. Geometry recipes remain available.
+
+  Add `vgpu/scene/gpu` to publish instance matrices and custom attributes as an instanced vertex stream, borrowing an existing mesh. Add pure `@vgpu/wgsl-std/scene` helpers for world matrices, positions, directions, and normals. Shaders own their resources and binding locations; applications connect uniforms by name and choose their own shading and passes.
+
+  Remove the previous mesh, material, light, camera-node, and orbit-control abstractions. This is a breaking pre-1.0 API revision.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.6.0-rc.0/docs/migrations/0.6.0.docs.md).
+
 ## 0.5.0
 
 ## 0.5.0-rc.1

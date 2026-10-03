@@ -83,7 +83,7 @@ test("disposing a wrapped buffer evicts Ring-1 cache identity and rejects later 
   pipeline.set({ source: first }); pipeline.dispatch(1);
   expect(instrumentation.calls.createBindGroup).toBe(1);
   first.dispose();
-  expect(() => pipeline.set({ source: first })).toThrow(expect.objectContaining({ code: "VGPU-BUFFER-DISPOSED" }));
+  expect(() => pipeline.set({ source: first })).toThrow(expect.objectContaining({ code: "VGPU-R1-BINDING-DESTROYED" }));
   const second = gpu.device.wrapBuffer(raw);
   pipeline.set({ source: second }); pipeline.dispatch(1);
   expect(instrumentation.calls.createBindGroup).toBe(2);
@@ -99,7 +99,7 @@ test("retained compute and uniform-like bindings respect logical disposal", asyn
   const uniformLike = { gpu: wrapped.gpu, size: 16, buffer: wrapped };
   const set = compute(gpu, prepareShader("struct U { value: u32 }; @group(0) @binding(0) var<uniform> u: U; @compute @workgroup_size(1) fn main() { let x = u.value; }"));
   wrapped.dispose();
-  expect(() => set.set({ u: uniformLike })).toThrow(expect.objectContaining({ code: "VGPU-BUFFER-DISPOSED" }));
+  expect(() => set.set({ u: uniformLike })).toThrow(expect.objectContaining({ code: "VGPU-R1-BINDING-DESTROYED" }));
   gpu.dispose();
   // Retained object, already built: our own guard reports the device it can no longer reach.
   expect(() => dispatch.dispatch(1)).toThrow(expect.objectContaining({ code: "VGPU-DEVICE-DISPOSED" }));
@@ -149,7 +149,7 @@ test("shared uniforms reject a disposed backing buffer", async () => {
   pipeline.set({ u: shared });
   const buffer = (shared as unknown as { buffer: import("@vgpu/core").Buffer }).buffer;
   buffer.dispose();
-  expect(() => pipeline.set({ u: shared })).toThrow(expect.objectContaining({ code: "VGPU-BUFFER-DISPOSED" }));
+  expect(() => pipeline.set({ u: shared })).toThrow(expect.objectContaining({ code: "VGPU-R1-BINDING-DESTROYED" }));
   gpu.dispose();
 });
 

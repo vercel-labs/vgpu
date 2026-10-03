@@ -105,8 +105,7 @@ frameLoop(gpu, (frame) => {
   frame.pass(target, wave);
 });
 ```
-Default: create once; update changing numbers/vectors/structs with `set()`. `set()` performs no equality check — a value written every frame is uploaded
-every frame, so hoist static and resize-class values out of the render loop.
+Default: create once; update changing numbers/vectors/structs with `set()`. `set()` validates and packs on every call, and frame captures are still uploaded each frame, so hoist static and resize-class values out of the render loop. For managed uniforms, a `set()` whose packed bytes equal the previous ones does not start a new revision, so later draws in the same frame reuse the snapshot already captured; you never need to compare values or pack buffers yourself. Storage bindings and live uniforms still write on every `set()`.
 
 ## 5. Bake static inputs once
 

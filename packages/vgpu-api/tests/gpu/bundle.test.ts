@@ -132,18 +132,19 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
     }
   });
 
-  test("§9 ping-pong with bundles uses two explicit recordings without staleness", async () => {
+  test("§9 ping-pong with bundles uses two stable effects without staleness", async () => {
     const gpu = await init();
     try {
       let read = target(gpu, { size: [4, 4], format: "rgba8unorm" });
       let write = target(gpu, { size: [4, 4], format: "rgba8unorm" });
       const seed = effect(gpu, prepareShader(SOLID_GREEN), { label: "seed" });
-      const sim = effect(gpu, prepareShader(COPY), { label: "sim" });
       frame(gpu, (f) => f.pass({ target: read, clear: [0, 0, 0, 1] }, (p) => p.draw(seed)));
 
-      const even = bundle(gpu, { target: write, label: "even" }, (b) => { sim.set({ src: read }); b.draw(sim); });
+      const evenEffect = effect(gpu, COPY, { label: "sim-even", set: { src: read } });
+      const even = bundle(gpu, { target: write, label: "even" }, (b) => b.draw(evenEffect));
       [read, write] = [write, read];
-      const odd = bundle(gpu, { target: write, label: "odd" }, (b) => { sim.set({ src: read }); b.draw(sim); });
+      const oddEffect = effect(gpu, COPY, { label: "sim-odd", set: { src: read } });
+      const odd = bundle(gpu, { target: write, label: "odd" }, (b) => b.draw(oddEffect));
       [read, write] = [write, read];
 
       frame(gpu, (f) => f.pass({ target: write }, (p) => p.bundles(even)));
@@ -153,6 +154,34 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
 
       const pixel = rgbaAt(await read.color.read({ mipLevel: 0, region: "all" }), 4, 2, 2);
       expect(pixel[1]).toBeGreaterThan(200);
+    } finally {
+      gpu.dispose();
+    }
+  });
+
+  test("§9 rebinding one effect while recording another bundle stales the older bundle", async () => {
+    const gpu = await init();
+    try {
+      const output = target(gpu, { size: [4, 4], format: "rgba8unorm" });
+      const first = target(gpu, { size: [4, 4], format: "rgba8unorm" });
+      const second = target(gpu, { size: [4, 4], format: "rgba8unorm" });
+      const shared = effect(gpu, COPY, { label: "shared-sim", set: { src: first } });
+      const older = bundle(gpu, { target: output, label: "older" }, (b) => b.draw(shared));
+      bundle(gpu, { target: output, label: "newer" }, (b) => {
+        shared.set({ src: second });
+        b.draw(shared);
+      });
+
+      expect(() => frame(gpu, (f) => f.pass(output, (p) => p.bundles(older)))).toThrowError(
+        expect.objectContaining({
+          code: "VGPU-R3-BUNDLE-STALE",
+          message:
+            "bundle 'older' is stale: binding `src` (@group(0) @binding(0)) of draw\n" +
+            "  'shared-sim' changed resource after recording. Bundles freeze commands and bind groups.\n" +
+            "  Fix: re-record it → older = bundle(gpu, { target: scene }, ...)\n" +
+            "  (re-recording is always your responsibility; the library only detects this).",
+        }),
+      );
     } finally {
       gpu.dispose();
     }
