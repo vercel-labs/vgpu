@@ -73,9 +73,27 @@ also newly fail on reflection-detectable WGSL errors in leaf files.
 
 ### Steps
 
+Although this is a minor release, raw WGSL renderer inputs and v1 artifacts require migration.
+Choose the path that matches how your app obtains its shaders:
+
+| Integration or shader source | What you need to change |
+| --- | --- |
+| Next.js with Turbopack | Use `wgslTurbopackRule()` from `@vgpu/wgsl/next` for the `"*.wgsl"` rule, then rebuild. The helper replaces the hand-written Turbopack rule; it runs in Node configuration, not in the browser. |
+| Webpack, including Next.js in webpack mode | Keep `@vgpu/wgsl/loader-webpack` and its existing configuration. Upgrade the packages and rebuild; the same public loader now emits prepared v2 artifacts. |
+| Vite | Keep `wgslVitePlugin` from `@vgpu/wgsl/loader-vite` and its existing configuration. Upgrade the packages and rebuild; the plugin now emits prepared v2 artifacts. |
+| Prebuilt JavaScript/JSON shader assets, including assets from another package | Regenerate them with the upgraded tooling. Rebuilding the app does not prepare assets that bypass its WGSL loader. |
+| WGSL strings generated or loaded at runtime | Call `prepareShader()` once per source revision before passing the result to the renderer. This explicit runtime import includes the parser in that consumer. |
+
+Static `.wgsl` imports do not need a new `prepareShader()` import or a manually configured decoder.
+Keep passing the imported shader object to the renderer; the loader prepares it during the build.
+
 1. Upgrade `vgpu` and `@vgpu/wgsl` together. The loader and the runtime must agree on the artifact
-   format, so rebuild the app after upgrading and discard any bundler cache that still holds loader
-   output from the previous `@vgpu/wgsl` release.
+   format, so rebuild the app after upgrading. For Turbopack, adopt `wgslTurbopackRule()` as shown
+   in the loader cache migration notes; this migration supports keeping the restored cache. If you
+   retain an old bare-string Turbopack rule instead, clear that app's `.next/cache` once after
+   upgrading. Do not routinely clear webpack or Vite caches: clear the affected bundler cache only
+   if stale v1 output persists, or for webpack when replacing a managed installed package in place
+   at the same version and resolved loader path.
 2. Keep static browser shaders as `.wgsl` imports through `@vgpu/wgsl/loader-vite` or
    `@vgpu/wgsl/loader-webpack`. Pass the imported object unchanged — never its `.wgsl` field.
 3. Regenerate every prebuilt, committed, or third-party shader asset with the upgraded tooling.
@@ -127,6 +145,9 @@ const legacy = effect(gpu, prepareShader(legacyAsset, "shaders/legacy.wgsl"));
   reports.
 - Log `shader.version` and `shader.producer` for one imported `.wgsl` file; they print `2` and
   `"@vgpu/wgsl/prepare-v2"`.
+- Test the production build with the cache restored by your deployment provider, then open the
+  deployed page and exercise its shaders. A successful build alone does not prove that a cached
+  shader is compatible with the renderer.
 - Render once and confirm no `VGPU-SHADER-SOURCE-UNPREPARED`, `VGPU-SHADER-SOURCE-VERSION`, or
   `VGPU-SHADER-SOURCE-INVALID` is thrown.
 - In a Vite or webpack watch build, remove and restore an imported `.wgsl` dependency and confirm

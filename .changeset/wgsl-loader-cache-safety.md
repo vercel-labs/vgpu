@@ -17,7 +17,9 @@ modes with `VGPU-WGSL-MINIFY-IDENTIFIERS`; it throws `VGPU-WGSL-CACHE-IDENTITY` 
 compiler files cannot be read or are inconsistent. The helper configures Turbopack only, does not
 depend on or import `next`, and is not re-exported from browser entrypoints.
 
-`@vgpu/wgsl/loader-webpack` keeps its specifier, default export, options, and output. It now
+`@vgpu/wgsl/loader-webpack` keeps its public specifier, default export, and supported options.
+Its output is the prepared `ShaderSource` v2 format introduced in this release; applications
+upgrading from 0.5.0 must rebuild their shaders. It now
 registers the same compiler files on every run, before metadata requests, ordinary leaves, or shader
 errors end the transform: through `addBuildDependency()` in webpack, and through `addDependency()` in
 Turbopack or contexts without build dependencies. Shader dependency and missing-import registration
@@ -62,6 +64,13 @@ defaults, and replace the previous blanket `addDependency()` claim with Next 16.
   so neither the helper nor dependency registration rebuilds them.
 
 ### Steps
+
+The helper is **only for Turbopack**. Webpack users keep `@vgpu/wgsl/loader-webpack`; Vite users
+keep `wgslVitePlugin` from `@vgpu/wgsl/loader-vite`. Both keep their existing configuration and
+`.wgsl` import syntax, but must upgrade and rebuild to produce v2 artifacts. They do not need to
+import `@vgpu/wgsl/next` or add `prepareShader()` to browser code for static `.wgsl` imports.
+
+For Next.js with Turbopack:
 
 1. Add `@vgpu/wgsl` to the `package.json` of the app that owns `next.config`, at the release this
    `vgpu` version depends on (`npm ls @vgpu/wgsl` shows it). Upgrade `vgpu` and `@vgpu/wgsl`
@@ -119,13 +128,15 @@ export default nextConfig;
 
 ### Verification
 
-- From the app directory, run `node --input-type=module -e "import('@vgpu/wgsl/next').then(({ wgslTurbopackRule }) => console.log(wgslTurbopackRule().as))"`;
-  it prints `*.js`. A module-not-found error means `@vgpu/wgsl` is not a direct dependency.
+- For Turbopack, from the app directory, run `node --input-type=module -e "import('@vgpu/wgsl/next').then(({ wgslTurbopackRule }) => console.log(wgslTurbopackRule().as))"`;
+  it prints `*.js`. If the module cannot be resolved, check that the app directly declares and has
+  installed the upgraded `@vgpu/wgsl` package.
 - Run the production build with the restored cache and confirm it succeeds.
 - Log `version`, `producer`, and `typeof sourceChecksum` for one imported `.wgsl` file, and confirm
   `reflection` is an object: they print `2`, `"@vgpu/wgsl/prepare-v2"`, and `"string"`.
 - For webpack, verify those exact v2 fields before clearing its cache. The retained-cache matrix
   rebuilt both a changed manifest version and the authentic changed resolved loader target; clear
   once only at the documented same-version boundary or after observing stale v1 output.
-- Render once and confirm no `VGPU-SHADER-SOURCE-UNPREPARED` is thrown.
+- Open the deployed production build and render each shader-driven page or example; confirm no
+  `VGPU-SHADER-SOURCE-UNPREPARED` is thrown. Build success alone does not verify runtime rendering.
 - Rebuild again without changes and confirm the emitted shader artifacts are unchanged.
