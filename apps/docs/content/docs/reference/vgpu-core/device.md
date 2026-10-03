@@ -84,6 +84,7 @@ declare class Device {
 
 - `VGPU-CORE-INVALID-USAGE` when `createBuffer({ size })` receives a non-finite size, `size <= 0`, or an empty `usage` array — pass a positive byte size and at least one buffer usage.
 - `VGPU-CORE-VALIDATION` can be returned from `popErrorScope()` when the native WebGPU scope reports a `GPUError` — inspect `.message` and fix the invalid WebGPU descriptor or command.
+- `VGPU-DEVICE-LOST` when `limits`, `features`, a resource factory, an error-scope method, or queue work runs after the wrapper observed its native `GPUDevice.lost` promise resolve. The message includes the native reason and message, and `cause` is the native `GPUDeviceLostInfo`. A lost device cannot be reused — create a new Gpu with `init()`, then recreate its resources and restart the loop.
 - Native WebGPU errors may be thrown by `gpu.createShaderModule`, `gpu.createTexture`, `gpu.pushErrorScope`, `gpu.popErrorScope`, or `gpu.destroy`; use error scopes around native validation-sensitive calls.
 
 ## Examples
@@ -140,5 +141,6 @@ device.destroy();
 - Prefer `device.createBuffer(...)` and `device.createTexture(...)` over raw `.gpu` creation when you want vgpu wrappers, readback, lifecycle callbacks, or structured core errors.
 - `destroy()` is idempotent and `dispose()` is an alias. Do not call `device.gpu.destroy()` directly unless you intentionally bypass vgpu lifecycle.
 - `createBuffer` throws immediately without an error scope, but captures into the current vgpu error scope when one is active.
+- `Device` has no loss promise or loss event of its own. In the main API (`vgpu`), subscribe to `gpu.lost` to learn about loss; vgpu stops the gpu's frame loops before its handlers run. Calling `gpu.device.dispose()` is not `gpu.dispose()`: it leaves the `Gpu` active without stopping its loops or canceling its open frames, so their next tick or `submit()` throws `VGPU-DEVICE-DISPOSED`. Tear a `Gpu` down with `gpu.dispose()`.
 - `isCompatibilityMode` is only a signal set by the adapter; keep compatibility-specific texture views and WGSL bindings in lockstep yourself.
 - **See also:** `Buffer`, `Texture`, `Queue`, `VGPUError`, `VGPUAdapter`.

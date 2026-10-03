@@ -82,17 +82,33 @@ export const exampleThumbs: Record<string, ExampleThumbPresence> = {
     "card": "/examples/instanced-rendering.card.png",
     "hero": "/examples/instanced-rendering.hero.png"
   },
+  "kinetic-sculpture": {
+    "card": "/examples/kinetic-sculpture.card.png",
+    "hero": "/examples/kinetic-sculpture.hero.png"
+  },
   "liquid-layout": {
     "card": "/examples/liquid-layout.card.png",
     "hero": "/examples/liquid-layout.hero.png"
+  },
+  "marble-machine": {
+    "card": "/examples/marble-machine.card.png",
+    "hero": "/examples/marble-machine.hero.png"
   },
   "matcap": {
     "card": "/examples/matcap.card.png",
     "hero": "/examples/matcap.hero.png"
   },
+  "mechanical-garden": {
+    "card": "/examples/mechanical-garden.card.png",
+    "hero": "/examples/mechanical-garden.hero.png"
+  },
   "mnist-classifier": {
     "card": "/examples/mnist-classifier.card.png",
     "hero": "/examples/mnist-classifier.hero.png"
+  },
+  "modular-city": {
+    "card": "/examples/modular-city.card.png",
+    "hero": "/examples/modular-city.hero.png"
   },
   "nextjs-flare": {
     "card": "/examples/nextjs-flare.card.png",

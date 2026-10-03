@@ -1,8 +1,9 @@
 import type { Draw, Frame, Gpu, Target } from "vgpu";
 import { draw, effect, frame, geometry, sampler, target } from "vgpu";
-import { icosphere, perspectiveCamera } from "vgpu/scene";
+import { icosphere } from "vgpu/scene";
 
 import bakeMatcapWgsl from "./bake-matcap.wgsl";
+import { cameraMatrices } from "./camera";
 import matcapWgsl from "./matcap.wgsl";
 
 // 512 is plenty: the texture is only ever sampled across a unit disk, so extra
@@ -50,7 +51,7 @@ export function renderScene(
   output: Target,
   time: number
 ): void {
-  const camera = perspectiveCamera({
+  const camera = cameraMatrices({
     fov: 34,
     aspect: output.size[0] / Math.max(1, output.size[1]),
     near: 0.1,

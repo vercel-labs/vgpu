@@ -27,6 +27,7 @@ export default defineConfig({
       { find: "server-only", replacement: resolve("apps/docs/lib/server-only-stub.ts") },
       { find: "vgpu/node", replacement: resolve("packages/vgpu-api/src/node.ts") },
       { find: "vgpu/mock", replacement: resolve("packages/vgpu-api/src/mock.ts") },
+      { find: "vgpu/scene/gpu", replacement: resolve("packages/vgpu-api/src/scene/gpu.ts") },
       { find: "vgpu/scene", replacement: resolve("packages/vgpu-api/src/scene.ts") },
       { find: "vgpu/core", replacement: resolve("packages/vgpu-api/src/core.ts") },
       { find: "vgpu/three", replacement: resolve("packages/vgpu-api/src/three.ts") },

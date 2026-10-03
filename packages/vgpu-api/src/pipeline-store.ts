@@ -4,6 +4,7 @@ import type { EntryPointInfo, OverrideInfo } from "@vgpu/wgsl/reflect-source";
 import type { Target, CompileTarget, TargetSignature } from "./target.ts";
 import { isTarget } from "./target-utils.ts";
 import { compileDisposedError, compileFailedError, compileSignatureInvalidError, constantsInvalidError, entryInvalidError, pipelineLayoutGapError, type VGPUError } from "./errors.ts";
+import { targetSignatureOf } from "./draw-protocols.ts";
 
 export interface ErrorCtx {
   readonly where: string;
@@ -55,6 +56,14 @@ const shaderModuleIds = new WeakMap<GPUShaderModule, number>();
 const pipelineLayoutIds = new WeakMap<GPUPipelineLayout, number>();
 
 export function normalizeSignature(arg: CompileTarget): TargetSignature {
+  const configured = targetSignatureOf(arg);
+  if (configured) {
+    return {
+      colors: [...configured.colors],
+      depth: configured.depth,
+      sampleCount: configured.sampleCount ?? 1,
+    };
+  }
   if (isTarget(arg)) {
     return {
       colors: arg.colors.map((color) => color.format),

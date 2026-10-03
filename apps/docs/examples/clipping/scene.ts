@@ -1,7 +1,8 @@
 import type { Draw, Frame, Geometry, Gpu, Target } from "vgpu";
 import { draw, geometry } from "vgpu";
-import { disk, icosphere, perspectiveCamera } from "vgpu/scene";
+import { disk, icosphere } from "vgpu/scene";
 
+import { cameraMatrices } from "./camera";
 import clippedWgsl from "./clipped.wgsl";
 
 export interface ClippingScene {
@@ -53,7 +54,7 @@ export function renderScene(
   output: Target,
   time: number
 ): void {
-  const camera = perspectiveCamera({
+  const camera = cameraMatrices({
     fov: 36,
     aspect: output.size[0] / Math.max(1, output.size[1]),
     near: 0.1,

@@ -5,7 +5,7 @@ import { identityKey, type BindGroupCache, type BindGroupIdentityPart } from "./
 import { entryMetadata } from "./entry-metadata.ts";
 import { claimedGroupIncompatibleError, claimedGroupSetError, destroyedBindingError, neverSetError, ownershipFlipError, unsupportedError } from "./errors.ts";
 import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, pipelineLayoutFor } from "./set-layouts.ts";
-import { isPlainObject, isPlainValue, normalizeResource } from "./set-resources.ts";
+import { assertResourceBindable, isPlainObject, isPlainValue, normalizeResource } from "./set-resources.ts";
 import { writeLayoutValue } from "./set-packing.ts";
 
 export type SetBag = Record<string, unknown>;
@@ -97,6 +97,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
   }
 
   function setBinding(state: MutableBindingState, name: string, value: unknown): readonly BindingIdentityChange[] {
+    assertResourceBindable(state.info, value, options.label);
     ensureGroupSettable(state.info.group);
     const ownership = ownershipFor(state.info, value);
     assertBindingOwnership(state, name, ownership);

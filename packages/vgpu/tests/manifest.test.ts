@@ -13,6 +13,23 @@ const root = resolve(import.meta.dirname, "../../..");
 const allowlist = readFileSync(resolve(root, "docs/allowlist.txt"), "utf8");
 const gettingStartedSource = readFileSync(resolve(root, "docs/topics/getting-started.docs.md"), "utf8");
 
+test("scene composition docs expose actual import paths and retire old API records", () => {
+  for (const [packageName, symbol] of [
+    ["vgpu/scene", "composeMatrix"], ["vgpu/scene", "group"], ["vgpu/scene", "evaluateHierarchy"],
+    ["vgpu/scene", "instances"], ["vgpu/scene", "orbitRig"], ["vgpu/scene", "viewMatrices"],
+    ["vgpu/scene/gpu", "instanceGeometry"], ["@vgpu/wgsl-std/scene", "transformNormal"],
+  ]) {
+    expect(docsManifest.records.find((entry) => entry.package === packageName && entry.symbol === symbol))
+      .toMatchObject({ kind: "api", package: packageName, symbol });
+  }
+  const retired = new Set(["mesh", "SceneMaterial", "perspectiveCamera", "SceneCamera", "OrbitControls"]);
+  expect(docsManifest.records.filter((entry) => entry.kind === "api" && entry.package === "vgpu/scene" && retired.has(entry.symbol))).toEqual([]);
+  expect(docsManifest.records.find((entry) => entry.symbol === "scene-composition"))
+    .toMatchObject({ kind: "guide", virtualPath: "/guides/scene-composition.docs.md" });
+  expect(docsManifest.records.find((entry) => entry.symbol === "scene-migration"))
+    .toMatchObject({ kind: "guide", virtualPath: "/guides/scene-migration.docs.md" });
+});
+
 test("versioned migrations are discoverable from the shared CLI/MCP corpus and website", () => {
   const record = docsManifest.records.find(record => record.virtualPath === "/migrations/0.5.0.docs.md");
   expect(record).toMatchObject({ package: "migrations", kind: "guide", symbol: "migration-0.5.0", websitePath: "/migrations/0.5.0" });

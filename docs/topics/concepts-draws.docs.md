@@ -51,16 +51,21 @@ import { init, draw, geometry, target } from "vgpu";
 const gpu = await init();
 
 // ---cut---
-import { box, orbit, perspectiveCamera } from "vgpu/scene";
+import { box, composeMatrix, orbitRig, perspective, rigPose, viewMatrices } from "vgpu/scene";
 import cubeShader from "./cube.wgsl";
 
 const colorTarget = target(gpu, { size: [1280, 720], depth: true });
-const camera = perspectiveCamera({ fov: 45, aspect: 16 / 9, position: [2, 2, 3], target: [0, 0, 0] });
+const rig = orbitRig({ yaw: 0.59, pitch: 0.51, distance: 4.12 });
+const pose = { position: new Float32Array(3), quaternion: new Float32Array(4) };
+const projection = perspective({ fov: 45, near: 0.1, far: 100 }, 16 / 9, new Float32Array(16));
+const camera = { view: new Float32Array(16), viewProjection: new Float32Array(16) };
+viewMatrices(rigPose(rig, pose), projection, camera);
+const model = composeMatrix({}, new Float32Array(16));
 
 const cube = draw(gpu, { shader: cubeShader, geometry: geometry(gpu, box({ size: 1 })) });
 cube.set({
   camera: { viewProjection: camera.viewProjection },
-  model: { model: orbit(0) },
+  model: { model },
 });
 
 cube.draw(colorTarget);
@@ -68,9 +73,11 @@ cube.draw(colorTarget);
 
 Everything works like the rest of vgpu: bindings come from the reflection the `@vgpu/wgsl` loader prepared for `cube.wgsl` at build time, `set()` writes uniforms by name, and the draw renders one-shot into any target. Pipelines are compiled per target format and cached, so the same `Draw` can render into different targets. See [Compilation](/concepts/compilation) to pre-warm each signature before the first draw.
 
+The shader chooses the camera's group and binding. `cube.set({ camera: { viewProjection } })` connects the matrix by the WGSL variable name; scene utilities do not reserve a group or inject uniforms. `set()` copies the values at the time of the call, so call it again after changing a matrix. See [Scene composition](/guides/scene-composition) for hierarchies, external camera state, and instances. For shared instance streams, declare the complete attribute layout in each consuming vertex entry, including inputs unused by a particular pass.
+
 Three details specific to geometry:
 
-- 3D needs a depth buffer, and surfaces don't have one — render into a `target(gpu, { depth: true })` and composite it to the canvas. [Effects](/concepts/effects) and [Passes](/concepts/passes) show how. Deep scenes fight z-fighting with reversed-Z: `depth: { compare: "greater" }` on the draw, `clearDepth: 0` on the pass.
+- For depth-tested 3D presented directly to the canvas, use `surface(gpu, canvas, { depth: true, msaa: true })`. Use an offscreen `target(gpu, { depth: true })` when another pass needs to sample the scene image; [Two-pass rendering](/guides/two-pass-rendering) shows both paths. Deep scenes fight z-fighting with reversed-Z: `depth: { compare: "greater" }` on the draw, `clearDepth: 0` on the pass.
 - A closed geometry like this box never shows its back faces — add `cull: "back"` to the draw and skip roughly half the fragment work.
 - `GeometryLike` is an open interface: `geometry(gpu)` builds one from `vgpu/scene` geometry, but you can also pass your own `GPUBuffer`s and vertex layouts. See the [reference](/reference/vgpu/draw#geometrylike).
 

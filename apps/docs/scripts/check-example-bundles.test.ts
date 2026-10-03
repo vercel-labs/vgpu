@@ -1,8 +1,9 @@
-import { mkdtempSync, mkdirSync, writeFileSync, utimesSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
 import { expect, test } from 'vitest';
 
 const script = fileURLToPath(new URL('./check-example-bundles.mjs', import.meta.url));
@@ -65,6 +66,7 @@ function writeFixture(options: {
 
   const budgetsPath = path.join(root, 'budgets.json');
   writeFileSync(budgetsPath, JSON.stringify({
+    $comment: 'Fixture metadata must survive measured baseline updates.',
     sharedHost: { gzipBytes: 0, maxGrowthBytes: 1_000_000 },
     examples: Object.fromEntries(slugs
       .filter((slug) => !options.budgetCoverageMismatch || slug !== 'fft-ocean')
@@ -87,8 +89,8 @@ function writeFixture(options: {
   return { chunks, budgetsPath, source };
 }
 
-function runFixture(fixture: ReturnType<typeof writeFixture>) {
-  return spawnSync(process.execPath, [script], {
+function runFixture(fixture: ReturnType<typeof writeFixture>, args: string[] = []) {
+  return spawnSync(process.execPath, [script, ...args], {
     encoding: 'utf8',
     env: {
       ...process.env,
@@ -139,4 +141,60 @@ test('refuses to grade chunks older than the sources they were built from', () =
   expect(result.status).toBe(1);
   expect(result.stderr).toContain('Stale chunks: examples/gradient/renderer.ts');
   expect(result.stderr).toContain('pnpm --filter docs build');
+});
+
+test('updates only selected baselines to measured gzip bytes and then passes an ordinary check', () => {
+  const fixture = writeFixture({ oversized: true });
+  const before = JSON.parse(readFileSync(fixture.budgetsPath, 'utf8'));
+  const expected = Object.fromEntries(['gradient', 'fluid'].map((slug) => [
+    slug,
+    gzipSync(readFileSync(path.join(fixture.chunks, `${slug}.js`))).byteLength,
+  ]));
+
+  const update = runFixture(fixture, ['--update=gradient,fluid']);
+
+  expect(update.status).toBe(0);
+  expect(update.stdout).toContain('Updated example bundle baselines for gradient, fluid');
+  expect(JSON.parse(readFileSync(fixture.budgetsPath, 'utf8'))).toEqual({
+    ...before,
+    examples: { ...before.examples, ...expected },
+  });
+
+  const check = runFixture(fixture);
+  expect(check.status).toBe(0);
+  expect(check.stdout).toContain(`Example bundle isolation and budgets passed for ${slugs.length} preview routes.`);
+});
+
+test.each([
+  ['stale chunks', { staleChunks: true }, ['--update=gradient'], 'Stale chunks:'],
+  ['foreign source', { foreign: true }, ['--update=gradient'], "contains another example's renderer/WGSL"],
+  ['coverage mismatch', { budgetCoverageMismatch: true }, ['--update=gradient'], 'Example budget coverage must exactly match'],
+  ['an unselected over-budget route', { oversized: true }, ['--update=fluid'], '/preview/gradient chunks are'],
+] as const)('does not write on %s', (_label, options, args, message) => {
+  const fixture = writeFixture(options);
+  const before = readFileSync(fixture.budgetsPath, 'utf8');
+
+  const result = runFixture(fixture, [...args]);
+
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain(message);
+  expect(readFileSync(fixture.budgetsPath, 'utf8')).toBe(before);
+});
+
+test.each([
+  [['--update=unknown-example'], 'Unknown update slug: unknown-example'],
+  [['--update=gradient,gradient'], 'Duplicate update slug: gradient'],
+  [['--update'], '--update requires at least one slug'],
+  [['--update='], '--update requires at least one slug'],
+  [['--update=gradient,,fluid'], 'Missing update slug in --update list'],
+  [['--unexpected'], 'Unknown argument: --unexpected'],
+] as const)('rejects invalid update input %j without writing', (args, message) => {
+  const fixture = writeFixture();
+  const before = readFileSync(fixture.budgetsPath, 'utf8');
+
+  const result = runFixture(fixture, [...args]);
+
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain(message);
+  expect(readFileSync(fixture.budgetsPath, 'utf8')).toBe(before);
 });

@@ -59,9 +59,9 @@ export interface Effect {
   readonly gpu: GPURenderPipeline | undefined;
   set(values: SetBag): this;
   draw(target?: Target | DrawCallOptions): void;
-  /** @throws VGPU-SURFACE-NOT-IN-FRAME when passed a Surface outside frame(gpu). */
+  /** Prepares a pipeline for a target; a live Surface is accepted without acquiring its current texture. */
   compile(target?: CompileTarget): Promise<this>;
-  /** @throws VGPU-SURFACE-NOT-IN-FRAME when passed a Surface outside frame(gpu). */
+  /** Synchronously prepares a pipeline; a live Surface is accepted outside a frame. */
   compileSync(target?: CompileTarget): this;
 }
 

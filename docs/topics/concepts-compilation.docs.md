@@ -25,6 +25,29 @@ Pipeline compilation is separate from shader preparation. A `.wgsl` import throu
 
 For an existing offscreen target, `await draw.compile(target)` and `await effect.compile(target)` warm exactly that signature and resolve back to the same object:
 
+```wgsl
+// ocean.wgsl
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return vec4f(uv, 0.8, 1.0);
+}
+```
+
+```wgsl
+// triangle.wgsl
+struct Out { @builtin(position) position: vec4f }
+
+@vertex fn vs_main(@builtin(vertex_index) vi: u32) -> Out {
+  var pts = array<vec2f, 3>(vec2f(-0.5, -0.5), vec2f(0.5, -0.5), vec2f(0.0, 0.5));
+  var out: Out;
+  out.position = vec4f(pts[vi], 0.0, 1.0);
+  return out;
+}
+
+@fragment fn fs_main() -> @location(0) vec4f {
+  return vec4f(1.0, 0.4, 0.2, 1.0);
+}
+```
+
 ```ts
 import { init, draw, effect, target } from "vgpu";
 import oceanShader from "./ocean.wgsl"; // fragment-only effect
@@ -43,6 +66,54 @@ ocean.draw(offscreen);
 ```
 
 The pipelines are cached per signature at the device level, so those first `draw()` calls — and every draw after them — just encode work.
+
+## Pre-warming for a canvas surface
+
+A live surface works the same way, during loading and outside any frame. Pass it to `compile()`, then render through `frame()` or `frameLoop()`:
+
+```ts
+import { init, effect, frameLoop, surface } from "vgpu";
+import oceanShader from "./ocean.wgsl";
+
+const gpu = await init();
+const canvas = document.querySelector("canvas")!;
+
+// ---cut---
+const canvasSurface = surface(gpu, canvas);
+const ocean = effect(gpu, oceanShader);
+
+await ocean.compile(canvasSurface); // no frame needed — no canvas texture is acquired
+
+frameLoop(gpu, (currentFrame) => {
+  currentFrame.pass(canvasSurface, (pass) => pass.draw(ocean)); // drawing stays inside the frame
+});
+```
+
+`compile(canvasSurface)` reads the surface's configured render signature — its `format`, including an explicit `surface(..., { format })` override, plus the depth format and sample count it was created with. A plain `surface(gpu, canvas)` has no depth attachment and a sample count of 1. It does not acquire the current canvas texture, read or allocate attachments, resize the canvas, notify `onResize` listeners, or submit work. `compileSync(canvasSurface)` and `draw(gpu, { targets: [canvasSurface] })` prepare the same pipeline synchronously.
+
+A surface created with `depth` or `msaa` reports those in its signature, so the same call warms the exact pipeline its passes need:
+
+```ts
+import { init, effect, frameLoop, surface } from "vgpu";
+import oceanShader from "./ocean.wgsl";
+
+const gpu = await init();
+const canvas = document.querySelector("canvas")!;
+const ocean = effect(gpu, oceanShader);
+
+// ---cut---
+const sceneSurface = surface(gpu, canvas, { depth: true, msaa: true });
+
+await ocean.compile(sceneSurface); // warms format + "depth24plus" + 4 samples
+
+frameLoop(gpu, (currentFrame) => {
+  currentFrame.pass(sceneSurface, ocean);
+});
+```
+
+Prefer `compile(surface)` once the surface exists: it cannot drift from the surface's real depth format and sample count. The signature excludes size, so resizing the surface keeps every pipeline compiled for it. Compiling against the surface or against the equivalent signature — `{ colors: [canvasSurface.format] }` for a plain surface, `{ colors: [sceneSurface.format], depth: "depth24plus", sampleCount: 4 }` for the one above — warms the same cached pipeline.
+
+> Warning: Preparation is not drawing. A one-shot `ocean.draw(canvasSurface)` outside a frame still throws `VGPU-SURFACE-NOT-IN-FRAME`; encode surface draws inside `frame(gpu, ...)` or `frameLoop(gpu, ...)`. Compiling against a disposed surface throws `VGPU-SURFACE-DISPOSED` — create a live surface first.
 
 ## Compiling without a target
 
@@ -65,15 +136,27 @@ const canvasSurface = surface(gpu, canvas);
 frame(gpu, (frame) => frame.pass(canvasSurface, ocean));
 ```
 
-For an existing surface, use `await ocean.compile({ colors: [canvasSurface.format] })` to respect its actual format, including an explicit `surface(..., { format })` override. Passing the surface itself to `compile()` outside a frame is rejected; a signature lets you pre-warm during loading without acquiring a canvas texture. Render to surfaces through `frame()` or `frameLoop()`.
+Once the surface exists, pass it directly — `await ocean.compile(canvasSurface)` — as in the previous section. Use a signature only when you prepare before the surface is created.
 
-The signature must match the actual target's color formats, depth format, and sample count. A canvas surface has no depth attachment and a sample count of 1, so the example omits both optional fields. For offscreen targets, use their configured formats and include depth/MSAA when enabled, or pass the existing target directly to `compile()`.
+The signature must match the actual target's color formats, depth format, and sample count. The surface in this example is created without `depth` or `msaa`, so it has no depth attachment and a sample count of 1, and the signature omits both optional fields. For a surface created with `{ depth: true, msaa: true }`, add `depth: "depth24plus", sampleCount: 4`. For offscreen targets, use their configured formats and include depth/MSAA when enabled, or pass the existing target or surface directly to `compile()`.
 
 > Good to know: `getPreferredCanvasFormat()` returns the system's preferred `rgba8unorm` or `bgra8unorm` canvas texture format. Compiling a different valid signature can succeed, but it doesn't warm the pipeline needed by the actual target: the first render still compiles that pipeline lazily.
 
 ## `compileSync()`
 
 `compileSync(target)` is the blocking twin: same cache, same signatures, but it creates the pipeline right now. Use it in tools and tests where jank doesn't matter. If an async `compile()` for the same signature is in flight, the synchronous result wins and the pending promise resolves with it.
+
+```wgsl
+// grid.wgsl
+@vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
+  var pts = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+  return vec4f(pts[vi], 0.0, 1.0);
+}
+
+@fragment fn fs_main() -> @location(0) vec4f {
+  return vec4f(0.1, 0.4, 0.7, 1.0);
+}
+```
 
 ```ts
 import { init, draw, target } from "vgpu";

@@ -19,6 +19,11 @@ The public skill install command has no branch pin:
 npx skills add vercel-labs/vgpu
 ```
 
+## 3D scenes
+
+If you need to work with 3D scenes, read [Scene composition](./scene.md) before implementing
+scene hierarchies, transforms, instances, cameras, or animation and physics integration.
+
 ## Blender assets
 
 For Blender modeling, high/low-poly workflows, normal or ambient occlusion baking, LODs, and

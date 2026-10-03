@@ -14,6 +14,7 @@ export const meta = {
   files: [
     'index.tsx',
     'renderer.ts',
+    'camera.ts',
     'video-source.ts',
     'scene.ts',
     'cube.wgsl',

@@ -14,7 +14,7 @@ import { hasStencilAspect, isTarget } from "./target-utils.ts";
 import { blendConstantInvalidError, blendInvalidError, claimedGroupNativeValidationError, colorsInvalidError, cullInvalidError, depthInvalidError, entryInvalidError, frontFaceInvalidError, indirectInvalidError, meshRangeInvalidError, multisampleInvalidError, stencilInvalidError, storageStageLimitError, surfaceNotInFrameError, targetRequiredError, unclippedDepthInvalidError, VGPUError, writeMaskInvalidError } from "./errors.ts";
 import { isFrameActive, isSurface } from "./surface.ts";
 import { assertDeviceUsable } from "./lifecycle.ts";
-import { geometryLayoutResolver, type GeometryLayoutResolvable } from "./draw-protocols.ts";
+import { geometryLayoutResolver, geometryLiveness, geometryLivenessOf, type GeometryLayoutResolvable } from "./draw-protocols.ts";
 import { resolveIndirect } from "./indirect.ts";
 import type { StorageBuffer } from "./api-types.ts";
 import { FRAME_DRAWABLE, type FrameDrawableProtocol } from "./frame-protocols.ts";
@@ -264,9 +264,9 @@ export interface Draw {
   group(n: number, bindGroup: GPUBindGroup): this;
   layout(n: number, opts?: DrawLayoutOptions): GPUBindGroupLayout;
   draw(target?: Target | DrawCallOptions): void;
-  /** @throws VGPU-SURFACE-NOT-IN-FRAME when passed a Surface outside frame(gpu). */
+  /** Prepares a pipeline for a target; a live Surface is accepted without acquiring its current texture. */
   compile(target?: CompileTarget): Promise<this>;
-  /** @throws VGPU-SURFACE-NOT-IN-FRAME when passed a Surface outside frame(gpu). */
+  /** Synchronously prepares a pipeline; a live Surface is accepted outside a frame. */
   compileSync(target?: CompileTarget): this;
 }
 
@@ -461,7 +461,7 @@ export class InternalDraw implements Draw {
   encode(pass: GPURenderPassEncoder, target: Target | TargetSignature, opts: DrawCallOptions = {}, claimValidation?: (result: ClaimedGroupValidationResult) => void, capture?: UniformCapture): void {
     assertDeviceUsable(drawState(this).device, `${this.label}.encode`);
     drawState(this).setCore.assertUsable();
-    const pipeline = this.pipelineFor(target, true);
+    const pipeline = this.pipelineFor(target);
     if (!pipeline) return;
     pass.setPipeline(pipeline);
     const state = drawState(this);
@@ -509,9 +509,9 @@ export class InternalDraw implements Draw {
     return this;
   }
 
-  pipelineFor(target: Target | TargetSignature, allowSurface = false): GPURenderPipeline | undefined {
+  pipelineFor(target: Target | TargetSignature): GPURenderPipeline | undefined {
     assertDeviceUsable(drawState(this).device, `${this.label}.pipelineFor`);
-    const { key, signature, signatureKey } = this.#compileKey(target, `${this.label}.pipelineFor`, allowSurface);
+    const { key, signature, signatureKey } = this.#compileKey(target, `${this.label}.pipelineFor`);
     const state = drawState(this);
     const pipeline = state.pipelineStore.getSync(key, () => this.#createPipeline(signature), { where: `${this.label}.pipelineFor`, signature: signatureKey, dependencies: pipelineDependencies(state) });
     if (pipeline) drawState(this).resolvedPipelineKeys.add(key);
@@ -530,17 +530,16 @@ export class InternalDraw implements Draw {
     });
   }
 
-  #compileKey(target: CompileTarget | undefined, where: string, allowSurface = false): { readonly signature: TargetSignature; readonly signatureKey: string; readonly key: string } {
-    const signature = this.#signatureForKeyTarget(target, where, allowSurface);
+  #compileKey(target: CompileTarget | undefined, where: string): { readonly signature: TargetSignature; readonly signatureKey: string; readonly key: string } {
+    const signature = this.#signatureForKeyTarget(target, where);
     const signatureKey = signatureKeyOf(signature);
     return { signature, signatureKey, key: this.#pipelineKey(signature) };
   }
 
-  #signatureForKeyTarget(target: CompileTarget | undefined, where: string, allowSurface = false): TargetSignature {
+  #signatureForKeyTarget(target: CompileTarget | undefined, where: string): TargetSignature {
     const state = drawState(this);
     const resolvedTarget = target ?? state.defaultTarget;
     if (!resolvedTarget) throw targetRequiredError(where);
-    if (!allowSurface) assertSurfaceTargetInFrame(resolvedTarget, where);
     const signature = normalizeSignature(resolvedTarget);
     validateTargetSignature(signature, where);
     if (state.colorStates && state.colorStates.length !== signature.colors.length) {
@@ -571,6 +570,7 @@ export class InternalDraw implements Draw {
 
   #encodeGeometry(pass: GPURenderPassEncoder, callOpts: DrawCallOptions = {}): void {
     const geometry = drawState(this).opts.geometry;
+    geometryLivenessOf(geometry)?.[geometryLiveness](`${this.label}.geometry`);
     if (geometry?.vertexBuffers) geometry.vertexBuffers.forEach((buffer, index) => pass.setVertexBuffer(index, buffer));
     if (callOpts.indirect !== undefined) return this.#encodeIndirect(pass, geometry, callOpts);
     const counts = resolveDrawCounts(this.label, geometry, drawState(this).opts, callOpts);
@@ -1089,6 +1089,8 @@ export function watchDrawResources(draw: InternalDraw, onDestroyed: (event: Bund
 
 export function registerDrawBundle(draw: Draw, bundle: BundleBackReference): void { drawState(draw).recordedIn.add(bundle); }
 
+export function unregisterDrawBundle(draw: Draw, bundle: BundleBackReference): void { drawState(draw).recordedIn.delete(bundle); }
+
 /** Render bundle encoders cannot set the pass blend constant; bundle uses this to reject such draws at recording. */
 export function drawUsesBlendConstant(draw: Draw): boolean { return drawState(draw).blendConstant !== undefined; }
 
@@ -1134,6 +1136,11 @@ export function encodeDraw(draw: InternalDraw, pass: GPURenderPassEncoder, targe
   draw.encode(pass, target, opts, claimValidation, capture);
 }
 
+/** @internal Revalidates geometry captured by a draw before render-bundle replay. */
+export function assertDrawGeometryUsable(draw: InternalDraw, where: string): void {
+  geometryLivenessOf(drawState(draw).opts.geometry)?.[geometryLiveness](where);
+}
+
 function drawState(draw: Draw): DrawState {
   const state = drawStates.get(draw);
   if (!state) throw new TypeError("Invalid Draw instance");
@@ -1153,12 +1160,50 @@ function reportDrawValidationError(state: DrawState, label: string, group: numbe
 }
 
 export function createBundleRegistry(): BundleBackReferenceRegistry {
-  const set = new Set<BundleBackReference>();
+  const refs = new Set<WeakRef<BundleBackReference>>();
+  const byBundle = new WeakMap<BundleBackReference, WeakRef<BundleBackReference>>();
+  let pruneCursor: SetIterator<WeakRef<BundleBackReference>> | undefined;
+
+  function pruneSome(limit = 16): void {
+    for (let index = 0; index < limit; index += 1) {
+      pruneCursor ??= refs.values();
+      let next = pruneCursor.next();
+      if (next.done) {
+        pruneCursor = refs.values();
+        next = pruneCursor.next();
+        if (next.done) return;
+      }
+      if (!next.value.deref()) refs.delete(next.value);
+    }
+  }
+
+  function list(): BundleBackReference[] {
+    const live: BundleBackReference[] = [];
+    for (const ref of refs) {
+      const bundle = ref.deref();
+      if (bundle) live.push(bundle);
+      else refs.delete(ref);
+    }
+    pruneCursor = undefined;
+    return live;
+  }
+
   return {
-    add(bundle) { set.add(bundle); },
-    delete(bundle) { set.delete(bundle); },
-    list() { return [...set]; },
-    markStale(event) { for (const bundle of set) bundle.markStale(event); },
+    add(bundle) {
+      // Incremental pruning keeps abandoned metadata bounded without an O(n) scan per recording.
+      pruneSome();
+      if (byBundle.has(bundle)) return;
+      const ref = new WeakRef(bundle);
+      byBundle.set(bundle, ref);
+      refs.add(ref);
+    },
+    delete(bundle) {
+      const ref = byBundle.get(bundle);
+      if (ref) refs.delete(ref);
+      byBundle.delete(bundle);
+    },
+    list,
+    markStale(event) { for (const bundle of list()) bundle.markStale(event); },
   };
 }
 

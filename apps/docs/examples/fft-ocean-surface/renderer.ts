@@ -1,7 +1,14 @@
 import GUI from "lil-gui";
 import { clock, frameLoop, surface, type Gpu, type Surface } from "vgpu";
-import { orbitControls, perspectiveCamera } from "vgpu/scene";
+import { orbit } from "vgpu/scene";
 
+import {
+  createOceanCamera,
+  resizeOceanCamera,
+  updateOceanCamera,
+  type OceanCamera,
+} from "./camera";
+import { installOrbitInput } from "./orbit-input";
 import { buildOcean, OCEAN_CAMERA, type OceanScene } from "./scene";
 
 interface RendererOptions {
@@ -19,8 +26,8 @@ export function createRenderer({ canvas }: RendererOptions) {
   let gpu: Gpu | undefined;
   let output: Surface | undefined;
   let scene: OceanScene | undefined;
-  let camera: ReturnType<typeof perspectiveCamera> | undefined;
-  let controls: ReturnType<typeof orbitControls> | undefined;
+  let camera: OceanCamera | undefined;
+  let input: ReturnType<typeof installOrbitInput> | undefined;
   let gui: GUI | undefined;
   let loop: { stop(): void } | undefined;
   let unsubscribeResize: (() => void) | undefined;
@@ -32,7 +39,7 @@ export function createRenderer({ canvas }: RendererOptions) {
     runCleanups([
       () => loop?.stop(),
       () => unsubscribeResize?.(),
-      () => controls?.dispose(),
+      () => input?.dispose(),
       () => gui?.destroy(),
       () => gpu?.dispose(),
     ]);
@@ -60,7 +67,7 @@ export function createRenderer({ canvas }: RendererOptions) {
     guard(() => {
       if (!scene || !camera || !output) return;
       scene.resize(output.size);
-      camera.set({ aspect: output.size[0] / output.size[1] });
+      resizeOceanCamera(camera, output.size[0] / output.size[1]);
     });
   }
 
@@ -76,17 +83,11 @@ export function createRenderer({ canvas }: RendererOptions) {
     gpu = nextGpu;
     output = surface(gpu, canvas, { dpr: [1, 2] });
     scene = buildOcean(gpu, output.size);
-    camera = perspectiveCamera({
+    camera = createOceanCamera({
       ...OCEAN_CAMERA,
       aspect: output.size[0] / output.size[1],
     });
-    controls = orbitControls(camera, {
-      element: canvas,
-      target: OCEAN_CAMERA.target,
-      damping: 0.12,
-      distance: { min: 20, max: 700 },
-      pitch: { min: -0.05, max: 1.35 },
-    });
+    input = installOrbitInput(canvas, camera.goal);
     const container = canvas.parentElement ?? undefined;
     gui = new GUI({ title: "Ocean", container });
     configureGui(gui, scene, view, () => guard(() => scene?.rebuildSpectrum()));
@@ -95,14 +96,19 @@ export function createRenderer({ canvas }: RendererOptions) {
     const time = clock(gpu);
     loop = frameLoop(gpu, (currentFrame) => {
       guard(() => {
-        if (disposed || !output || !scene || !camera || !controls) return;
+        if (disposed || !output || !scene || !camera || !input) return;
         const dt = time.deltaTime;
-        controls.update(dt);
         if (view.autoRotate) {
-          controls.set({ yaw: controls.yaw + dt * view.rotateSpeed });
+          orbit(camera.goal, dt * view.rotateSpeed, 0, {
+            minPitch: -0.05,
+            maxPitch: 1.35,
+            minDistance: 20,
+            maxDistance: 700,
+          });
         }
+        updateOceanCamera(camera, dt);
         scene.simulate(dt);
-        scene.updateCamera(camera.viewProjection, camera.worldPosition);
+        scene.updateCamera(camera.viewProjection, camera.pose.position);
         currentFrame.pass({ target: scene.hdr, clear: scene.clear }, (pass) => {
           pass.draw(scene!.skydome);
           pass.draw(scene!.ocean);

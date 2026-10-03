@@ -12,7 +12,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock("vgpu", () => mocks);
 vi.mock("vgpu/scene", () => ({
   box: vi.fn(),
-  perspectiveCamera: vi.fn(),
   plane: vi.fn(),
 }));
 

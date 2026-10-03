@@ -43,6 +43,10 @@ export const exampleComponentLoaders = {
   'spiral-galaxy': () => import('../examples/spiral-galaxy/index'),
   'liquid-layout': () => import('../examples/liquid-layout/index'),
   'spring-choreography': () => import('../examples/spring-choreography/index'),
+  'modular-city': () => import('../examples/modular-city/index'),
+  'kinetic-sculpture': () => import('../examples/kinetic-sculpture/index'),
+  'marble-machine': () => import('../examples/marble-machine/index'),
+  'mechanical-garden': () => import('../examples/mechanical-garden/index'),
 } satisfies Record<ExampleSlug, ExampleComponentLoader>;
 
 export function getExampleComponentLoader(slug: ExampleSlug): ExampleComponentLoader {

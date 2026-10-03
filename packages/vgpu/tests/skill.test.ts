@@ -15,12 +15,15 @@ test("generates only a version-neutral router", () => {
   expect(skill).not.toContain("API reference");
 });
 
-test("regeneration preserves authored Blender resources and prunes stale generated files", () => {
+test("regeneration preserves authored scene and Blender resources and prunes stale generated files", () => {
   const root = resolve(import.meta.dirname, "../../..");
   const scratch = mkdtempSync(join(tmpdir(), "vgpu-blender-skill-"));
   const skillDir = join(scratch, "skill");
   try {
     cpSync(join(root, "skills/vgpu"), skillDir, { recursive: true });
+    const scenePath = join(skillDir, "scene.md");
+    const sceneText = readFileSync(scenePath, "utf8") + "\nAuthored iteration sentinel.\n";
+    writeFileSync(scenePath, sceneText);
     const authoredPath = join(skillDir, "blender/references/local-review.md");
     writeFileSync(authoredPath, "# Authored review notes\n");
     writeFileSync(join(skillDir, "stale-generated.md"), "obsolete\n");
@@ -47,6 +50,8 @@ test("regeneration preserves authored Blender resources and prunes stale generat
       }
     };
     visit(join(skillDir, "SKILL.md"));
+    expect(readFileSync(scenePath, "utf8")).toBe(sceneText);
+    expect(visited.has(scenePath)).toBe(true);
     expect(visited.has(join(skillDir, "blender/index.md"))).toBe(true);
     expect(visited.has(join(skillDir, "blender/references/shape-and-assembly.md"))).toBe(true);
     expect(visited.has(join(skillDir, "blender/references/baking-and-diagnostics.md"))).toBe(true);

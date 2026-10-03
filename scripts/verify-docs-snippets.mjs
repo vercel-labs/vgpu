@@ -75,6 +75,7 @@ try {
         "vgpu": ["packages/vgpu-api/src/index.ts"],
         "vgpu/mock": ["packages/vgpu-api/src/mock.ts"],
         "vgpu/node": ["packages/vgpu-api/src/node.ts"],
+        "vgpu/scene/gpu": ["packages/vgpu-api/src/scene/gpu.ts"],
         "vgpu/scene": ["packages/vgpu-api/src/scene.ts"],
         "vgpu/core": ["packages/vgpu-api/src/core.ts"],
         "vgpu/client": ["packages/vgpu-api/src/client.ts"],

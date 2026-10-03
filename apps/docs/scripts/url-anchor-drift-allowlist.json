@@ -125,7 +125,7 @@
       "path": "/docs/reference/render/canvas-mouse-tracker",
       "prodAnchor": "canvasmousetracker-2",
       "newAnchor": "canvasmousetracker",
-      "heading": "CanvasMouseTracker"
+      "heading": "canvasMouseTracker"
     },
     {
       "path": "/docs/reference/render/edit",
@@ -291,9 +291,45 @@
     },
     {
       "path": "/docs/reference/vgpu-scene/camera",
+      "prodAnchor": "examples-2",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/camera",
+      "prodAnchor": "examples-3",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/camera",
+      "prodAnchor": "examples-4",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/camera",
       "prodAnchor": "examples-5",
       "newAnchor": "examples",
       "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/camera",
+      "prodAnchor": "import-2",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/camera",
+      "prodAnchor": "import-3",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/camera",
+      "prodAnchor": "import-4",
+      "newAnchor": "import",
+      "heading": "Import"
     },
     {
       "path": "/docs/reference/vgpu-scene/camera",
@@ -303,15 +339,69 @@
     },
     {
       "path": "/docs/reference/vgpu-scene/camera",
+      "prodAnchor": "notes-2",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/camera",
+      "prodAnchor": "notes-3",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/camera",
+      "prodAnchor": "notes-4",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/camera",
       "prodAnchor": "notes-5",
       "newAnchor": "notes",
       "heading": "Notes"
     },
     {
       "path": "/docs/reference/vgpu-scene/camera",
+      "prodAnchor": "parameters-2",
+      "newAnchor": "parameters",
+      "heading": "Parameters"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/camera",
+      "prodAnchor": "parameters-3",
+      "newAnchor": "parameters",
+      "heading": "Parameters"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/camera",
+      "prodAnchor": "parameters-4",
+      "newAnchor": "parameters",
+      "heading": "Parameters"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/camera",
       "prodAnchor": "parameters-5",
       "newAnchor": "parameters",
       "heading": "Parameters"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/camera",
+      "prodAnchor": "signature-2",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/camera",
+      "prodAnchor": "signature-3",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/camera",
+      "prodAnchor": "signature-4",
+      "newAnchor": "signature",
+      "heading": "Signature"
     },
     {
       "path": "/docs/reference/vgpu-scene/camera",
@@ -359,7 +449,43 @@
       "path": "/docs/reference/vgpu-scene/light",
       "prodAnchor": "directionallight-2",
       "newAnchor": "directionallight",
-      "heading": "DirectionalLight"
+      "heading": "directionalLight"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "examples-2",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "examples-3",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "examples-4",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "examples-5",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "examples-6",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "examples-7",
+      "newAnchor": "examples",
+      "heading": "Examples"
     },
     {
       "path": "/docs/reference/vgpu-scene/light",
@@ -369,9 +495,81 @@
     },
     {
       "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "import-2",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "import-3",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "import-4",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "import-5",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "import-6",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "import-7",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
       "prodAnchor": "import-8",
       "newAnchor": "import",
       "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "notes-2",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "notes-3",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "notes-4",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "notes-5",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "notes-6",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "notes-7",
+      "newAnchor": "notes",
+      "heading": "Notes"
     },
     {
       "path": "/docs/reference/vgpu-scene/light",
@@ -381,9 +579,69 @@
     },
     {
       "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "signature-2",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "signature-3",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "signature-4",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "signature-5",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "signature-6",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
+      "prodAnchor": "signature-7",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/light",
       "prodAnchor": "signature-8",
       "newAnchor": "signature",
       "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "examples-10",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "examples-11",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "examples-12",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "examples-13",
+      "newAnchor": "examples",
+      "heading": "Examples"
     },
     {
       "path": "/docs/reference/vgpu-scene/material",
@@ -393,7 +651,127 @@
     },
     {
       "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "examples-2",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "examples-3",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "examples-4",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "examples-5",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "examples-6",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "examples-7",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "examples-8",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "examples-9",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "import-10",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "import-11",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "import-12",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "import-13",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
       "prodAnchor": "import-14",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "import-2",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "import-3",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "import-4",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "import-5",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "import-6",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "import-7",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "import-8",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "import-9",
       "newAnchor": "import",
       "heading": "Import"
     },
@@ -411,7 +789,79 @@
     },
     {
       "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "notes-10",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "notes-11",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "notes-12",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "notes-13",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
       "prodAnchor": "notes-14",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "notes-2",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "notes-3",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "notes-4",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "notes-5",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "notes-6",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "notes-7",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "notes-8",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "notes-9",
       "newAnchor": "notes",
       "heading": "Notes"
     },
@@ -429,7 +879,79 @@
     },
     {
       "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "signature-10",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "signature-11",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "signature-12",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "signature-13",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
       "prodAnchor": "signature-14",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "signature-2",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "signature-3",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "signature-4",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "signature-5",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "signature-6",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "signature-7",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "signature-8",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/material",
+      "prodAnchor": "signature-9",
       "newAnchor": "signature",
       "heading": "Signature"
     },
@@ -437,7 +959,25 @@
       "path": "/docs/reference/vgpu-scene/material",
       "prodAnchor": "unlitmaterial-2",
       "newAnchor": "unlitmaterial",
-      "heading": "UnlitMaterial"
+      "heading": "unlitMaterial"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orbit-controls",
+      "prodAnchor": "examples-2",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orbit-controls",
+      "prodAnchor": "examples-3",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orbit-controls",
+      "prodAnchor": "examples-4",
+      "newAnchor": "examples",
+      "heading": "Examples"
     },
     {
       "path": "/docs/reference/vgpu-scene/orbit-controls",
@@ -447,9 +987,45 @@
     },
     {
       "path": "/docs/reference/vgpu-scene/orbit-controls",
+      "prodAnchor": "import-2",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orbit-controls",
+      "prodAnchor": "import-3",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orbit-controls",
+      "prodAnchor": "import-4",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orbit-controls",
       "prodAnchor": "import-5",
       "newAnchor": "import",
       "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orbit-controls",
+      "prodAnchor": "notes-2",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orbit-controls",
+      "prodAnchor": "notes-3",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orbit-controls",
+      "prodAnchor": "notes-4",
+      "newAnchor": "notes",
+      "heading": "Notes"
     },
     {
       "path": "/docs/reference/vgpu-scene/orbit-controls",
@@ -461,7 +1037,25 @@
       "path": "/docs/reference/vgpu-scene/orbit-controls",
       "prodAnchor": "orbitcontrols-2",
       "newAnchor": "orbitcontrols",
-      "heading": "OrbitControls"
+      "heading": "orbitControls"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orbit-controls",
+      "prodAnchor": "signature-2",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orbit-controls",
+      "prodAnchor": "signature-3",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orbit-controls",
+      "prodAnchor": "signature-4",
+      "newAnchor": "signature",
+      "heading": "Signature"
     },
     {
       "path": "/docs/reference/vgpu-scene/orbit-controls",
@@ -471,15 +1065,33 @@
     },
     {
       "path": "/docs/reference/vgpu-scene/orthographic-camera",
+      "prodAnchor": "examples-2",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orthographic-camera",
       "prodAnchor": "examples-3",
       "newAnchor": "examples",
       "heading": "Examples"
     },
     {
       "path": "/docs/reference/vgpu-scene/orthographic-camera",
+      "prodAnchor": "import-2",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orthographic-camera",
       "prodAnchor": "import-3",
       "newAnchor": "import",
       "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orthographic-camera",
+      "prodAnchor": "notes-2",
+      "newAnchor": "notes",
+      "heading": "Notes"
     },
     {
       "path": "/docs/reference/vgpu-scene/orthographic-camera",
@@ -491,7 +1103,13 @@
       "path": "/docs/reference/vgpu-scene/orthographic-camera",
       "prodAnchor": "orthographiccamera-2",
       "newAnchor": "orthographiccamera",
-      "heading": "OrthographicCamera"
+      "heading": "orthographicCamera"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/orthographic-camera",
+      "prodAnchor": "signature-2",
+      "newAnchor": "signature",
+      "heading": "Signature"
     },
     {
       "path": "/docs/reference/vgpu-scene/orthographic-camera",
@@ -501,9 +1119,21 @@
     },
     {
       "path": "/docs/reference/vgpu-scene/perspective-camera",
+      "prodAnchor": "examples-2",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/perspective-camera",
       "prodAnchor": "examples-3",
       "newAnchor": "examples",
       "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/perspective-camera",
+      "prodAnchor": "import-2",
+      "newAnchor": "import",
+      "heading": "Import"
     },
     {
       "path": "/docs/reference/vgpu-scene/perspective-camera",
@@ -513,9 +1143,21 @@
     },
     {
       "path": "/docs/reference/vgpu-scene/perspective-camera",
+      "prodAnchor": "notes-2",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/perspective-camera",
       "prodAnchor": "notes-3",
       "newAnchor": "notes",
       "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/perspective-camera",
+      "prodAnchor": "signature-2",
+      "newAnchor": "signature",
+      "heading": "Signature"
     },
     {
       "path": "/docs/reference/vgpu-scene/perspective-camera",
@@ -531,13 +1173,157 @@
     },
     {
       "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "examples-2",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "examples-3",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "examples-4",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "examples-5",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "examples-6",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "examples-7",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "examples-8",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "examples-9",
+      "newAnchor": "examples",
+      "heading": "Examples"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
       "prodAnchor": "import-10",
       "newAnchor": "import",
       "heading": "Import"
     },
     {
       "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "import-2",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "import-3",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "import-4",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "import-5",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "import-6",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "import-7",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "import-8",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "import-9",
+      "newAnchor": "import",
+      "heading": "Import"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
       "prodAnchor": "notes-10",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "notes-2",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "notes-3",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "notes-4",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "notes-5",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "notes-6",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "notes-7",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "notes-8",
+      "newAnchor": "notes",
+      "heading": "Notes"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "notes-9",
       "newAnchor": "notes",
       "heading": "Notes"
     },
@@ -550,6 +1336,54 @@
     {
       "path": "/docs/reference/vgpu-scene/scene-tree",
       "prodAnchor": "signature-10",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "signature-2",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "signature-3",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "signature-4",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "signature-5",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "signature-6",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "signature-7",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "signature-8",
+      "newAnchor": "signature",
+      "heading": "Signature"
+    },
+    {
+      "path": "/docs/reference/vgpu-scene/scene-tree",
+      "prodAnchor": "signature-9",
       "newAnchor": "signature",
       "heading": "Signature"
     }

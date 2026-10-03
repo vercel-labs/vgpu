@@ -1,0 +1,64 @@
+{
+  "contracts": [
+    {
+      "taskId": "scene-robot-arm",
+      "stage": 1,
+      "sha256": "672c4747ade66a91c4050137d00c10d41b208a118649bdfd1e16c81b9b250222"
+    },
+    {
+      "taskId": "scene-robot-arm",
+      "stage": 2,
+      "sha256": "db4994f09ffd5d4d90dfed832f777586a80c19eae8c99a4ec77e486f562b28be"
+    },
+    {
+      "taskId": "scene-shader-bindings",
+      "stage": 1,
+      "sha256": "131e8656c4a654e75c06d0aedde3bedc04eccbe070ad214c2e7c08f199cddaba"
+    },
+    {
+      "taskId": "scene-shader-bindings",
+      "stage": 2,
+      "sha256": "aaffd837788beabe2e1e8365594fc2bc25ae6d226a81920be856128933456d6f"
+    },
+    {
+      "taskId": "scene-warehouse",
+      "stage": 1,
+      "sha256": "c91fb962fa1c8e98c94d0b4133f32bb6093b1de22f5f5d70b404bb86b25374c2"
+    },
+    {
+      "taskId": "scene-warehouse",
+      "stage": 2,
+      "sha256": "424ee54aeee2af3693840e640d187ff625cb716aa09299396f1afed11ae074b5"
+    }
+  ],
+  "seedFiles": [
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-robot-arm/contract.md",
+      "sha256": "8c2ae9d83e5690a71844b8b534881869ffff91ef54154d7671a20f51c5c0084d"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-robot-arm/package.json",
+      "sha256": "609158e6c5fbc237939fa3ddf7faab80ab690bdc0c8d584414a885130103c4e8"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-shader-bindings/contract.md",
+      "sha256": "39bf8e5b295bfb947dfc275880470e8f57ccd6a523c93a2561fe6e331977d70b"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-shader-bindings/integration.wgsl",
+      "sha256": "ddb213c4a16258e299e79087b79fdd8eceb41d21ab16a53b95fc91d8eefa8083"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-shader-bindings/package.json",
+      "sha256": "609158e6c5fbc237939fa3ddf7faab80ab690bdc0c8d584414a885130103c4e8"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-warehouse/contract.md",
+      "sha256": "f9a17c3c2b2b54bda6769ccc32e7e9519ca7d80c2be9f2dcacfaeb327d452bb0"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-warehouse/package.json",
+      "sha256": "609158e6c5fbc237939fa3ddf7faab80ab690bdc0c8d584414a885130103c4e8"
+    }
+  ]
+}

@@ -1,7 +1,11 @@
 ---
-title: "canvasMouseTracker"
-description: "Tracks pointer coordinates relative to a canvas layout and drawing buffer."
+title: "Canvas mouse tracking"
+description: "Track pointer coordinates relative to a canvas layout and drawing buffer."
 ---
+
+# canvasMouseTracker
+
+Tracks pointer coordinates relative to a canvas layout and drawing buffer.
 
 ## Import
 

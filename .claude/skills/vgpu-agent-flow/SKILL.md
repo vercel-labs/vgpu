@@ -21,6 +21,7 @@ The normal API phases below still apply if the asset work changes a public API.
 |---|---|---|
 | `repo:api-researcher` | fx `google/gemini-3.8-flash` → Codex `gpt-5.6-luna` | How other frameworks/libraries solve it. Raw findings only |
 | `repo:graphics-researcher` | fx `google/gemini-3.8-flash` → Codex `gpt-5.6-luna` | Papers, talks, shipped game techniques. Raw findings only |
+| `repo:eval-designer` | Claude `claude-opus-5.5` high → Codex `gpt-6-astra` high | Eval methodology, independent gates, negative controls, and evidence-based analysis |
 | `repo:api-designer` | Codex `gpt-6-astra` xhigh → Claude `claude-opus-5.5` xhigh | API alternatives + illustrative snippets, agent-ergonomics evaluation |
 | `repo:planner` | Codex `gpt-6-astra` high → Claude `claude-opus-5.5` high | Plan folder: index, task specs, lanes, progress log |
 | `repo:implementer` | Codex `gpt-5.6-sol` high → Claude `claude-opus-5.5` high | One task, test-first; runs `writer` and `reviewer` as children; commits |
@@ -198,16 +199,29 @@ the executor's receipt to establish which artifacts were actually built or revie
 - Prefer one ordinary `subharness run ...` per specialist through your background-command
   controls, continue other work, and collect the result. Otherwise use `--detach` and later
   `subharness wait <task-id>`. Never use shell `&`.
+- Record the host background-command identifier alongside each task/session identifier. Collect
+  that command's result and inspect its state; an early response can leave descendant work pending.
+  Use `wait <task-id> --after <response-id>` to observe later responses. `--detach` does not configure
+  a completion notification or guarantee external chat reactivation; that depends on the host.
+  Continue coordinating the authorized implementation after each result rather than ending at launch.
 - Follow up in the same session with `subharness send <session-id> --prompt "..."`; cancel with
   `subharness cancel <task-id>`. `subharness dashboard` shows live sessions.
 - Exit code 0 means a response arrived, not that the goal was met — read the response. A response
-  with `State: waiting` means the specialist paused for its own child (e.g. the example-builder's
-  reviewer); follow it with `subharness wait <task-id> --after <response-id>` until `completed`.
+  with `State: waiting` means the specialist paused for a child; follow it with
+  `subharness wait <task-id> --after <response-id>` until `completed`.
+- Version 0.0.5 returns `approval_required` for supported native permission requests. Inspect
+  the actual operation, existing user authorization and returned schema; answer only an authorized,
+  offered choice with `subharness respond <request-id> --content-file <path>`, then observe the same
+  task. Do not replay the prompt or broaden permissions. Hard sandbox denials remain hard denials.
+- In the dashboard, Up/Down selects a run, Enter opens session requests and expands prompt/response
+  details, and Escape returns. Ctrl+C closes the monitor without stopping agents.
 - Check readiness without spending a model turn: `npx subharness check repo:<name>`.
 
 ## Personal access (per user, not committed)
 
-Research runs on fx through AI Gateway, which needs an explicit connection. Use the OIDC token of
+All vgpu specialists, including Codex/Claude implementations and child writers/reviewers, must use
+Vercel project OIDC through AI Gateway so repository work is attributed to the project. Do not
+fall back to native subscriptions, direct provider keys, or an unrelated Gateway key. Use the OIDC token of
 the `vercel-labs/vgpu` project, configured once in the **main checkout** (worktrees read it from
 there):
 
@@ -224,17 +238,22 @@ vercel env pull .env.local --yes                       # writes VERCEL_OIDC_TOKE
 ```json
 {
   "access": {
+    "codex": [{ "type": "vercel-oidc", "project": ".", "envFile": ".env.local" }],
+    "claudeCode": [{ "type": "vercel-oidc", "project": ".", "envFile": ".env.local" }],
     "fx": [{ "type": "vercel-oidc", "project": ".", "envFile": ".env.local" }]
   }
 }
 ```
 
-Verify with `npx subharness check repo:graphics-researcher`. The OIDC token expires after about
-12 hours; when fx fails with an expired-token error, re-run `vercel env pull .env.local --yes` in
-the main checkout. Without fx access the researchers fall back to Codex. Codex and Claude Code use
-their native subscription logins by default.
+Verify every role with `pnpm exec subharness check repo:<name>`, including implementation, writer,
+reviewer, and both researchers. A readiness check validates startup, not provider quota or a paid
+inference result. Never print tokens or commit `.env.local`/`agents.local.json`.
 
-`claude-opus-5.5` is served through AI Gateway, not every Claude subscription: when a Claude
-specialist fails with `HARNESS_ERROR` or "selected a different model than requested", add the same
-connection for Claude Code (`"claudeCode": [{ "type": "vercel-oidc", "project": ".", "envFile":
-".env.local" }]`) to `agents.local.json`. That bills Claude specialists to the linked project.
+The OIDC token expires after about 12 hours. The lead may renew it for this established project
+through the existing authenticated Vercel CLI, following Subharness's `sdk/access-config.md`;
+children report failures instead of racing to change shared credentials. Do not switch billing
+routes when renewal fails. Credential changes apply only to new native sessions: checkpoint and
+close older sessions, then start new sessions from those artifacts. A follow-up to an existing
+session retains its original credentials. Record which sessions were restarted and the verified
+project/expiry, without exposing credentials. The main-checkout access file covers linked worktrees;
+a worktree-local copy is not an override.

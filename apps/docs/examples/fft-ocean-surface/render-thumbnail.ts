@@ -1,6 +1,6 @@
 import { frame, type Gpu, type Target } from "vgpu";
-import { perspectiveCamera } from "vgpu/scene";
 
+import { createOceanCamera } from "./camera";
 import { buildOcean, OCEAN_CAMERA, type OceanScene } from "./scene";
 
 interface ThumbnailOptions {
@@ -19,7 +19,7 @@ export async function renderThumbnail(
   let failed = false;
   try {
     scene = buildOcean(gpu, output.size);
-    const camera = perspectiveCamera({
+    const camera = createOceanCamera({
       ...OCEAN_CAMERA,
       aspect: output.size[0] / output.size[1],
     });
@@ -27,7 +27,7 @@ export async function renderThumbnail(
     const warmup = Math.max(0, options.warmupFrames ?? 0);
     for (let index = 0; index < warmup; index++) scene.simulate(dt);
     scene.simulate((options.time ?? 9) - warmup * dt);
-    scene.updateCamera(camera.viewProjection, camera.worldPosition);
+    scene.updateCamera(camera.viewProjection, camera.pose.position);
     frame(gpu, (currentFrame) => {
       currentFrame.pass({ target: scene!.hdr, clear: scene!.clear }, (pass) => {
         pass.draw(scene!.skydome);

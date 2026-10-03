@@ -1,0 +1,2367 @@
+{
+  "schemaVersion": 1,
+  "experiment": "scene-skill-split-pilot-v1",
+  "date": "2026-10-01",
+  "task": "scene-quaternion-keyframes",
+  "design": {
+    "sessions": 2,
+    "stagesPerSession": 2,
+    "forcedSkillLoading": false,
+    "taskNamesMath": false,
+    "dependencyChoiceIsGate": false,
+    "comparison": "Descriptive historical reference only; no concurrent control arm or causal claim.",
+    "sourceReview": "Anonymous code IDs, both stage sources and contract only; same specialist session, scores/transcripts withheld."
+  },
+  "provenance": {
+    "planPath": ".context/work/scene-skill-split-eval/plan.json",
+    "planSha256": "acccefd1ef5455a7f9f48f7cbee956205c69cee66fa7616a3e4a0091d2dcb664",
+    "gitHead": "c583738883c98c00baa7908cc1c102a3166aef3b",
+    "workspaceDirty": true,
+    "trackedDiffSha256": "a999cefc3fd23f35bd64a189fb65bbbc04c7b07ca5b367a267018e75b0c42efa",
+    "sourceKey": "d3c1b503511e66dc",
+    "dockerImage": "ghcr.io/vercel/eve@sha256:de79f9a495add7cd1691e3496afc1c3227b0846f9ae0b26126f120c91af3445c",
+    "eveVersion": "0.29.5",
+    "skillSha256": "441abc5ebcae157ec05ca3bbb53cec3309b1c5b3144fef04b75f62518c9772ac",
+    "sceneReferenceSha256": "338c104663b076841b96c2f050fe39cbab36a53d8054ef1635943aaf4585f21c",
+    "generatorSha256": "ce456b3c1bbfde38dbbd5d49e0b9da6a8c5cc3705a12e95fb9dbe2255bfd156a",
+    "tarballs": [
+      {
+        "name": "@vgpu/wgsl-std",
+        "version": "0.5.0",
+        "file": "vgpu-wgsl-std-0.5.0.tgz",
+        "sha256": "79b1f234709401ee321be98a740b7e5d10129499682917e17c3a4a7a312dd73e"
+      },
+      {
+        "name": "@vgpu/wgsl",
+        "version": "0.5.0",
+        "file": "vgpu-wgsl-0.5.0.tgz",
+        "sha256": "37fddc5e403f38961bad193d42b00da1c4c1ea5e4edac991eba2e2c0209b8f1b"
+      },
+      {
+        "name": "@vgpu/core",
+        "version": "0.5.0",
+        "file": "vgpu-core-0.5.0.tgz",
+        "sha256": "7909bef2df9b6a99a2ce67eed81952a24739b9090f76c1b702125915c59a8ff5"
+      },
+      {
+        "name": "@vgpu/adapter-mock",
+        "version": "0.5.0",
+        "file": "vgpu-adapter-mock-0.5.0.tgz",
+        "sha256": "8ea54f07083676ffd5b07a3fc3441d6b20d44c1af726f30d986c355df5474dcd"
+      },
+      {
+        "name": "@vgpu/adapter-node",
+        "version": "0.5.0",
+        "file": "vgpu-adapter-node-0.5.0.tgz",
+        "sha256": "7f75cb9a099ad2409accb5244499ddcc040c113b0e30e6dfaed40f4b76fabe3b"
+      },
+      {
+        "name": "vgpu",
+        "version": "0.5.0",
+        "file": "vgpu-0.5.0.tgz",
+        "sha256": "e7f3bd063142de29f74b84768b198c1305ac8e64fe87ffc023934eb0be6e10a4"
+      }
+    ],
+    "authentication": "Vercel vgpu project OIDC only; no credential values recorded.",
+    "postPilotEditorialChanges": {
+      "sceneReference": "Removed one trailing blank line during PR whitespace validation; evaluation hashes retain the exact executed bytes.",
+      "sceneReferencePublishedSha256": "f510734200a462b41b3f80e9107055a861c7748cb044b214cc42ba5d2a6802f0",
+      "report": "Made host evidence paths repository-relative. Final documentation and packaging-test edits are outside the frozen run."
+    }
+  },
+  "controls": {
+    "outcome": "pass",
+    "cases": 28,
+    "summary": "apps/agent-evals/.work/scene-controls/2026-10-01T19-48-10.369Z-cae3a62a/scene-quaternion-keyframes/summary.json",
+    "summarySha256": "3e28bec7f6d8031769549a8733b8cf184ce2d679549a692e37c2cada1522f759"
+  },
+  "totals": {
+    "completedSessions": 2,
+    "passingStages": 4,
+    "passingChecks": 16,
+    "frames": 40,
+    "skillLoaded": 0,
+    "sceneReferenceReadObserved": 0,
+    "cliMathGuideRead": 1,
+    "mathInstalled": 0,
+    "mathUsed": 0,
+    "handwrittenInterpolation": 2,
+    "generationCostUsd": 4.020654,
+    "costScope": "Model generation only; excludes reviewer, native controls, Docker/compute and storage."
+  },
+  "sessions": [
+    {
+      "slot": 1,
+      "sessionId": "wrun_01M3WG9N62QG6TDF70GM86V5B2",
+      "codeId": "code-b60d9155",
+      "startedAt": "2026-10-01T19:50:08.463Z",
+      "endedAt": "2026-10-01T20:00:12.284Z",
+      "exitCode": 0,
+      "classification": "pass",
+      "integrityError": null,
+      "model": "anthropic/claude-sonnet-5",
+      "steps": 61,
+      "usage": {
+        "costUsd": 1.9517108,
+        "inputTokens": 5257311,
+        "outputTokens": 28816,
+        "cacheReadTokens": 4991159,
+        "cacheWriteTokens": 266030
+      },
+      "skillDelivery": {
+        "scope": "scene-quaternion-keyframes-only",
+        "name": "vgpu",
+        "advertised": true,
+        "advertisedFullMarkdownSha256": "441abc5ebcae157ec05ca3bbb53cec3309b1c5b3144fef04b75f62518c9772ac",
+        "expectedAdvertisedFullMarkdownSha256": "441abc5ebcae157ec05ca3bbb53cec3309b1c5b3144fef04b75f62518c9772ac",
+        "observedAdvertisedFullMarkdownSha256": "441abc5ebcae157ec05ca3bbb53cec3309b1c5b3144fef04b75f62518c9772ac",
+        "materializedPath": "/home/vercel-sandbox/.agents/skills/vgpu/SKILL.md",
+        "materializedPresent": true,
+        "materializedSha256": "441abc5ebcae157ec05ca3bbb53cec3309b1c5b3144fef04b75f62518c9772ac",
+        "materializedOutsideWorkspace": true,
+        "advertisementIntegrity": "pass",
+        "advertisementError": null,
+        "expectedSceneReferenceSha256": "338c104663b076841b96c2f050fe39cbab36a53d8054ef1635943aaf4585f21c",
+        "expectedLoadedBodySha256": "e55f965bb0f312d008ce3157f7803e11e8d7138511ecfbcd3551f2bd9c08d6be",
+        "generatorSha256": "ce456b3c1bbfde38dbbd5d49e0b9da6a8c5cc3705a12e95fb9dbe2255bfd156a",
+        "packageGitHead": "c583738883c98c00baa7908cc1c102a3166aef3b",
+        "workspaceGitHead": "c583738883c98c00baa7908cc1c102a3166aef3b",
+        "workspaceDirty": true,
+        "harnessAggregateSha256": "6aacf9bcef1ba8e3a53a7132b2ddb804b709e190e6ec259c7595303cc95d89ea",
+        "harnessFiles": [
+          {
+            "path": "apps/agent-evals/agent/hooks/finalize-turn.ts",
+            "sha256": "e15e74c8269429e951e7158086c9c10f07f2477395361072376cebfd3ccbed8d"
+          },
+          {
+            "path": "apps/agent-evals/agent/lib/scene-keyframe-dependencies.ts",
+            "sha256": "c3fc82d3f99437192768938d889b4c1ed45fb9bd9040c01ce656aecd7f96d3cb"
+          },
+          {
+            "path": "apps/agent-evals/agent/sandbox/sandbox.ts",
+            "sha256": "dc2d4f46a116f5fe996c2c0b464826b3f9ff0dbe08f028023849ec522af52268"
+          },
+          {
+            "path": "apps/agent-evals/agent/skills/vgpu.ts",
+            "sha256": "e0646f1a9fe050767aa7c388733e27e41f5111aaaa667ebc092e07df15da34f1"
+          },
+          {
+            "path": "apps/agent-evals/agent/sandbox/tasks/scene-quaternion-keyframes/contract.md",
+            "sha256": "8051ee6a46943390d14190868eab88fb4633ffe340913fc94283b581d3983db8"
+          },
+          {
+            "path": "apps/agent-evals/agent/sandbox/tasks/scene-quaternion-keyframes/example-input.json",
+            "sha256": "3f65e3b4dac0087bd4c11d46f72314a55fbc256185690a4f26d9a24da5db135b"
+          },
+          {
+            "path": "apps/agent-evals/agent/sandbox/tasks/scene-quaternion-keyframes/package.json",
+            "sha256": "a90fc33418afa2b9cbf4768524b021135b965ecdf993457505bfae3ac44a8428"
+          },
+          {
+            "path": "apps/agent-evals/controls/scene-keyframes-reference.mjs",
+            "sha256": "a2eb092d5eeec89d477446a6618c0fbcb486aac188ff9e233ec2bdc9373e1009"
+          },
+          {
+            "path": "apps/agent-evals/controls/scene-keyframes-sphere.wgsl",
+            "sha256": "66d3ef0ffa6b467ddf86b11fabaf082eb9c6a431031578c6350191c88b6ec884"
+          },
+          {
+            "path": "apps/agent-evals/evals/lib/scene-contracts.mjs",
+            "sha256": "5a5b6ae26f8a6f33c89bd5abb5ab0f21cbe9a93a4769db14606c5b2299257966"
+          },
+          {
+            "path": "apps/agent-evals/evals/lib/scene-eval.ts",
+            "sha256": "e853b42e4313bca8e163441997467d9eb0085cc8532420df083d2533dfc410f3"
+          },
+          {
+            "path": "apps/agent-evals/evals/lib/scene-keyframes.mjs",
+            "sha256": "86ef6f4fda38767c632f816c5b2461ef424f1941e266db7461b7f74f7b8d41d4"
+          },
+          {
+            "path": "apps/agent-evals/evals/scene-quaternion-keyframes.eval.ts",
+            "sha256": "bd46c0eec3f2fc5428d1235ccad9ec330d4424d858c7393248834e3a2ff4d1de"
+          },
+          {
+            "path": "apps/agent-evals/scripts/scene-controls.mjs",
+            "sha256": "6a1c42aabf254cf6dcccfee1d2af38389f45075b2c087aa0467cf9902ddc6d86"
+          },
+          {
+            "path": "apps/agent-evals/scripts/scene-skill-isolation.mjs",
+            "sha256": "d78821a30dd2095d6f9e08554b26f25175c330e110f83a289d03e6c0a4a3a05d"
+          },
+          {
+            "path": "apps/agent-evals/tests/scene-keyframes.test.mjs",
+            "sha256": "4e8b55454a29e8faaad0207052a5f730c9eb6c28e7cdfadd42dd2220c3ddd149"
+          },
+          {
+            "path": "scripts/agent-evals.mjs",
+            "sha256": "8ef5460eec3d82ed5dc29fc030dbb88741c37f41110a6d4f5b42606c6c0f3ecf"
+          }
+        ],
+        "delivery": "SKILL.md and scene.md; blender resources not delivered",
+        "sceneReference": {
+          "path": "/home/vercel-sandbox/.agents/skills/vgpu/scene.md",
+          "expectedSha256": "338c104663b076841b96c2f050fe39cbab36a53d8054ef1635943aaf4585f21c",
+          "sha256": "338c104663b076841b96c2f050fe39cbab36a53d8054ef1635943aaf4585f21c",
+          "matches": true
+        }
+      },
+      "skillLoadCalls": [],
+      "sceneReferenceAccesses": [],
+      "readFileCalls": [
+        {
+          "turnId": "turn_0",
+          "callId": "toolu_01A1ceGKe9SHVySDSGd4Se51",
+          "input": {
+            "filePath": "/workspace/contract.md"
+          }
+        },
+        {
+          "turnId": "turn_1",
+          "callId": "toolu_01NF5HPG9yC8jT2yxrpCqHu4",
+          "input": {
+            "filePath": "/workspace/render.mjs"
+          }
+        }
+      ],
+      "cliMathGuideExposure": {
+        "tier": "content",
+        "sections": [
+          "## Choose who owns each operation",
+          "## Pass a math matrix into an instance",
+          "## Write local transforms into an external hierarchy",
+          "## Read a vgpu matrix with math",
+          "## Match camera and matrix conventions"
+        ],
+        "firstContent": {
+          "turnId": "turn_0",
+          "stepIndex": 8
+        },
+        "perTurn": [
+          {
+            "turnId": "turn_0",
+            "tier": "content",
+            "sections": [
+              "## Choose who owns each operation",
+              "## Pass a math matrix into an instance",
+              "## Write local transforms into an external hierarchy",
+              "## Read a vgpu matrix with math",
+              "## Match camera and matrix conventions"
+            ],
+            "firstContent": {
+              "turnId": "turn_0",
+              "stepIndex": 8
+            }
+          },
+          {
+            "turnId": "turn_1",
+            "tier": "none",
+            "sections": [],
+            "firstContent": null
+          }
+        ],
+        "deliveries": [
+          {
+            "turnId": "turn_0",
+            "stepIndex": 7,
+            "tool": "bash",
+            "callId": "toolu_01DgEmUY4MSVjQHTZEx1QX8N",
+            "command": "cd /workspace && npx vgpu docs find \"orthographic\" 2>&1; echo \"---find quaternion---\"; npx vgpu docs find \"quaternion\" 2>&1",
+            "tier": "surfaced",
+            "sections": [],
+            "truncated": false
+          },
+          {
+            "turnId": "turn_0",
+            "stepIndex": 8,
+            "tool": "bash",
+            "callId": "toolu_01PbFsC2ovf9hCrQx681SstL",
+            "command": "cd /workspace && npx vgpu docs cat /guides/scene-math.docs.md 2>&1",
+            "tier": "content",
+            "sections": [
+              "## Choose who owns each operation",
+              "## Pass a math matrix into an instance",
+              "## Write local transforms into an external hierarchy",
+              "## Read a vgpu matrix with math",
+              "## Match camera and matrix conventions"
+            ],
+            "truncated": false
+          }
+        ]
+      },
+      "packageInstallAttempts": [],
+      "initialDependencies": {
+        "math": {
+          "present": false,
+          "version": null
+        },
+        "wgpuMatrix": {
+          "present": true,
+          "version": "3.4.2"
+        },
+        "three": {
+          "present": false,
+          "version": null
+        }
+      },
+      "initialDependencySnapshotSha256": "7895398c072eccca0d7e00e01e2dc7cc3afabcab6909875fac6e50948bb97145",
+      "stages": [
+        {
+          "stage": 1,
+          "outcome": "pass",
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": true,
+              "metrics": {
+                "errors": []
+              }
+            },
+            {
+              "name": "artifacts",
+              "ok": true,
+              "metrics": {
+                "frames": 9
+              }
+            },
+            {
+              "name": "state",
+              "ok": true,
+              "metrics": {
+                "maximumAbsoluteError": 2.834612200519615e-08,
+                "failingFrames": []
+              }
+            },
+            {
+              "name": "pixels",
+              "ok": true,
+              "metrics": {
+                "failingFrames": [],
+                "frames": [
+                  {
+                    "frame": 1,
+                    "nonBlack": 3379,
+                    "contained": 3379,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 1126,
+                        "centroid": [
+                          354.02131438721136,
+                          233.16429840142095
+                        ],
+                        "centroidError": 0.04145432436632534
+                      },
+                      {
+                        "marker": 1,
+                        "area": 1127,
+                        "centroid": [
+                          256.00842945874,
+                          81.17613132209405
+                        ],
+                        "centroidError": 0.028651087584044513
+                      },
+                      {
+                        "marker": 2,
+                        "area": 1126,
+                        "centroid": [
+                          173.89076376554175,
+                          241.00355239786856
+                        ],
+                        "centroidError": 0.16918875952896664
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 2,
+                    "nonBlack": 2744,
+                    "contained": 2744,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 914,
+                        "centroid": [
+                          359.1531728665208,
+                          226.77352297592998
+                        ],
+                        "centroidError": 0.06289994501623652
+                      },
+                      {
+                        "marker": 1,
+                        "area": 914,
+                        "centroid": [
+                          298.3818380743983,
+                          71.17833698030634
+                        ],
+                        "centroidError": 0.07013655589230457
+                      },
+                      {
+                        "marker": 2,
+                        "area": 916,
+                        "centroid": [
+                          193.2052401746725,
+                          167.70633187772927
+                        ],
+                        "centroidError": 0.03250018343361366
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 3,
+                    "nonBlack": 2632,
+                    "contained": 2632,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 878,
+                        "centroid": [
+                          367.4601366742597,
+                          231.1127562642369
+                        ],
+                        "centroidError": 0.10896372853220661
+                      },
+                      {
+                        "marker": 1,
+                        "area": 877,
+                        "centroid": [
+                          304.0655644241733,
+                          204.25484606613455
+                        ],
+                        "centroidError": 0.12628597136495653
+                      },
+                      {
+                        "marker": 2,
+                        "area": 877,
+                        "centroid": [
+                          296.9116305587229,
+                          70.7690992018244
+                        ],
+                        "centroidError": 0.11528357084455776
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 4,
+                    "nonBlack": 3278,
+                    "contained": 3278,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 1091,
+                        "centroid": [
+                          365.4193400549954,
+                          240.34692942254813
+                        ],
+                        "centroidError": 0.1384919731263942
+                      },
+                      {
+                        "marker": 1,
+                        "area": 1096,
+                        "centroid": [
+                          257.73631386861314,
+                          277.86678832116786
+                        ],
+                        "centroidError": 0.13814797117343502
+                      },
+                      {
+                        "marker": 2,
+                        "area": 1091,
+                        "centroid": [
+                          322.56324472960586,
+                          110.28368469294226
+                        ],
+                        "centroidError": 0.059124774180788583
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 5,
+                    "nonBlack": 3065,
+                    "contained": 3065,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 1022,
+                        "centroid": [
+                          381.24461839530335,
+                          187.16634050880626
+                        ],
+                        "centroidError": 0.03081943350784952
+                      },
+                      {
+                        "marker": 1,
+                        "area": 1020,
+                        "centroid": [
+                          274.3637254901961,
+                          298.5529411764706
+                        ],
+                        "centroidError": 0.034966536692546686
+                      },
+                      {
+                        "marker": 2,
+                        "area": 1023,
+                        "centroid": [
+                          275.1813294232649,
+                          121.28103616813294
+                        ],
+                        "centroidError": 0.06050239861101841
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 6,
+                    "nonBlack": 2971,
+                    "contained": 2971,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 992,
+                        "centroid": [
+                          336.8195564516129,
+                          111.1491935483871
+                        ],
+                        "centroidError": 0.042138073405666755
+                      },
+                      {
+                        "marker": 1,
+                        "area": 990,
+                        "centroid": [
+                          336.2262626262626,
+                          288.8363636363636
+                        ],
+                        "centroidError": 0.11750114957411052
+                      },
+                      {
+                        "marker": 2,
+                        "area": 989,
+                        "centroid": [
+                          197.58796764408493,
+                          213.4423660262892
+                        ],
+                        "centroidError": 0.05695126420948208
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 7,
+                    "nonBlack": 3037,
+                    "contained": 3037,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 1011,
+                        "centroid": [
+                          283.797725024728,
+                          115.37833827893175
+                        ],
+                        "centroidError": 0.03526311294291165
+                      },
+                      {
+                        "marker": 1,
+                        "area": 1013,
+                        "centroid": [
+                          364.4930898321816,
+                          256.9846989141165
+                        ],
+                        "centroidError": 0.02437154880271383
+                      },
+                      {
+                        "marker": 2,
+                        "area": 1013,
+                        "centroid": [
+                          194.06367226061204,
+                          271.32922013820337
+                        ],
+                        "centroidError": 0.04121900264958635
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 8,
+                    "nonBlack": 3065,
+                    "contained": 3065,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 1022,
+                        "centroid": [
+                          283.16340508806263,
+                          71.83463796477496
+                        ],
+                        "centroidError": 0.023035127150056105
+                      },
+                      {
+                        "marker": 1,
+                        "area": 1022,
+                        "centroid": [
+                          364.95303326810176,
+                          232.2289628180039
+                        ],
+                        "centroidError": 0.01799834712413555
+                      },
+                      {
+                        "marker": 2,
+                        "area": 1021,
+                        "centroid": [
+                          194.5499510284035,
+                          210.14250734573946
+                        ],
+                        "centroidError": 0.009509826289622025
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 9,
+                    "nonBlack": 2938,
+                    "contained": 2938,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 979,
+                        "centroid": [
+                          282.60316649642493,
+                          67.9688457609806
+                        ],
+                        "centroidError": 0.00973490191292568
+                      },
+                      {
+                        "marker": 1,
+                        "area": 980,
+                        "centroid": [
+                          365.1173469387755,
+                          206.35408163265305
+                        ],
+                        "centroidError": 0.013750213680070402
+                      },
+                      {
+                        "marker": 2,
+                        "area": 979,
+                        "centroid": [
+                          194.64096016343208,
+                          163.77477017364657
+                        ],
+                        "centroidError": 0.017297956898865725
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ],
+          "skillLoaded": false,
+          "sceneReference": {
+            "path": "/home/vercel-sandbox/.agents/skills/vgpu/scene.md",
+            "expectedSha256": "338c104663b076841b96c2f050fe39cbab36a53d8054ef1635943aaf4585f21c",
+            "sha256": "338c104663b076841b96c2f050fe39cbab36a53d8054ef1635943aaf4585f21c",
+            "matches": true
+          },
+          "dependencies": {
+            "math": {
+              "present": false,
+              "version": null
+            },
+            "wgpuMatrix": {
+              "present": true,
+              "version": "3.4.2"
+            },
+            "three": {
+              "present": false,
+              "version": null
+            }
+          }
+        },
+        {
+          "stage": 2,
+          "outcome": "pass",
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": true,
+              "metrics": {
+                "errors": []
+              }
+            },
+            {
+              "name": "artifacts",
+              "ok": true,
+              "metrics": {
+                "frames": 11
+              }
+            },
+            {
+              "name": "state",
+              "ok": true,
+              "metrics": {
+                "maximumAbsoluteError": 2.809596832964445e-08,
+                "failingFrames": []
+              }
+            },
+            {
+              "name": "pixels",
+              "ok": true,
+              "metrics": {
+                "failingFrames": [],
+                "frames": [
+                  {
+                    "frame": 1,
+                    "nonBlack": 3379,
+                    "contained": 3379,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 1126,
+                        "centroid": [
+                          354.02131438721136,
+                          233.16429840142095
+                        ],
+                        "centroidError": 0.04145432436632534
+                      },
+                      {
+                        "marker": 1,
+                        "area": 1127,
+                        "centroid": [
+                          256.00842945874,
+                          81.17613132209405
+                        ],
+                        "centroidError": 0.028651087584044513
+                      },
+                      {
+                        "marker": 2,
+                        "area": 1126,
+                        "centroid": [
+                          173.89076376554175,
+                          241.00355239786856
+                        ],
+                        "centroidError": 0.16918875952896664
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 2,
+                    "nonBlack": 3379,
+                    "contained": 3379,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 1126,
+                        "centroid": [
+                          354.02131438721136,
+                          233.16429840142095
+                        ],
+                        "centroidError": 0.04145432436632534
+                      },
+                      {
+                        "marker": 1,
+                        "area": 1127,
+                        "centroid": [
+                          256.00842945874,
+                          81.17613132209405
+                        ],
+                        "centroidError": 0.028651087584044513
+                      },
+                      {
+                        "marker": 2,
+                        "area": 1126,
+                        "centroid": [
+                          173.89076376554175,
+                          241.00355239786856
+                        ],
+                        "centroidError": 0.16918875952896664
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 3,
+                    "nonBlack": 2632,
+                    "contained": 2632,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 878,
+                        "centroid": [
+                          367.4601366742597,
+                          231.1127562642369
+                        ],
+                        "centroidError": 0.10896372853220661
+                      },
+                      {
+                        "marker": 1,
+                        "area": 877,
+                        "centroid": [
+                          304.0655644241733,
+                          204.25484606613455
+                        ],
+                        "centroidError": 0.12628597136495653
+                      },
+                      {
+                        "marker": 2,
+                        "area": 877,
+                        "centroid": [
+                          296.9116305587229,
+                          70.7690992018244
+                        ],
+                        "centroidError": 0.11528357084455776
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 4,
+                    "nonBlack": 3065,
+                    "contained": 3065,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 1022,
+                        "centroid": [
+                          381.24461839530335,
+                          187.16634050880626
+                        ],
+                        "centroidError": 0.03081943350784952
+                      },
+                      {
+                        "marker": 1,
+                        "area": 1020,
+                        "centroid": [
+                          274.3637254901961,
+                          298.5529411764706
+                        ],
+                        "centroidError": 0.034966536692546686
+                      },
+                      {
+                        "marker": 2,
+                        "area": 1023,
+                        "centroid": [
+                          275.1813294232649,
+                          121.28103616813294
+                        ],
+                        "centroidError": 0.06050239861101841
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 5,
+                    "nonBlack": 2971,
+                    "contained": 2971,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 992,
+                        "centroid": [
+                          336.8195564516129,
+                          111.1491935483871
+                        ],
+                        "centroidError": 0.042138073405666755
+                      },
+                      {
+                        "marker": 1,
+                        "area": 990,
+                        "centroid": [
+                          336.2262626262626,
+                          288.8363636363636
+                        ],
+                        "centroidError": 0.11750114957411052
+                      },
+                      {
+                        "marker": 2,
+                        "area": 989,
+                        "centroid": [
+                          197.58796764408493,
+                          213.4423660262892
+                        ],
+                        "centroidError": 0.05695126420948208
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 6,
+                    "nonBlack": 3065,
+                    "contained": 3065,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 1022,
+                        "centroid": [
+                          283.16340508806263,
+                          71.83463796477496
+                        ],
+                        "centroidError": 0.023035127150056105
+                      },
+                      {
+                        "marker": 1,
+                        "area": 1022,
+                        "centroid": [
+                          364.95303326810176,
+                          232.2289628180039
+                        ],
+                        "centroidError": 0.01799834712413555
+                      },
+                      {
+                        "marker": 2,
+                        "area": 1021,
+                        "centroid": [
+                          194.5499510284035,
+                          210.14250734573946
+                        ],
+                        "centroidError": 0.009509826289622025
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 7,
+                    "nonBlack": 2938,
+                    "contained": 2938,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 979,
+                        "centroid": [
+                          282.60316649642493,
+                          67.9688457609806
+                        ],
+                        "centroidError": 0.00973490191292568
+                      },
+                      {
+                        "marker": 1,
+                        "area": 980,
+                        "centroid": [
+                          365.1173469387755,
+                          206.35408163265305
+                        ],
+                        "centroidError": 0.013750213680070402
+                      },
+                      {
+                        "marker": 2,
+                        "area": 979,
+                        "centroid": [
+                          194.64096016343208,
+                          163.77477017364657
+                        ],
+                        "centroidError": 0.017297956898865725
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 8,
+                    "nonBlack": 2934,
+                    "contained": 2934,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 980,
+                        "centroid": [
+                          300.1704081632653,
+                          72.38367346938776
+                        ],
+                        "centroidError": 0.03254814165186868
+                      },
+                      {
+                        "marker": 1,
+                        "area": 981,
+                        "centroid": [
+                          350.0270132517839,
+                          218.80173292558612
+                        ],
+                        "centroidError": 0.026968416432074465
+                      },
+                      {
+                        "marker": 2,
+                        "area": 973,
+                        "centroid": [
+                          181.19270298047277,
+                          155.084789311408
+                        ],
+                        "centroidError": 0.017620983961966083
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 9,
+                    "nonBlack": 2763,
+                    "contained": 2763,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 921,
+                        "centroid": [
+                          320.46416938110747,
+                          81.42942453854506
+                        ],
+                        "centroidError": 0.022975368649069447
+                      },
+                      {
+                        "marker": 1,
+                        "area": 921,
+                        "centroid": [
+                          323.6932681867535,
+                          231.8984799131379
+                        ],
+                        "centroidError": 0.03910702029500515
+                      },
+                      {
+                        "marker": 2,
+                        "area": 921,
+                        "centroid": [
+                          168.52280130293158,
+                          141.30238870792616
+                        ],
+                        "centroidError": 0.03180859539353472
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 10,
+                    "nonBlack": 2853,
+                    "contained": 2853,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 952,
+                        "centroid": [
+                          332.64180672268907,
+                          90.1155462184874
+                        ],
+                        "centroidError": 0.07160346817668194
+                      },
+                      {
+                        "marker": 1,
+                        "area": 949,
+                        "centroid": [
+                          300.2744994731296,
+                          238.57797681770285
+                        ],
+                        "centroidError": 0.06274758987495528
+                      },
+                      {
+                        "marker": 2,
+                        "area": 952,
+                        "centroid": [
+                          163.5,
+                          130
+                        ],
+                        "centroidError": 0.03140937131014265
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 11,
+                    "nonBlack": 2853,
+                    "contained": 2853,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 952,
+                        "centroid": [
+                          332.64180672268907,
+                          90.1155462184874
+                        ],
+                        "centroidError": 0.07160346817668194
+                      },
+                      {
+                        "marker": 1,
+                        "area": 949,
+                        "centroid": [
+                          300.2744994731296,
+                          238.57797681770285
+                        ],
+                        "centroidError": 0.06274758987495528
+                      },
+                      {
+                        "marker": 2,
+                        "area": 952,
+                        "centroid": [
+                          163.5,
+                          130
+                        ],
+                        "centroidError": 0.03140937131014265
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ],
+          "skillLoaded": false,
+          "sceneReference": {
+            "path": "/home/vercel-sandbox/.agents/skills/vgpu/scene.md",
+            "expectedSha256": "338c104663b076841b96c2f050fe39cbab36a53d8054ef1635943aaf4585f21c",
+            "sha256": "338c104663b076841b96c2f050fe39cbab36a53d8054ef1635943aaf4585f21c",
+            "matches": true
+          },
+          "dependencies": {
+            "math": {
+              "present": false,
+              "version": null
+            },
+            "wgpuMatrix": {
+              "present": true,
+              "version": "3.4.2"
+            },
+            "three": {
+              "present": false,
+              "version": null
+            }
+          }
+        }
+      ],
+      "sourceIdentity": [
+        {
+          "stage": 1,
+          "eligible": true,
+          "executedManifest": {
+            "status": "matched",
+            "path": "apps/agent-evals/.work/snapshots/wrun_01M3WG9N62QG6TDF70GM86V5B2/turns/turn_0/evt_01M3WGRD6P4D321PVES6QRZ104/verify/source-manifest.txt",
+            "cwd": "/var/tmp/vgpu-scene-4d343ff6-61a3-4240-ab6b-83477e295f70/app",
+            "exactGradedSourceIdentity": true,
+            "issues": [],
+            "errors": []
+          },
+          "files": [
+            {
+              "name": "package-lock.json",
+              "kind": "package-metadata",
+              "provenance": "agent-authored",
+              "sha256": "f28868073023d44653e11aee6540ff5dd07e6d717790c55275d725573b6cfe4c",
+              "bytes": 7122,
+              "executedSha256": "f28868073023d44653e11aee6540ff5dd07e6d717790c55275d725573b6cfe4c",
+              "executedValidation": "matched"
+            },
+            {
+              "name": "package.json",
+              "kind": "package-metadata",
+              "provenance": "agent-authored",
+              "sha256": "88d225ccb7efc2ded49992481bc2c991bbe435fb35bb7e15a96fb1335e92463d",
+              "bytes": 425,
+              "executedSha256": "88d225ccb7efc2ded49992481bc2c991bbe435fb35bb7e15a96fb1335e92463d",
+              "executedValidation": "matched"
+            },
+            {
+              "name": "render.mjs",
+              "kind": "code",
+              "provenance": "agent-authored",
+              "sha256": "034096b707724e9ed735e8cde1b025b84e665d656364231a5ff186ac4e5c020d",
+              "bytes": 6242,
+              "executedSha256": "034096b707724e9ed735e8cde1b025b84e665d656364231a5ff186ac4e5c020d",
+              "executedValidation": "matched"
+            }
+          ]
+        },
+        {
+          "stage": 2,
+          "eligible": true,
+          "executedManifest": {
+            "status": "matched",
+            "path": "apps/agent-evals/.work/snapshots/wrun_01M3WG9N62QG6TDF70GM86V5B2/turns/turn_1/evt_01M3WGTYCPT6CERHQ46ZJ426J4/verify/source-manifest.txt",
+            "cwd": "/var/tmp/vgpu-scene-e4acf427-7082-4642-a131-822efa6b24c6/app",
+            "exactGradedSourceIdentity": true,
+            "issues": [],
+            "errors": []
+          },
+          "files": [
+            {
+              "name": "package-lock.json",
+              "kind": "package-metadata",
+              "provenance": "agent-authored",
+              "sha256": "f28868073023d44653e11aee6540ff5dd07e6d717790c55275d725573b6cfe4c",
+              "bytes": 7122,
+              "executedSha256": "f28868073023d44653e11aee6540ff5dd07e6d717790c55275d725573b6cfe4c",
+              "executedValidation": "matched"
+            },
+            {
+              "name": "package.json",
+              "kind": "package-metadata",
+              "provenance": "agent-authored",
+              "sha256": "88d225ccb7efc2ded49992481bc2c991bbe435fb35bb7e15a96fb1335e92463d",
+              "bytes": 425,
+              "executedSha256": "88d225ccb7efc2ded49992481bc2c991bbe435fb35bb7e15a96fb1335e92463d",
+              "executedValidation": "matched"
+            },
+            {
+              "name": "render.mjs",
+              "kind": "code",
+              "provenance": "agent-authored",
+              "sha256": "e26347e00edddfe54e50e327c864026b308ff8f4243b518d96c335bad0bdaca4",
+              "bytes": 6611,
+              "executedSha256": "e26347e00edddfe54e50e327c864026b308ff8f4243b518d96c335bad0bdaca4",
+              "executedValidation": "matched"
+            }
+          ]
+        }
+      ],
+      "sourceReview": {
+        "provider": "handwritten",
+        "reviewer": "Subharness repo:reviewer",
+        "sessionId": "ses_99ff072d-5a1d-4101-83fb-ba8e8afbc9af",
+        "evidence": ".context/work/scene-skill-split-eval/source-review/review-1.log",
+        "evidenceSha256": "94aeff7e26fff8785bd04739d8fea05d93af351edfefd26c3eac7624720e1e12",
+        "resultsAndTranscriptsWithheld": true,
+        "status": "completed",
+        "inContractDefects": [],
+        "notes": [
+          "Stage 1 already clamps; stage 2 makes endpoint handling explicit."
+        ]
+      },
+      "evidence": {
+        "events": "apps/agent-evals/.eve/evals/2026-10-01T20-00-10/evals/scene-quaternion-keyframes.events.ndjson",
+        "eventsSha256": "be585603f9feb913f8c78e33cedd836574db8e16c2a25b8dd943ecbc8a231de7",
+        "sceneRun": "apps/agent-evals/.work/snapshots/wrun_01M3WG9N62QG6TDF70GM86V5B2/scene-run.json",
+        "sceneRunSha256": "7b8314c4d2af2670bde4dacaa7fa84ad262b16976632b7b2587d4c260a6cfc3a",
+        "log": ".context/work/scene-skill-split-eval/runs/1.log",
+        "logSha256": "71e250890b952b5848b4182b1ac224552618741212570fb47726b2f9db15be9d"
+      }
+    },
+    {
+      "slot": 2,
+      "sessionId": "wrun_01M3WGWPWW5HXS8QA1EKC75NJ5",
+      "codeId": "code-54f95982",
+      "startedAt": "2026-10-01T20:00:12.376Z",
+      "endedAt": "2026-10-01T20:07:57.673Z",
+      "exitCode": 0,
+      "classification": "pass",
+      "integrityError": null,
+      "model": "anthropic/claude-sonnet-5",
+      "steps": 54,
+      "usage": {
+        "costUsd": 2.0689432,
+        "inputTokens": 5472151,
+        "outputTokens": 28942,
+        "cacheReadTokens": 5174261,
+        "cacheWriteTokens": 297782
+      },
+      "skillDelivery": {
+        "scope": "scene-quaternion-keyframes-only",
+        "name": "vgpu",
+        "advertised": true,
+        "advertisedFullMarkdownSha256": "441abc5ebcae157ec05ca3bbb53cec3309b1c5b3144fef04b75f62518c9772ac",
+        "expectedAdvertisedFullMarkdownSha256": "441abc5ebcae157ec05ca3bbb53cec3309b1c5b3144fef04b75f62518c9772ac",
+        "observedAdvertisedFullMarkdownSha256": "441abc5ebcae157ec05ca3bbb53cec3309b1c5b3144fef04b75f62518c9772ac",
+        "materializedPath": "/home/vercel-sandbox/.agents/skills/vgpu/SKILL.md",
+        "materializedPresent": true,
+        "materializedSha256": "441abc5ebcae157ec05ca3bbb53cec3309b1c5b3144fef04b75f62518c9772ac",
+        "materializedOutsideWorkspace": true,
+        "advertisementIntegrity": "pass",
+        "advertisementError": null,
+        "expectedSceneReferenceSha256": "338c104663b076841b96c2f050fe39cbab36a53d8054ef1635943aaf4585f21c",
+        "expectedLoadedBodySha256": "e55f965bb0f312d008ce3157f7803e11e8d7138511ecfbcd3551f2bd9c08d6be",
+        "generatorSha256": "ce456b3c1bbfde38dbbd5d49e0b9da6a8c5cc3705a12e95fb9dbe2255bfd156a",
+        "packageGitHead": "c583738883c98c00baa7908cc1c102a3166aef3b",
+        "workspaceGitHead": "c583738883c98c00baa7908cc1c102a3166aef3b",
+        "workspaceDirty": true,
+        "harnessAggregateSha256": "6aacf9bcef1ba8e3a53a7132b2ddb804b709e190e6ec259c7595303cc95d89ea",
+        "harnessFiles": [
+          {
+            "path": "apps/agent-evals/agent/hooks/finalize-turn.ts",
+            "sha256": "e15e74c8269429e951e7158086c9c10f07f2477395361072376cebfd3ccbed8d"
+          },
+          {
+            "path": "apps/agent-evals/agent/lib/scene-keyframe-dependencies.ts",
+            "sha256": "c3fc82d3f99437192768938d889b4c1ed45fb9bd9040c01ce656aecd7f96d3cb"
+          },
+          {
+            "path": "apps/agent-evals/agent/sandbox/sandbox.ts",
+            "sha256": "dc2d4f46a116f5fe996c2c0b464826b3f9ff0dbe08f028023849ec522af52268"
+          },
+          {
+            "path": "apps/agent-evals/agent/skills/vgpu.ts",
+            "sha256": "e0646f1a9fe050767aa7c388733e27e41f5111aaaa667ebc092e07df15da34f1"
+          },
+          {
+            "path": "apps/agent-evals/agent/sandbox/tasks/scene-quaternion-keyframes/contract.md",
+            "sha256": "8051ee6a46943390d14190868eab88fb4633ffe340913fc94283b581d3983db8"
+          },
+          {
+            "path": "apps/agent-evals/agent/sandbox/tasks/scene-quaternion-keyframes/example-input.json",
+            "sha256": "3f65e3b4dac0087bd4c11d46f72314a55fbc256185690a4f26d9a24da5db135b"
+          },
+          {
+            "path": "apps/agent-evals/agent/sandbox/tasks/scene-quaternion-keyframes/package.json",
+            "sha256": "a90fc33418afa2b9cbf4768524b021135b965ecdf993457505bfae3ac44a8428"
+          },
+          {
+            "path": "apps/agent-evals/controls/scene-keyframes-reference.mjs",
+            "sha256": "a2eb092d5eeec89d477446a6618c0fbcb486aac188ff9e233ec2bdc9373e1009"
+          },
+          {
+            "path": "apps/agent-evals/controls/scene-keyframes-sphere.wgsl",
+            "sha256": "66d3ef0ffa6b467ddf86b11fabaf082eb9c6a431031578c6350191c88b6ec884"
+          },
+          {
+            "path": "apps/agent-evals/evals/lib/scene-contracts.mjs",
+            "sha256": "5a5b6ae26f8a6f33c89bd5abb5ab0f21cbe9a93a4769db14606c5b2299257966"
+          },
+          {
+            "path": "apps/agent-evals/evals/lib/scene-eval.ts",
+            "sha256": "e853b42e4313bca8e163441997467d9eb0085cc8532420df083d2533dfc410f3"
+          },
+          {
+            "path": "apps/agent-evals/evals/lib/scene-keyframes.mjs",
+            "sha256": "86ef6f4fda38767c632f816c5b2461ef424f1941e266db7461b7f74f7b8d41d4"
+          },
+          {
+            "path": "apps/agent-evals/evals/scene-quaternion-keyframes.eval.ts",
+            "sha256": "bd46c0eec3f2fc5428d1235ccad9ec330d4424d858c7393248834e3a2ff4d1de"
+          },
+          {
+            "path": "apps/agent-evals/scripts/scene-controls.mjs",
+            "sha256": "6a1c42aabf254cf6dcccfee1d2af38389f45075b2c087aa0467cf9902ddc6d86"
+          },
+          {
+            "path": "apps/agent-evals/scripts/scene-skill-isolation.mjs",
+            "sha256": "d78821a30dd2095d6f9e08554b26f25175c330e110f83a289d03e6c0a4a3a05d"
+          },
+          {
+            "path": "apps/agent-evals/tests/scene-keyframes.test.mjs",
+            "sha256": "4e8b55454a29e8faaad0207052a5f730c9eb6c28e7cdfadd42dd2220c3ddd149"
+          },
+          {
+            "path": "scripts/agent-evals.mjs",
+            "sha256": "8ef5460eec3d82ed5dc29fc030dbb88741c37f41110a6d4f5b42606c6c0f3ecf"
+          }
+        ],
+        "delivery": "SKILL.md and scene.md; blender resources not delivered",
+        "sceneReference": {
+          "path": "/home/vercel-sandbox/.agents/skills/vgpu/scene.md",
+          "expectedSha256": "338c104663b076841b96c2f050fe39cbab36a53d8054ef1635943aaf4585f21c",
+          "sha256": "338c104663b076841b96c2f050fe39cbab36a53d8054ef1635943aaf4585f21c",
+          "matches": true
+        }
+      },
+      "skillLoadCalls": [],
+      "sceneReferenceAccesses": [],
+      "readFileCalls": [
+        {
+          "turnId": "turn_0",
+          "callId": "toolu_01Gk3Af3e6TuchwzqXsmuFB5",
+          "input": {
+            "filePath": "/workspace/contract.md"
+          }
+        },
+        {
+          "turnId": "turn_0",
+          "callId": "toolu_016GEu6hLap3iiQg1E7p8e7s",
+          "input": {
+            "filePath": "/workspace/node_modules/vgpu/README.md"
+          }
+        },
+        {
+          "turnId": "turn_1",
+          "callId": "toolu_01XejRbnTDKWq3i54f2NddB5",
+          "input": {
+            "filePath": "/workspace/render.mjs"
+          }
+        },
+        {
+          "turnId": "turn_1",
+          "callId": "toolu_01SPfUwUweoNNgEEazEHEX2Q",
+          "input": {
+            "filePath": "/workspace/render.mjs",
+            "limit": 19,
+            "offset": 98
+          }
+        },
+        {
+          "turnId": "turn_1",
+          "callId": "toolu_01KdQxqQNLAtVL1cFprgW9tx",
+          "input": {
+            "filePath": "/workspace/render.mjs",
+            "limit": 9,
+            "offset": 98
+          }
+        }
+      ],
+      "cliMathGuideExposure": {
+        "tier": "none",
+        "sections": [],
+        "firstContent": null,
+        "perTurn": [
+          {
+            "turnId": "turn_0",
+            "tier": "none",
+            "sections": [],
+            "firstContent": null
+          },
+          {
+            "turnId": "turn_1",
+            "tier": "none",
+            "sections": [],
+            "firstContent": null
+          }
+        ],
+        "deliveries": []
+      },
+      "packageInstallAttempts": [],
+      "initialDependencies": {
+        "math": {
+          "present": false,
+          "version": null
+        },
+        "wgpuMatrix": {
+          "present": true,
+          "version": "3.4.2"
+        },
+        "three": {
+          "present": false,
+          "version": null
+        }
+      },
+      "initialDependencySnapshotSha256": "7895398c072eccca0d7e00e01e2dc7cc3afabcab6909875fac6e50948bb97145",
+      "stages": [
+        {
+          "stage": 1,
+          "outcome": "pass",
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": true,
+              "metrics": {
+                "errors": []
+              }
+            },
+            {
+              "name": "artifacts",
+              "ok": true,
+              "metrics": {
+                "frames": 9
+              }
+            },
+            {
+              "name": "state",
+              "ok": true,
+              "metrics": {
+                "maximumAbsoluteError": 2.834612200519615e-08,
+                "failingFrames": []
+              }
+            },
+            {
+              "name": "pixels",
+              "ok": true,
+              "metrics": {
+                "failingFrames": [],
+                "frames": [
+                  {
+                    "frame": 1,
+                    "nonBlack": 3379,
+                    "contained": 3379,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 1126,
+                        "centroid": [
+                          354.02131438721136,
+                          233.16429840142095
+                        ],
+                        "centroidError": 0.04145432436632534
+                      },
+                      {
+                        "marker": 1,
+                        "area": 1127,
+                        "centroid": [
+                          256.00842945874,
+                          81.17613132209405
+                        ],
+                        "centroidError": 0.028651087584044513
+                      },
+                      {
+                        "marker": 2,
+                        "area": 1126,
+                        "centroid": [
+                          173.89076376554175,
+                          241.00355239786856
+                        ],
+                        "centroidError": 0.16918875952896664
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 2,
+                    "nonBlack": 2744,
+                    "contained": 2744,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 914,
+                        "centroid": [
+                          359.1531728665208,
+                          226.77352297592998
+                        ],
+                        "centroidError": 0.06289994501623652
+                      },
+                      {
+                        "marker": 1,
+                        "area": 914,
+                        "centroid": [
+                          298.3818380743983,
+                          71.17833698030634
+                        ],
+                        "centroidError": 0.07013655589230457
+                      },
+                      {
+                        "marker": 2,
+                        "area": 916,
+                        "centroid": [
+                          193.2052401746725,
+                          167.70633187772927
+                        ],
+                        "centroidError": 0.03250018343361366
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 3,
+                    "nonBlack": 2632,
+                    "contained": 2632,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 878,
+                        "centroid": [
+                          367.4601366742597,
+                          231.1127562642369
+                        ],
+                        "centroidError": 0.10896372853220661
+                      },
+                      {
+                        "marker": 1,
+                        "area": 877,
+                        "centroid": [
+                          304.0655644241733,
+                          204.25484606613455
+                        ],
+                        "centroidError": 0.12628597136495653
+                      },
+                      {
+                        "marker": 2,
+                        "area": 877,
+                        "centroid": [
+                          296.9116305587229,
+                          70.7690992018244
+                        ],
+                        "centroidError": 0.11528357084455776
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 4,
+                    "nonBlack": 3278,
+                    "contained": 3278,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 1091,
+                        "centroid": [
+                          365.4193400549954,
+                          240.34692942254813
+                        ],
+                        "centroidError": 0.1384919731263942
+                      },
+                      {
+                        "marker": 1,
+                        "area": 1096,
+                        "centroid": [
+                          257.73631386861314,
+                          277.86678832116786
+                        ],
+                        "centroidError": 0.13814797117343502
+                      },
+                      {
+                        "marker": 2,
+                        "area": 1091,
+                        "centroid": [
+                          322.56324472960586,
+                          110.28368469294226
+                        ],
+                        "centroidError": 0.059124774180788583
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 5,
+                    "nonBlack": 3065,
+                    "contained": 3065,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 1022,
+                        "centroid": [
+                          381.24461839530335,
+                          187.16634050880626
+                        ],
+                        "centroidError": 0.03081943350784952
+                      },
+                      {
+                        "marker": 1,
+                        "area": 1020,
+                        "centroid": [
+                          274.3637254901961,
+                          298.5529411764706
+                        ],
+                        "centroidError": 0.034966536692546686
+                      },
+                      {
+                        "marker": 2,
+                        "area": 1023,
+                        "centroid": [
+                          275.1813294232649,
+                          121.28103616813294
+                        ],
+                        "centroidError": 0.06050239861101841
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 6,
+                    "nonBlack": 2971,
+                    "contained": 2971,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 992,
+                        "centroid": [
+                          336.8195564516129,
+                          111.1491935483871
+                        ],
+                        "centroidError": 0.042138073405666755
+                      },
+                      {
+                        "marker": 1,
+                        "area": 990,
+                        "centroid": [
+                          336.2262626262626,
+                          288.8363636363636
+                        ],
+                        "centroidError": 0.11750114957411052
+                      },
+                      {
+                        "marker": 2,
+                        "area": 989,
+                        "centroid": [
+                          197.58796764408493,
+                          213.4423660262892
+                        ],
+                        "centroidError": 0.05695126420948208
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 7,
+                    "nonBlack": 3037,
+                    "contained": 3037,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 1011,
+                        "centroid": [
+                          283.797725024728,
+                          115.37833827893175
+                        ],
+                        "centroidError": 0.03526311294291165
+                      },
+                      {
+                        "marker": 1,
+                        "area": 1013,
+                        "centroid": [
+                          364.4930898321816,
+                          256.9846989141165
+                        ],
+                        "centroidError": 0.02437154880271383
+                      },
+                      {
+                        "marker": 2,
+                        "area": 1013,
+                        "centroid": [
+                          194.06367226061204,
+                          271.32922013820337
+                        ],
+                        "centroidError": 0.04121900264958635
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 8,
+                    "nonBlack": 3065,
+                    "contained": 3065,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 1022,
+                        "centroid": [
+                          283.16340508806263,
+                          71.83463796477496
+                        ],
+                        "centroidError": 0.023035127150056105
+                      },
+                      {
+                        "marker": 1,
+                        "area": 1022,
+                        "centroid": [
+                          364.95303326810176,
+                          232.2289628180039
+                        ],
+                        "centroidError": 0.01799834712413555
+                      },
+                      {
+                        "marker": 2,
+                        "area": 1021,
+                        "centroid": [
+                          194.5499510284035,
+                          210.14250734573946
+                        ],
+                        "centroidError": 0.009509826289622025
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 9,
+                    "nonBlack": 2938,
+                    "contained": 2938,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 979,
+                        "centroid": [
+                          282.60316649642493,
+                          67.9688457609806
+                        ],
+                        "centroidError": 0.00973490191292568
+                      },
+                      {
+                        "marker": 1,
+                        "area": 980,
+                        "centroid": [
+                          365.1173469387755,
+                          206.35408163265305
+                        ],
+                        "centroidError": 0.013750213680070402
+                      },
+                      {
+                        "marker": 2,
+                        "area": 979,
+                        "centroid": [
+                          194.64096016343208,
+                          163.77477017364657
+                        ],
+                        "centroidError": 0.017297956898865725
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ],
+          "skillLoaded": false,
+          "sceneReference": {
+            "path": "/home/vercel-sandbox/.agents/skills/vgpu/scene.md",
+            "expectedSha256": "338c104663b076841b96c2f050fe39cbab36a53d8054ef1635943aaf4585f21c",
+            "sha256": "338c104663b076841b96c2f050fe39cbab36a53d8054ef1635943aaf4585f21c",
+            "matches": true
+          },
+          "dependencies": {
+            "math": {
+              "present": false,
+              "version": null
+            },
+            "wgpuMatrix": {
+              "present": true,
+              "version": "3.4.2"
+            },
+            "three": {
+              "present": false,
+              "version": null
+            }
+          }
+        },
+        {
+          "stage": 2,
+          "outcome": "pass",
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": true,
+              "metrics": {
+                "errors": []
+              }
+            },
+            {
+              "name": "artifacts",
+              "ok": true,
+              "metrics": {
+                "frames": 11
+              }
+            },
+            {
+              "name": "state",
+              "ok": true,
+              "metrics": {
+                "maximumAbsoluteError": 2.809596832964445e-08,
+                "failingFrames": []
+              }
+            },
+            {
+              "name": "pixels",
+              "ok": true,
+              "metrics": {
+                "failingFrames": [],
+                "frames": [
+                  {
+                    "frame": 1,
+                    "nonBlack": 3379,
+                    "contained": 3379,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 1126,
+                        "centroid": [
+                          354.02131438721136,
+                          233.16429840142095
+                        ],
+                        "centroidError": 0.04145432436632534
+                      },
+                      {
+                        "marker": 1,
+                        "area": 1127,
+                        "centroid": [
+                          256.00842945874,
+                          81.17613132209405
+                        ],
+                        "centroidError": 0.028651087584044513
+                      },
+                      {
+                        "marker": 2,
+                        "area": 1126,
+                        "centroid": [
+                          173.89076376554175,
+                          241.00355239786856
+                        ],
+                        "centroidError": 0.16918875952896664
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 2,
+                    "nonBlack": 3379,
+                    "contained": 3379,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 1126,
+                        "centroid": [
+                          354.02131438721136,
+                          233.16429840142095
+                        ],
+                        "centroidError": 0.04145432436632534
+                      },
+                      {
+                        "marker": 1,
+                        "area": 1127,
+                        "centroid": [
+                          256.00842945874,
+                          81.17613132209405
+                        ],
+                        "centroidError": 0.028651087584044513
+                      },
+                      {
+                        "marker": 2,
+                        "area": 1126,
+                        "centroid": [
+                          173.89076376554175,
+                          241.00355239786856
+                        ],
+                        "centroidError": 0.16918875952896664
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 3,
+                    "nonBlack": 2632,
+                    "contained": 2632,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 878,
+                        "centroid": [
+                          367.4601366742597,
+                          231.1127562642369
+                        ],
+                        "centroidError": 0.10896372853220661
+                      },
+                      {
+                        "marker": 1,
+                        "area": 877,
+                        "centroid": [
+                          304.0655644241733,
+                          204.25484606613455
+                        ],
+                        "centroidError": 0.12628597136495653
+                      },
+                      {
+                        "marker": 2,
+                        "area": 877,
+                        "centroid": [
+                          296.9116305587229,
+                          70.7690992018244
+                        ],
+                        "centroidError": 0.11528357084455776
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 4,
+                    "nonBlack": 3065,
+                    "contained": 3065,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 1022,
+                        "centroid": [
+                          381.24461839530335,
+                          187.16634050880626
+                        ],
+                        "centroidError": 0.03081943350784952
+                      },
+                      {
+                        "marker": 1,
+                        "area": 1020,
+                        "centroid": [
+                          274.3637254901961,
+                          298.5529411764706
+                        ],
+                        "centroidError": 0.034966536692546686
+                      },
+                      {
+                        "marker": 2,
+                        "area": 1023,
+                        "centroid": [
+                          275.1813294232649,
+                          121.28103616813294
+                        ],
+                        "centroidError": 0.06050239861101841
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 5,
+                    "nonBlack": 2971,
+                    "contained": 2971,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 992,
+                        "centroid": [
+                          336.8195564516129,
+                          111.1491935483871
+                        ],
+                        "centroidError": 0.042138073405666755
+                      },
+                      {
+                        "marker": 1,
+                        "area": 990,
+                        "centroid": [
+                          336.2262626262626,
+                          288.8363636363636
+                        ],
+                        "centroidError": 0.11750114957411052
+                      },
+                      {
+                        "marker": 2,
+                        "area": 989,
+                        "centroid": [
+                          197.58796764408493,
+                          213.4423660262892
+                        ],
+                        "centroidError": 0.05695126420948208
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 6,
+                    "nonBlack": 3065,
+                    "contained": 3065,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 1022,
+                        "centroid": [
+                          283.16340508806263,
+                          71.83463796477496
+                        ],
+                        "centroidError": 0.023035127150056105
+                      },
+                      {
+                        "marker": 1,
+                        "area": 1022,
+                        "centroid": [
+                          364.95303326810176,
+                          232.2289628180039
+                        ],
+                        "centroidError": 0.01799834712413555
+                      },
+                      {
+                        "marker": 2,
+                        "area": 1021,
+                        "centroid": [
+                          194.5499510284035,
+                          210.14250734573946
+                        ],
+                        "centroidError": 0.009509826289622025
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 7,
+                    "nonBlack": 2938,
+                    "contained": 2938,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 979,
+                        "centroid": [
+                          282.60316649642493,
+                          67.9688457609806
+                        ],
+                        "centroidError": 0.00973490191292568
+                      },
+                      {
+                        "marker": 1,
+                        "area": 980,
+                        "centroid": [
+                          365.1173469387755,
+                          206.35408163265305
+                        ],
+                        "centroidError": 0.013750213680070402
+                      },
+                      {
+                        "marker": 2,
+                        "area": 979,
+                        "centroid": [
+                          194.64096016343208,
+                          163.77477017364657
+                        ],
+                        "centroidError": 0.017297956898865725
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 8,
+                    "nonBlack": 2934,
+                    "contained": 2934,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 980,
+                        "centroid": [
+                          300.1704081632653,
+                          72.38367346938776
+                        ],
+                        "centroidError": 0.03254814165186868
+                      },
+                      {
+                        "marker": 1,
+                        "area": 981,
+                        "centroid": [
+                          350.0270132517839,
+                          218.80173292558612
+                        ],
+                        "centroidError": 0.026968416432074465
+                      },
+                      {
+                        "marker": 2,
+                        "area": 973,
+                        "centroid": [
+                          181.19270298047277,
+                          155.084789311408
+                        ],
+                        "centroidError": 0.017620983961966083
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 9,
+                    "nonBlack": 2763,
+                    "contained": 2763,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 921,
+                        "centroid": [
+                          320.46416938110747,
+                          81.42942453854506
+                        ],
+                        "centroidError": 0.022975368649069447
+                      },
+                      {
+                        "marker": 1,
+                        "area": 921,
+                        "centroid": [
+                          323.6932681867535,
+                          231.8984799131379
+                        ],
+                        "centroidError": 0.03910702029500515
+                      },
+                      {
+                        "marker": 2,
+                        "area": 921,
+                        "centroid": [
+                          168.52280130293158,
+                          141.30238870792616
+                        ],
+                        "centroidError": 0.03180859539353472
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 10,
+                    "nonBlack": 2853,
+                    "contained": 2853,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 952,
+                        "centroid": [
+                          332.64180672268907,
+                          90.1155462184874
+                        ],
+                        "centroidError": 0.07160346817668194
+                      },
+                      {
+                        "marker": 1,
+                        "area": 949,
+                        "centroid": [
+                          300.2744994731296,
+                          238.57797681770285
+                        ],
+                        "centroidError": 0.06274758987495528
+                      },
+                      {
+                        "marker": 2,
+                        "area": 952,
+                        "centroid": [
+                          163.5,
+                          130
+                        ],
+                        "centroidError": 0.03140937131014265
+                      }
+                    ]
+                  },
+                  {
+                    "frame": 11,
+                    "nonBlack": 2853,
+                    "contained": 2853,
+                    "containedRatio": 1,
+                    "markers": [
+                      {
+                        "marker": 0,
+                        "area": 952,
+                        "centroid": [
+                          332.64180672268907,
+                          90.1155462184874
+                        ],
+                        "centroidError": 0.07160346817668194
+                      },
+                      {
+                        "marker": 1,
+                        "area": 949,
+                        "centroid": [
+                          300.2744994731296,
+                          238.57797681770285
+                        ],
+                        "centroidError": 0.06274758987495528
+                      },
+                      {
+                        "marker": 2,
+                        "area": 952,
+                        "centroid": [
+                          163.5,
+                          130
+                        ],
+                        "centroidError": 0.03140937131014265
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ],
+          "skillLoaded": false,
+          "sceneReference": {
+            "path": "/home/vercel-sandbox/.agents/skills/vgpu/scene.md",
+            "expectedSha256": "338c104663b076841b96c2f050fe39cbab36a53d8054ef1635943aaf4585f21c",
+            "sha256": "338c104663b076841b96c2f050fe39cbab36a53d8054ef1635943aaf4585f21c",
+            "matches": true
+          },
+          "dependencies": {
+            "math": {
+              "present": false,
+              "version": null
+            },
+            "wgpuMatrix": {
+              "present": true,
+              "version": "3.4.2"
+            },
+            "three": {
+              "present": false,
+              "version": null
+            }
+          }
+        }
+      ],
+      "sourceIdentity": [
+        {
+          "stage": 1,
+          "eligible": true,
+          "executedManifest": {
+            "status": "matched",
+            "path": "apps/agent-evals/.work/snapshots/wrun_01M3WGWPWW5HXS8QA1EKC75NJ5/turns/turn_0/evt_01M3WH6HCT4Y59Z1ZC6639YT17/verify/source-manifest.txt",
+            "cwd": "/var/tmp/vgpu-scene-66c33a8e-eba2-46d8-aad8-6d034342dad5/app",
+            "exactGradedSourceIdentity": true,
+            "issues": [],
+            "errors": []
+          },
+          "files": [
+            {
+              "name": "package-lock.json",
+              "kind": "package-metadata",
+              "provenance": "agent-authored",
+              "sha256": "f28868073023d44653e11aee6540ff5dd07e6d717790c55275d725573b6cfe4c",
+              "bytes": 7122,
+              "executedSha256": "f28868073023d44653e11aee6540ff5dd07e6d717790c55275d725573b6cfe4c",
+              "executedValidation": "matched"
+            },
+            {
+              "name": "package.json",
+              "kind": "package-metadata",
+              "provenance": "agent-authored",
+              "sha256": "88d225ccb7efc2ded49992481bc2c991bbe435fb35bb7e15a96fb1335e92463d",
+              "bytes": 425,
+              "executedSha256": "88d225ccb7efc2ded49992481bc2c991bbe435fb35bb7e15a96fb1335e92463d",
+              "executedValidation": "matched"
+            },
+            {
+              "name": "render.mjs",
+              "kind": "code",
+              "provenance": "agent-authored",
+              "sha256": "1ceca48003ebe1f8f7aa0eacb04c69254ae5996e51856bf3dd63eac027b9b682",
+              "bytes": 7164,
+              "executedSha256": "1ceca48003ebe1f8f7aa0eacb04c69254ae5996e51856bf3dd63eac027b9b682",
+              "executedValidation": "matched"
+            }
+          ]
+        },
+        {
+          "stage": 2,
+          "eligible": true,
+          "executedManifest": {
+            "status": "matched",
+            "path": "apps/agent-evals/.work/snapshots/wrun_01M3WGWPWW5HXS8QA1EKC75NJ5/turns/turn_1/evt_01M3WH97EBE9MHHBY9Z0BH6995/verify/source-manifest.txt",
+            "cwd": "/var/tmp/vgpu-scene-7921c251-3297-47e5-84f7-619adfe08114/app",
+            "exactGradedSourceIdentity": true,
+            "issues": [],
+            "errors": []
+          },
+          "files": [
+            {
+              "name": "package-lock.json",
+              "kind": "package-metadata",
+              "provenance": "agent-authored",
+              "sha256": "f28868073023d44653e11aee6540ff5dd07e6d717790c55275d725573b6cfe4c",
+              "bytes": 7122,
+              "executedSha256": "f28868073023d44653e11aee6540ff5dd07e6d717790c55275d725573b6cfe4c",
+              "executedValidation": "matched"
+            },
+            {
+              "name": "package.json",
+              "kind": "package-metadata",
+              "provenance": "agent-authored",
+              "sha256": "88d225ccb7efc2ded49992481bc2c991bbe435fb35bb7e15a96fb1335e92463d",
+              "bytes": 425,
+              "executedSha256": "88d225ccb7efc2ded49992481bc2c991bbe435fb35bb7e15a96fb1335e92463d",
+              "executedValidation": "matched"
+            },
+            {
+              "name": "render.mjs",
+              "kind": "code",
+              "provenance": "agent-authored",
+              "sha256": "da572c20f4b910d42c12a90a5cdd0b8e6a52e2350577d6f9132e4f72bd4e64ff",
+              "bytes": 7520,
+              "executedSha256": "da572c20f4b910d42c12a90a5cdd0b8e6a52e2350577d6f9132e4f72bd4e64ff",
+              "executedValidation": "matched"
+            }
+          ]
+        }
+      ],
+      "sourceReview": {
+        "provider": "handwritten",
+        "reviewer": "Subharness repo:reviewer",
+        "sessionId": "ses_99ff072d-5a1d-4101-83fb-ba8e8afbc9af",
+        "evidence": ".context/work/scene-skill-split-eval/source-review/review-2.log",
+        "evidenceSha256": "9e70bdbe3ce8b86867c21322eee8c9b1c18ca881be692100c34ee0d0785c2967",
+        "resultsAndTranscriptsWithheld": true,
+        "status": "completed",
+        "inContractDefects": [],
+        "notes": [
+          "Stage 2 changes comments only; stage 1 already clamps.",
+          "Near-parallel nlerp fallback is an approximation to constant angular speed, within the evaluation tolerance."
+        ]
+      },
+      "evidence": {
+        "events": "apps/agent-evals/.eve/evals/2026-10-01T20-07-57/evals/scene-quaternion-keyframes.events.ndjson",
+        "eventsSha256": "f9e289161e505f8405873181833073e1871be924a2542cc4abf6fa6e12f7e874",
+        "sceneRun": "apps/agent-evals/.work/snapshots/wrun_01M3WGWPWW5HXS8QA1EKC75NJ5/scene-run.json",
+        "sceneRunSha256": "ec1580d9bc3f6bc09ce1195132c7cb839051f52bc56b712e392fa1753271c0fd",
+        "log": ".context/work/scene-skill-split-eval/runs/2.log",
+        "logSha256": "2a6f30a6cc64f93ed6a19b09bda67e176f347bbb3e9839f27663052834aac6dc"
+      }
+    }
+  ],
+  "operationalNotes": [
+    "Eve emitted MaxListenersExceededWarning messages. Both sessions completed with exit 0 and no retained session/turn/step failure events.",
+    "After slot 2 printed its passing summary, Eve logged a queue HTTP 503 / socket hang up. Both stage receipts, exact skill materialization, source identity and exported artifacts were complete; retained as an operational warning, not a discarded or retried sample.",
+    "During slot 2, user requested workspace-only disk cleanup. Disposable previous control installs, pre-current-day Eve runtime snapshots and an inactive prior Next build were removed. Frozen run files and all current eval evidence were preserved; final integrity validation passed."
+  ],
+  "limitations": [
+    "Two fresh sessions provide observations, not a reliable adoption rate or evidence of improvement.",
+    "Neither agent consumed the split skill, so this cohort did not exercise its SKILL.md → scene.md path.",
+    "Math is optional; correct handwritten interpolation is accepted. No conclusion that installation would improve correctness.",
+    "The task renders one rotating body with three markers, not a large hierarchical scene or ECS integration.",
+    "Stage-one sources already clamp outside the range according to static review. No carry-forward replay was run; no measured adaptation benefit claimed.",
+    "Software Mesa rendering verifies function, not hardware performance."
+  ],
+  "recommendedNextExperiment": "Keep this spontaneous-discovery task unchanged. Add a separate task condition that explicitly asks the agent to follow the vgpu skill, without naming math or scene.md, to test the index-to-reference journey."
+}

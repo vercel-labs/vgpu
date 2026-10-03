@@ -1,0 +1,19 @@
+{
+  "extends": "../../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "baseUrl": "../../../..",
+    "paths": {
+      "vgpu/scene": ["packages/vgpu-api/src/scene.ts"],
+      "vgpu/scene/gpu": ["packages/vgpu-api/src/scene/gpu.ts"]
+    }
+  },
+  "include": [
+    "../../src/**/*.ts",
+    "scene-exports-types.ts"
+  ]
+}

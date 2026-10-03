@@ -257,3 +257,4 @@ const cube = geometry(gpu, box({ size: 2 }));
 - Draw-time range overrides use `DrawCallOptions.indices`, `firstIndex`, and `baseVertex`; non-indexed draws use existing `vertices` and `firstVertex`.
 - Bundles bake counts and ranges at record time. Dynamic per-frame ranges need direct draws or bundle re-recording.
 - `destroy()` only destroys buffers owned from `data`/`indices`; caller-owned `buffer` and `indexBuffer` remain caller-owned.
+- For repeated scene objects, [`instanceGeometry()`](/reference/vgpu-scene-gpu/instance-geometry) borrows a live base mesh and adds an owned instance buffer. Destroying that bridge leaves the base mesh alive; destroying the base invalidates its composed draws and recorded bundles. Recreate affected draws/bundles before reuse. Known-dead geometry and slices are checked at encoding and bundle replay; raw `GPUBuffer.destroy()` outside the geometry lifecycle cannot be intercepted.

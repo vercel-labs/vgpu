@@ -1,6 +1,6 @@
 # Target
 
-Offscreen render target abstraction used by passes, draws, bundles, and ping-pong resources. Targets own size, color formats, optional depth, MSAA resolve textures, and readback. Canvas-backed targets are `Surface` instances created with `surface(gpu, canvas)`.
+Offscreen render target abstraction used by passes, draws, bundles, and ping-pong resources. Targets own size, color formats, optional depth, MSAA resolve textures, and readback. Canvas-backed targets are `Surface` instances created with `surface(gpu, canvas)`; they accept opt-in `depth` / `msaa` options for direct 3D rendering, but their color is the canvas's current presentation texture and the surface itself is never an input binding.
 
 ## Import
 
@@ -190,17 +190,20 @@ pair.swap();
 
 `target.depth` is a `Texture` with `render_attachment` and `texture_binding` usage. Bind it, or the `Target` itself, to a `texture_depth_2d` binding. Depth textures are not filterable: use `textureLoad`, or pair `textureSample` with `sampler(gpu, { minFilter: "nearest", magFilter: "nearest" })`; vgpu declares that sampler slot as `non-filtering` automatically. A comparison sampler also works with `textureSampleCompare`. Combined depth-stencil formats are exposed through a depth-only view. A target without `depth` is rejected with a fix-it.
 
+A `Surface` has no follow-resize binding: bind its single-sample `surface.depth` explicitly and rebind it from `onResize`, because resize destroys the old depth texture. See `Surface` for the read-only pass example.
+
 ## Notes
 
-- Choose `Target` for offscreen intermediates that must be reused, sampled, read back, or ping-ponged; choose `Surface` only for the canvas swapchain (see `Surface`). A target can be rendered in multiple passes and sampled by later effects.
+- Choose `Target` for offscreen intermediates that must be reused, sampled, read back, or ping-ponged; choose `Surface` only for the canvas swapchain (see `Surface`). A target can be rendered in multiple passes and sampled by later effects. Depth-tested 3D that is only presented does not need a target: render it to `surface(gpu, canvas, { depth: true, msaa: true })`.
 - Use simple `format` for one color attachment. Use `colors` when a pass writes multiple attachments (MRT/G-buffer), then consume `target.colors[i]` in later lighting/post passes.
-- Set `depth: true` for ordinary z-testing; choose `depth: "depth24plus-stencil8"` when stencil masking is required. Enable `msaa: true`/`4` for anti-aliased 3D geometry, but do not combine MSAA with `clear: false` preservation or `depthReadOnly`: the internal multisample render attachments (including depth) are discarded, while the resolved `.color(s)` remain sampleable/readable.
+- Set `depth: true` for ordinary z-testing; choose `depth: "depth24plus-stencil8"` when stencil masking is required. Enable `msaa: true`/`4` for anti-aliased 3D geometry, but do not combine MSAA with `clear: false` preservation or `depthReadOnly`: the internal multisample render attachments (including depth) are discarded, while the resolved `.color(s)` remain sampleable/readable. The same pass restrictions apply to an `msaa` surface.
 - `target.color.read({ mipLevel: 0, region: "all" })` / `target.color.readFloats({ mipLevel: 0, region: "all" })` are intended for tests, snapshots, and diagnostics—not a per-frame hot path. For iterative simulation or post-processing, use `pingPong(gpu, ...)` and swap targets instead of readback.
 - There is no global resolution binding. Pass `target.size` or `target.texelSize` explicitly to shaders.
-- `Surface.color` wraps the canvas current texture; offscreen target colors are stable until resize/destroy.
+- `Surface.color` wraps the canvas current texture; offscreen target colors are stable until resize/destroy. `Surface.depth` is owned and stable until resize/dispose like a target depth, while a surface's MSAA color stays private.
 - Offscreen resize prepares all color/MSAA/depth replacements before publishing them. Synchronous preparation failure cleans partial allocations and leaves old attachments and bindings intact. Late native validation/out-of-memory errors use normal WebGPU reporting without rollback; this is not an async resize API.
 - Successful resize publishes one coherent attachment generation, notifies Target bindings, then releases old textures. Subscriber failures do not roll back an already committed replacement; other subscribers and cleanup still run. Recursive resize inside replacement callbacks is rejected. Destroyed targets cannot be resized, including to the same size.
 - Binding `target.color`/`target.depth` retains that exact attachment; it does not follow resize. Rebind the replacement after resizing, or bind the Target itself to follow its selected color/depth attachment. Tracked destroyed references fail at draw/dispatch; recorded bundles must be re-recorded.
+- As an input binding value, only offscreen and custom targets are bindable as a `Target`. A `Surface` passed to `set()` or a constructor `set` option of `draw(gpu)`, `effect(gpu)`, or `compute(gpu)` throws `VGPU-SURFACE-NOT-BINDABLE` before any canvas texture is acquired. Surfaces remain render destinations: render the image into an offscreen target, bind that target or its texture, and present it with a surface pass; see `Surface` for the example. An explicit single-sample `surface.depth` texture is bindable; the surface object is not.
 - `target.color.read({ mipLevel: 0, region: "all" })` and `surface.color.read({ mipLevel: 0, region: "all" })` return raw texel bytes in the target's own color format, with row padding removed and BGRA canvas formats swizzled to RGBA. For `rgba8unorm` targets that is exactly the previous RGBA byte layout.
 - Float targets (`rgba16float`, `rgba32float`, `r16float`, `r32float`, `rg16float`, `rg32float`) read back through `target.color.readFloats({ mipLevel: 0, region: "all" })`, which decodes half/float texels into a `Float32Array` of components — HDR values above `1` and negatives are preserved. `readFloats()` also works on `unorm8` targets (normalized to `[0, 1]`), so tooling can stay format-agnostic.
 - `Target` and `Surface` have no read methods. Select `.color` or `.colors[index]`, then use that texture's required mip/region selection. Custom implementations expose attachments, not readback delegates.

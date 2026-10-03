@@ -118,22 +118,6 @@
       "destination": "/docs/reference/render/frame-clock#frameclock-2"
     },
     {
-      "source": "/packages/vgpu-scene/OrbitOptions",
-      "destination": "/docs/reference/vgpu-scene/orbit#orbitoptions"
-    },
-    {
-      "source": "/packages/vgpu-scene/OrthographicCameraOptions",
-      "destination": "/docs/reference/vgpu-scene/orthographic-camera#orthographiccameraoptions"
-    },
-    {
-      "source": "/packages/vgpu-scene/PerspectiveCamera",
-      "destination": "/docs/reference/vgpu-scene/perspective-camera#perspectivecamera-2"
-    },
-    {
-      "source": "/packages/vgpu-scene/PerspectiveCameraOptions",
-      "destination": "/docs/reference/vgpu-scene/perspective-camera#perspectivecameraoptions"
-    },
-    {
       "source": "/packages/vgpu-wgsl-loader-vite/transformWgsl",
       "destination": "/docs/reference/wgsl/loader-vite#transformwgsl"
     },

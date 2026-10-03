@@ -3,12 +3,13 @@ import { PNG } from "pngjs";
 import { compareVisualSnapshot } from "../../../../scripts/lib/visual-snapshot.mjs";
 import { expect } from "vitest";
 import type { Device } from "@vgpu/core";
-import { perspectiveCamera, type Mat4, type Vec3 } from "vgpu/scene";
+import type { Mat4 } from "vgpu/scene";
 import type { Mesh } from "../../src/mesh-like.ts";
 import { normalDebugMaterial } from "@vgpu/render/inspect";
 import type { EditableMeshValue as EditableMesh, ElementSelection } from "@vgpu/render/edit";
 import { unwrapKernel } from "../../src/edit/kernel-handle.ts";
 import { renderInspectFrame } from "../inspect/helpers.ts";
+import { testCamera } from "../inspect/camera.ts";
 import { wireframeOverlayMaterial } from "./fixtures/wireframe-overlay-material.ts";
 
 export const SNAPSHOT_DIR = "packages/render/tests/edit/__snapshots__";
@@ -31,8 +32,8 @@ export async function renderEditMeshWireframe(device: Device, mesh: Mesh, angle:
     const cam = camera(angle), modelMatrix = IDENTITY;
     const baseBindGroup = device.gpu.createBindGroup({ layout: base.bindGroupLayout, entries: [{ binding: 0, resource: { buffer: baseUniform.gpu } }] });
     const overlayBindGroup = device.gpu.createBindGroup({ layout: overlay.bindGroupLayout, entries: [{ binding: 0, resource: { buffer: overlayUniform.gpu } }] });
-    base.writeUniforms(baseUniform.gpu, 0, { viewProjectionMatrix: cam.viewProjectionMatrix, modelMatrix });
-    overlay.writeUniforms(overlayUniform.gpu, 0, { viewProjectionMatrix: cam.viewProjectionMatrix, modelMatrix });
+    base.writeUniforms(baseUniform.gpu, 0, { viewProjectionMatrix: cam.viewProjection, modelMatrix });
+    overlay.writeUniforms(overlayUniform.gpu, 0, { viewProjectionMatrix: cam.viewProjection, modelMatrix });
 
     const encoder = device.gpu.createCommandEncoder();
     const pass = encoder.beginRenderPass({
@@ -79,5 +80,4 @@ export function editableSignature(em: EditableMesh): string {
 
 export function sha(bytes: Uint8Array): string { return createHash("sha256").update(bytes).digest("hex"); }
 function bytes(view: ArrayBufferView): Uint8Array { return new Uint8Array(view.buffer, view.byteOffset, view.byteLength); }
-function camera(angle: keyof typeof ANGLES) { return perspectiveCamera({ fov: 45, aspect: 1, near: 0.1, far: 100, position: vec3(ANGLES[angle]), target: vec3([0, 0, 0]) }); }
-function vec3(values: readonly number[]): Vec3 { return new Float32Array(values) as Vec3; }
+function camera(angle: keyof typeof ANGLES) { return testCamera(ANGLES[angle]); }

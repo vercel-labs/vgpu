@@ -43,6 +43,6 @@ console.log(clockwise < 0);
 
 ## Notes
 
-- Public camera helpers in `vgpu/scene` accept degrees for field-of-view values; do not convert `PerspectiveCameraOptions.fov` yourself.
+- Public camera helpers in `vgpu/scene` accept degrees for field-of-view values; do not convert `Lens.fov` yourself.
 - Use `degToRad` for custom transforms and CPU-side uniform values that explicitly need radians.
-- **See also:** `perspectiveCamera`, `orbit`.
+- **See also:** `perspective`, `composeMatrix`.

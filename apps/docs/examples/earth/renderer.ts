@@ -12,7 +12,7 @@ import {
   surface,
   target,
 } from "vgpu";
-import { perspectiveCamera, sphere } from "vgpu/scene";
+import { sphere } from "vgpu/scene";
 
 import {
   EARTH_TUNING,
@@ -23,6 +23,7 @@ import {
   sunDirection,
   type OrbitState,
 } from "./planet";
+import { cameraMatrices } from "./camera";
 
 import atmosphereWgsl from "./atmosphere.wgsl";
 import bakeCloudsWgsl from "./bake-clouds.wgsl";
@@ -357,7 +358,7 @@ export function setFrameUniforms(
   const aspect = size[0] / Math.max(1, size[1]);
   const position = orbitPosition(orbit);
   const light = sunDirection(sunDegrees);
-  const view = perspectiveCamera({
+  const view = cameraMatrices({
     fov: camera.fov,
     aspect,
     near: camera.near,

@@ -11,7 +11,7 @@ import type { EntryPointInputInfo, WGSLType } from "@vgpu/wgsl/reflect-source";
 import type { GeometryLike } from "../draw.ts";
 import type { Gpu, Kernel } from "../kernel.ts";
 import type { GeometryRecipe } from "./geometry-recipe.ts";
-import { geometryLayoutResolver } from "../draw-protocols.ts";
+import { geometryLayoutResolver, geometryLiveness } from "../draw-protocols.ts";
 import { liveKernel, ownResource } from "../live-kernel.ts";
 import { meshAttributeAmbiguousError, meshAttributeUnmatchedError, meshDataMisalignedError, meshFormatMismatchError, meshInputMissingError, meshLayoutInvalidError, meshLimitExceededError, meshLocationConflictError, meshRangeInvalidError, meshWriteRangeError } from "../errors.ts";
 
@@ -89,6 +89,7 @@ type NormalizedBuffer = {
   readonly gpu: GPUBuffer;
   readonly owned?: CoreBuffer;
 };
+const geometryComposition = Symbol("vgpu.geometry.composition");
 
 /** Immutable geometry layout with fixed-size mutable owned buffers. */
 export class Geometry implements GeometryLike {
@@ -155,7 +156,7 @@ export class Geometry implements GeometryLike {
 
   /** @internal Resolves named attributes for one reflected vertex entry point. */
   [geometryLayoutResolver](inputs: readonly EntryPointInputInfo[], where: string): readonly GPUVertexBufferLayout[] {
-    if (this.#destroyed) throw meshLayoutInvalidError(where, "Geometry is destroyed; create a live geometry.");
+    this[geometryLiveness](where);
     const key = inputs.map((input) => `${input.name}:${input.location}:${shaderTypeBase(input.type)}`).join("|");
     const cached = this.#resolvedLayouts.get(key);
     if (cached) return cached;
@@ -180,6 +181,18 @@ export class Geometry implements GeometryLike {
     const result = Object.freeze(layouts);
     this.#resolvedLayouts.set(key, result);
     return result;
+  }
+
+  /** @internal Guards cached draw and bundle commands immediately before buffer use. */
+  [geometryLiveness](where: string): void {
+    const custom = geometryLivenessOverrides.get(this);
+    if (custom) return custom(where);
+    if (this.#destroyed) throw meshLayoutInvalidError(where, "Geometry is destroyed; create a live geometry and rebuild the draw or bundle.");
+  }
+
+  /** @internal Keeps private normalized metadata behind a module-local nominal key. */
+  [geometryComposition](): { readonly normalized: readonly NormalizedBuffer[]; readonly destroyed: boolean } {
+    return { normalized: this.#normalized, destroyed: this.#destroyed };
   }
 
   /** Creates a frozen range view sharing this geometry's buffers and layout identity. */
@@ -261,6 +274,7 @@ class InternalGeometrySlice implements GeometrySlice {
   readonly baseVertex?: number;
   readonly firstVertex?: number;
   [geometryLayoutResolver](inputs: readonly EntryPointInputInfo[], where: string): readonly GPUVertexBufferLayout[] { return this.geometry[geometryLayoutResolver](inputs, where); }
+  [geometryLiveness](where: string): void { this.geometry[geometryLiveness](where); }
   constructor(geometry: Geometry, opts: GeometrySliceOptions) {
     this.geometry = geometry;
     this.vertexBuffers = geometry.vertexBuffers;
@@ -329,8 +343,84 @@ function isRecipe(value: GeometryOptions | GeometryRecipe): value is GeometryRec
 
 /** @internal Ties a geometry to the gpu lifetime; the registration is dropped if it is destroyed first. */
 export function ownGeometry(kernel: Kernel, value: Geometry): Geometry {
+  geometryProvenance.set(value, kernel);
   return ownResource(kernel, value, (owned) => owned.destroy(), (cb) => { value.onDestroy(cb); });
 }
+
+/** Private metadata used only to append bounded internal geometry streams. */
+export interface GeometryCompositionInfo {
+  readonly kernel?: Kernel;
+  readonly destroyed: boolean;
+  readonly bufferCount: number;
+  readonly attributeNames: readonly string[];
+  readonly attributeCount: number;
+  readonly hasInstanceStream: boolean;
+}
+
+/** @internal Reads immutable geometry provenance/layout facts without exposing mutable metadata. */
+export function geometryCompositionInfo(value: unknown): GeometryCompositionInfo | undefined {
+  const inspect = typeof value === "object" && value !== null
+    ? (value as Partial<Geometry>)[geometryComposition]
+    : undefined;
+  if (typeof inspect !== "function") return undefined;
+  const state = inspect.call(value);
+  return Object.freeze({
+    kernel: geometryProvenance.get(value as Geometry),
+    destroyed: state.destroyed,
+    bufferCount: state.normalized.length,
+    attributeNames: Object.freeze(state.normalized.flatMap((buffer) => buffer.attributes.map((attribute) => attribute.name))),
+    attributeCount: state.normalized.reduce((count, buffer) => count + buffer.attributes.length, 0),
+    hasInstanceStream: state.normalized.some((buffer) => buffer.stepMode === "instance"),
+  });
+}
+
+export interface GeometryCompositionBuffer {
+  readonly data: GeometryData;
+  readonly attributes: GeometryAttributes;
+  readonly stride: number;
+  readonly stepMode: GPUVertexStepMode;
+  readonly label?: string;
+}
+
+/** @internal Appends one owned stream while borrowing every buffer and index resource from `base`. */
+export function composeGeometry(
+  kernel: Kernel,
+  base: Geometry,
+  buffer: GeometryCompositionBuffer,
+  assertLive: (where: string) => void,
+): Geometry {
+  const baseState = base[geometryComposition]();
+  const opts: GeometryOptions = {
+    buffers: [
+      ...baseState.normalized.map((normalized) => ({
+        buffer: normalized.gpu,
+        stride: normalized.stride,
+        ...(normalized.layout.stepMode ? { stepMode: normalized.stepMode } : {}),
+        attributes: Object.fromEntries(normalized.attributes.map((attribute, index) => {
+          const layout = [...normalized.layout.attributes][index]!;
+          return [attribute.name, {
+            format: attribute.format,
+            offset: layout.offset,
+            ...(attribute.location === undefined ? {} : { location: attribute.location }),
+          }];
+        })),
+      })),
+      buffer,
+    ],
+    vertexCount: base.vertexCount,
+    instanceCount: 0,
+    indexBuffer: base.indexBuffer,
+    indexFormat: base.indexFormat,
+    indexCount: base.indexCount,
+    topology: base.topology,
+  };
+  const composed = new Geometry(kernel.device, opts);
+  geometryLivenessOverrides.set(composed, assertLive);
+  return ownGeometry(kernel, composed);
+}
+
+const geometryProvenance = new WeakMap<Geometry, Kernel>();
+const geometryLivenessOverrides = new WeakMap<Geometry, (where: string) => void>();
 
 /** Returns the byte width of one value in a WebGPU vertex format. */
 export function formatByteSize(fmt: GPUVertexFormat): number {
@@ -371,7 +461,12 @@ function normalizeBuffer(device: Device, opts: GeometryBufferOptions, where: str
   const bytes = opts.data ? byteLength(opts.data) : undefined;
   if (bytes !== undefined && bytes % stride !== 0) throw meshDataMisalignedError(where, `Data byteLength ${bytes} is not divisible by stride ${stride}.`);
   const owned = opts.data !== undefined ? device.createBuffer({ label: opts.label, size: Math.max(4, bytes ?? 0), usage: ["vertex", "copy_dst"] }) : undefined;
-  if (owned && opts.data) owned.write(opts.data);
+  try {
+    if (owned && opts.data) owned.write(opts.data);
+  } catch (cause) {
+    owned?.destroy();
+    throw cause;
+  }
   const layout = Object.freeze({ arrayStride: stride, ...(opts.stepMode ? { stepMode } : {}), attributes: Object.freeze(attrs) as readonly GPUVertexAttribute[] });
   return { layout, attributes: Object.freeze(metas), stride, stepMode, byteLength: bytes, gpu: owned?.gpu ?? requiredBuffer(opts.buffer, where), owned };
 }

@@ -29,27 +29,36 @@ function expectOutsideFrame(fn: () => unknown): void {
   catch (error) {
     expect(error).toMatchObject({
       code: "VGPU-SURFACE-NOT-IN-FRAME",
-      fix: "surface passes must run inside frame(gpu, ...); precompile against an offscreen target(gpu, ...) instead",
+      fix: "Encode surface draws inside frame(gpu, ...); compile(surface) and bundle(gpu, { target: surface }, ...) can prepare outside a frame.",
     });
     return;
   }
   throw new Error("Expected VGPU-SURFACE-NOT-IN-FRAME");
 }
 
-test("surface pipeline creation is rejected outside frame(gpu) with an offscreen precompile hint", async () => {
+test("surface pipeline preparation is accepted outside frame(gpu)", async () => {
   const gpu = await init();
   const canvasSurface = surface(gpu, surfaceCanvas());
   const drawable = draw(gpu, { shader: prepareShader(WGSL) });
   const shader1 = effect(gpu, prepareShader(FRAGMENT_ONLY));
 
-  expectOutsideFrame(() => drawable.compile(canvasSurface));
-  expectOutsideFrame(() => drawable.compileSync(canvasSurface));
-  expectOutsideFrame(() => drawable.draw(canvasSurface));
-  expectOutsideFrame(() => shader1.compile(canvasSurface));
-  expectOutsideFrame(() => shader1.compileSync(canvasSurface));
-  expectOutsideFrame(() => shader1.draw(canvasSurface));
-  expectOutsideFrame(() => bundle(gpu, { target: canvasSurface }, () => undefined));
+  await expect(drawable.compile(canvasSurface)).resolves.toBe(drawable);
+  expect(drawable.compileSync(canvasSurface)).toBe(drawable);
+  await expect(shader1.compile(canvasSurface)).resolves.toBe(shader1);
+  expect(shader1.compileSync(canvasSurface)).toBe(shader1);
+  expect(() => bundle(gpu, { target: canvasSurface }, () => undefined)).not.toThrow();
   expect(() => frame(gpu, (currentFrame) => currentFrame.pass(canvasSurface, drawable))).not.toThrow();
+  gpu.dispose();
+});
+
+test("surface drawing remains rejected outside frame(gpu)", async () => {
+  const gpu = await init();
+  const canvasSurface = surface(gpu, surfaceCanvas());
+  const drawable = draw(gpu, { shader: prepareShader(WGSL) });
+  const shader1 = effect(gpu, prepareShader(FRAGMENT_ONLY));
+
+  expectOutsideFrame(() => drawable.draw(canvasSurface));
+  expectOutsideFrame(() => shader1.draw(canvasSurface));
   gpu.dispose();
 });
 

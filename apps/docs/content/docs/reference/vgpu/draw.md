@@ -116,7 +116,7 @@ interface Draw {
 | opts.geometry | `GeometryLike` | ✖ | `undefined` | Supplies vertex/index buffers and layouts. Omit for generated vertex-index drawing. |
 | opts.set | `Record<string, unknown>` | ✖ | `undefined` | Initial `.set()` call. |
 | opts.label | `string` | ✖ | `"draw"` | Debug/error label. |
-| opts.targets | `readonly Target[]` | ✖ | `undefined` | Synchronous pre-warm sugar for the listed target signatures. In browser load paths, prefer `await draw.compile(target)`. |
+| opts.targets | `readonly Target[]` | ✖ | `undefined` | Synchronous pre-warm sugar for the listed target signatures. A live `Surface` is accepted outside a frame; its configured signature is used without acquiring a canvas texture. In browser load paths, prefer `await draw.compile(target)`. |
 | opts.instances | `number` | ✖ | `1` | Default instance count. Integer `>= 0`; per-call `instances` overrides. |
 | opts.vertices | `number` | ✖ | `3` for non-indexed, unless `geometry.vertexCount` exists | Default non-indexed vertex count. Ignored by indexed geometries. Integer `>= 0`. |
 | opts.firstInstance | `number` | ✖ | `0` | Default first instance. Integer `>= 0`; per-call `firstInstance` overrides. |
@@ -132,13 +132,13 @@ interface Draw {
 | opts.multisample | `{ alphaToCoverage?, mask? }` | ✖ | `{ alphaToCoverage: false, mask: 0xFFFFFFFF }` | MSAA state. `alphaToCoverage`: turns fragment alpha into a per-sample coverage mask, so alpha-tested foliage antialiases in any draw order — no blending, no transparency sorting; requires an `msaa: true` target. `mask`: bitmask of samples the draw may write — a niche debugging tool most draws never set. Only the low `sampleCount` bits matter; higher bits are legal and ignored. |
 | opts.constants | `Readonly<Record<string, number \| boolean>>` | ✖ | the WGSL defaults | Values for WGSL `override` constants, fixed at pipeline creation. Use them to specialize one shader — quality tiers, feature toggles, workgroup-size tuning — without string-templating the WGSL. Key by override name, or by the decimal string of `N` when the declaration has `@id(N)` (the name is not usable then). Booleans become `1`/`0`; every override declared without a default must be provided. |
 | opts.entry | `{ vertex?: string; fragment?: string }` | ✖ | `vs_main` / `fs_main` when declared, otherwise first in each stage | Selects which `@vertex`/`@fragment` functions to compile when one WGSL module declares several — variants of one technique sharing helpers, such as depth-only and shaded passes from the same source. Names must exist in the shader with the matching stage. Omitted fields select the sole entry of that stage, or prefer its conventional name when several exist, falling back to the first. Explicit names always take priority and must be valid. |
-| draw.set.values | `Record<string, unknown>` | ✔ | — | Values keyed by WGSL binding variable name. JS objects/numbers are packed; resources are bound by identity. |
+| draw.set.values | `Record<string, unknown>` | ✔ | — | Values keyed by WGSL binding variable name. JS objects/numbers are packed; resources are bound by identity. A `Target` follows its attachment across resizes; a `Texture` stays bound to that exact texture. A `Surface` is rejected in every slot with `VGPU-SURFACE-NOT-BINDABLE`. |
 | draw.group.n | `number` | ✔ | — | Bind group index to claim for manual bind-group binding (`group(n, bindGroup)`). |
 | draw.group.bindGroup | `GPUBindGroup` | ✔ | — | Must be compatible with `draw.layout(n)` or `draw.layout(n, { dynamicOffsets: true })`. |
 | draw.layout.n | `number` | ✔ | — | Reflected bind group index. |
 | draw.layout.opts.dynamicOffsets | `boolean` | ✖ | `false` | When `true`, returns/reuses a layout whose buffer entries have `hasDynamicOffset: true` and clears cached pipelines. |
 | draw.draw.target | `Target \| DrawCallOptions` | ✖ | `{}` | One-shot draw options. Pass a bare target for the common case, or an options bag when setting counts or offsets. |
-| opts.target | `Target` | ✖ | — | Required at runtime when an options bag is used. Use a `Surface` or an offscreen `Target`. |
+| opts.target | `Target` | ✖ | — | Required at runtime when an options bag is used. Use an offscreen `Target`, or a `Surface` while a frame is active; outside a frame a surface throws `VGPU-SURFACE-NOT-IN-FRAME`. |
 | opts.offsets | `readonly number[] \| Partial<Record<number, readonly number[]>>` | ✖ | Reflected/claimed fallback offsets | Dynamic offsets for claimed/dynamic groups. Array applies to every group; object keys by group. |
 | opts.instances | `number` | ✖ | `DrawOptions.instances ?? geometry.instanceCount ?? 1` | Per-call instance count; integer `>= 0`. |
 | opts.vertices | `number` | ✖ | `geometry.vertexCount ?? DrawOptions.vertices ?? 3` | Per-call non-indexed vertex count; indexed geometries use `geometry.indexCount`. |
@@ -181,6 +181,8 @@ interface Draw {
 
 - `VGPU-LIMIT-STORAGE-VERTEX` / `VGPU-LIMIT-STORAGE-FRAGMENT` — static storage-buffer use by a selected entry point exceeds the granted stage limit. Request the supported `requiredLimits` value, or reduce/move the storage data.
 - `VGPU-TARGET-REQUIRED` — `draw.draw()` was called without a target and the draw has none to fall back on. Pass a `Target`, or an options bag with `target`.
+- `VGPU-SURFACE-NOT-IN-FRAME` — one-shot `draw.draw()` targets a `Surface` while no frame is active. Encode surface draws inside `frame(gpu, ...)`; `compile(surface)` and `bundle(gpu, { target: surface }, ...)` can prepare outside a frame.
+- `VGPU-SURFACE-DISPOSED` — `compile()`, `compileSync()`, or `targets: [...]` received a disposed `Surface`. `compile()` throws synchronously instead of returning a rejected promise. Prepare against a live surface.
 - `VGPU-BLEND-INVALID` — unknown blend preset or malformed blend object. Use `"alpha"`, `"additive"`, `"premultiplied"`, or `{ color: { src, dst, op? }, alpha? }`.
 - `VGPU-BLEND-CONSTANT-INVALID` — `blendConstant` is not exactly four finite numbers, or no color target's effective blend uses a `"constant"`/`"one-minus-constant"` factor (the value could never apply). The effective blend of a target is its `colors[i].blend` when it has one, else the top-level `blend` — so a top-level constant factor overridden on *every* target is still dead, while a constant factor reached only through `colors[i].blend` is live. Fix the tuple, or add a constant factor to a blend that survives the per-target overrides.
 - `VGPU-WRITEMASK-INVALID` — `writeMask` is not an array, or contains a channel outside `"r"`/`"g"`/`"b"`/`"a"`.
@@ -198,6 +200,7 @@ interface Draw {
 - `VGPU-R1-BINDING-NEVER-SET` — a reflected binding was never provided before drawing. `set()` the named binding, or claim its group with `group(n, bindGroup)`.
 - `VGPU-R1-OWNERSHIP-FLIP` — a binding switched between JS-value ownership and resource ownership across `set()` calls. Keep passing the kind its first `set()` used.
 - `VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE` — a `set()` value does not satisfy the binding; the message names the binding and what it needs.
+- `VGPU-SURFACE-NOT-BINDABLE` — a `Surface` was passed as a binding value, in `opts.set` or a later `set()`, inside or outside a frame. `where` is `<label>.<binding>`. vgpu throws before reading the surface's `color`/`colors`/`depth` or acquiring a canvas texture, and the rejected binding keeps its previous value. `set()` applies keys in order, so keys before the rejected one in the same call are already applied. Render to an offscreen target and bind that target or its texture; use the `Surface` only as a render destination.
 - `VGPU-SET-VALUE-INVALID` — a JS-owned buffer binding has a missing or unknown struct member, the wrong vector/matrix/array extent, an out-of-range integer, or an invalid runtime-array extent. Structured detail identifies the complete value path and reason. The rejected value does not change that binding's retained host state or packed GPU bytes.
 - `VGPU-SET-TEXTURE-FILTERABILITY` — a facade texture format cannot satisfy an ordinarily sampled `float` binding (detail identifies the format, texture, and paired sampler). Use a filterable format, request `float32-filterable`, or rewrite to `textureLoad`.
 - `VGPU-R4-GROUP-CLAIMED` — `set()` tried to update a claimed group. Call `set()` before claiming, or keep updating the group yourself from `draw.layout(n)`.
@@ -470,6 +473,40 @@ The compute pass writes the draw arguments and the draw consumes them on the GPU
 
 `draw.compile(target)` asynchronously prepares one target signature and resolves to the same draw. `draw.compileSync(target)` prepares the same signature synchronously; if an async compile for that signature is still pending, the synchronous result wins the race and unblocks later draws. Both methods also accept a target signature object such as `{ colors: ["bgra8unorm"], depth: "depth24plus", sampleCount: 4 }`; `colors` is required and bare strings are rejected.
 
+Pass a live `Surface` to prepare for a canvas during loading. Preparation reads the surface's configured signature — `format`, resolved depth format, and sample count — and does not acquire the canvas texture, resize the canvas, or submit work, so it runs outside any frame:
+
+```wgsl
+// prewarm-triangle.wgsl
+@vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
+  var p = array<vec2f, 3>(vec2f(-0.5, -0.5), vec2f(0.5, -0.5), vec2f(0.0, 0.5));
+  return vec4f(p[vi], 0, 1);
+}
+
+@fragment fn fs_main() -> @location(0) vec4f {
+  return vec4f(1, 0.4, 0.2, 1);
+}
+```
+
+```ts
+import { init, draw, frameLoop, surface } from "vgpu";
+import triangleShader from "./prewarm-triangle.wgsl";
+
+const gpu = await init();
+const canvasSurface = surface(gpu, document.querySelector("canvas")!);
+
+// ---cut---
+const tri = draw(gpu, {
+  shader: triangleShader,
+});
+await tri.compile(canvasSurface); // outside a frame: no canvas texture is acquired
+
+frameLoop(gpu, (currentFrame) => {
+  currentFrame.pass(canvasSurface, (pass) => pass.draw(tri)); // rendering stays inside the frame
+});
+```
+
+The default surface shown above and the equivalent signature `{ colors: [canvasSurface.format] }` share one cached pipeline, and a size-only resize keeps it valid. A surface with `depth` or `msaa` needs the matching `depth` and `sampleCount` in that signature. Prefer `compile(surface)` once the surface exists; use the explicit signature for preparation before it does.
+
 Each color/depth/sample-count variant is a different pipeline. A missed variant sync-compiles on first use, which can jank; fire-and-forget pre-warms should always use `.catch(...)` or `gpu.onError`/`gpu.settled()` will not observe the returned promise rejection. `targets: [target]` is kept as creation-time `compileSync()` sugar for non-browser hot paths.
 
 ## Notes
@@ -493,6 +530,7 @@ Each color/depth/sample-count variant is a different pipeline. A missed variant 
 - A non-zero `firstInstance` inside the buffered indirect arguments silently turns the draw into a no-op unless the device has the `"indirect-first-instance"` feature. The value lives on the GPU, so vgpu cannot validate it — request the feature with `init({ requiredFeatures: ["indirect-first-instance"] })` when you need it.
 - One-shot `draw.draw()` has no implicit target and returns `void`; raw claimed-group validation errors are delivered through `gpu.onError`, and tests can `await gpu.settled()`.
 - Changing resource identity after a draw is recorded in a `Bundle` marks that bundle stale; changing JS values in-place does not.
+- Bind an offscreen `Target` (`set({ source: sceneTarget })`) when the draw should follow its attachment: after `sceneTarget.resize(...)`, the binding switches to the replacement texture. Bind a `Texture` (`set({ source: sceneTarget.color })`) to keep that exact texture and its lifetime; it does not follow resize, so rebind the replacement after `sceneTarget.resize(...)` — the released attachment fails at draw time. Do not bind a `Surface` — render into a `Target` and present it with a surface pass; see `Surface` for the full producer → present example.
 - **See also:** `ShaderSource`, `prepareShader` (`@vgpu/wgsl/prepare`), `Effect`, `FramePass.draw`, `Bundle`, `Surface`, `Target`, `SharedUniforms`.
 
 ## Compilation validation and uniform capture

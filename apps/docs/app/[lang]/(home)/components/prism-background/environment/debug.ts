@@ -1,6 +1,8 @@
 import type { Draw, Frame, Geometry, Gpu, Surface } from "vgpu";
 import { draw, frameLoop, geometry, surface } from "vgpu";
-import { perspectiveCamera, sphere } from "vgpu/scene";
+import { sphere } from "vgpu/scene";
+
+import { createCameraState } from "../../../../../../lib/scene-camera";
 
 import { cameraView, rotationMatrix } from "../scene/camera";
 import environmentDebugAxesWgsl from "./environment-debug-axes.wgsl";
@@ -152,7 +154,7 @@ export function createEnvironmentDebugRenderer(
       const mirrorDraw = mirror;
       const axesDraw = axes;
       const cameraPosition = orbitPosition(yaw, pitch, distance);
-      const camera = perspectiveCamera({
+      const camera = createCameraState({
         fov: 38,
         aspect: canvasSurface.size[0] / Math.max(1, canvasSurface.size[1]),
         near: 0.05,

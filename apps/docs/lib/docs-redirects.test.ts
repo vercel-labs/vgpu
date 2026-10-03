@@ -9,6 +9,18 @@ type Redirect = { source: string; destination: string };
 type SectionRoot = Redirect & { dir: string };
 
 describe("API reference package roots", () => {
+  it("keeps retired scene pages and symbols linked to explicit migration guidance", () => {
+    const redirects = new Map(
+      (buildDocsRedirects([]) as Redirect[]).map(({ source, destination }) => [source, destination]),
+    );
+    for (const page of ["camera", "perspective-camera", "orthographic-camera", "orbit", "orbit-controls", "scene-tree", "material", "light"]) {
+      expect(redirects.get(`/docs/reference/vgpu-scene/${page}`)).toBe("/docs/guides/scene-migration");
+    }
+    for (const symbol of ["SceneCamera", "perspectiveCamera", "OrbitOptions", "OrbitControls", "mesh", "SceneMaterial", "AmbientLight"]) {
+      expect(redirects.get(`/packages/vgpu-scene/${symbol}`)).toBe(`/docs/guides/scene-migration#${symbol.toLowerCase()}`);
+    }
+  });
+
   it("redirects every package card to an existing topic page", () => {
     const index = readFileSync(resolve(CONTENT_ROOT, "reference/index.mdx"), "utf8");
     const packagesSection = index.slice(index.indexOf("## Packages"));

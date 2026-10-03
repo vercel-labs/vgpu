@@ -9,7 +9,8 @@ import { prepareShader } from "@vgpu/wgsl/prepare";
 import { resolveShader } from "@vgpu/wgsl/runtime";
 import { PNG } from "pngjs";
 import { draw, frame, geometry, init, target } from "vgpu/node";
-import { perspectiveCamera } from "vgpu/scene";
+
+import { cameraMatrices } from "../camera";
 
 type DebugMode = "normal" | "diffuse-environment" | "environment";
 
@@ -67,7 +68,7 @@ try {
     cull: "back",
     label: "hero-fractal-vector-debug",
   });
-  const camera = perspectiveCamera({
+  const camera = cameraMatrices({
     fov: CAMERA_FOV,
     aspect: options.size[0] / options.size[1],
     near: 0.05,
@@ -111,7 +112,7 @@ try {
     await writePng(
       path,
       options.size,
-      await output.color.read({ mipLevel: 0, region: "all" })
+      await output.color.read({ mipLevel: 0, region: "all" }),
     );
     console.log(path);
   }

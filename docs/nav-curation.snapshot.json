@@ -5,6 +5,7 @@
       "vgpu",
       "vgpu/three",
       "vgpu/scene",
+      "vgpu/scene/gpu",
       "@vgpu/wgsl",
       "@vgpu/wgsl-std",
       "vgpu/core",
@@ -38,6 +39,7 @@
       ],
       "@vgpu/wgsl-std": [
         "color",
+        "scene",
         "fullscreen",
         "hash",
         "noise",
@@ -77,12 +79,18 @@
         "..."
       ],
       "vgpu/scene": [
-        "camera",
-        "orthographic-camera",
-        "perspective-camera",
+        "transforms",
+        "nodes",
+        "hierarchy",
+        "instances",
+        "camera-state",
+        "geometry",
         "deg-to-rad",
         "srgb",
-        "orbit",
+        "..."
+      ],
+      "vgpu/scene/gpu": [
+        "instance-geometry",
         "..."
       ],
       "vgpu/three": [
@@ -94,12 +102,15 @@
       {
         "title": "General",
         "slugs": [
-          "getting-started"
+          "getting-started",
+          "scene-composition",
+          "scene-migration"
         ]
       },
       {
         "title": "Integrations",
         "slugs": [
+          "scene-math",
           "threejs",
           "nextjs",
           "no-bundler",

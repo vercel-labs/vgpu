@@ -30,10 +30,13 @@ vi.mock("vgpu", () => ({
 }));
 
 vi.mock("vgpu/scene", () => ({
-  perspectiveCamera: vi.fn(() => ({
-    viewProjectionMatrix: new Float32Array(16),
-  })),
   sphere: vi.fn(() => ({ sphere: true })),
+}));
+
+vi.mock("./camera", () => ({
+  cameraMatrices: vi.fn(() => ({
+    viewProjection: new Float32Array(16),
+  })),
 }));
 
 vi.mock("./hero-glass-assets", () => ({

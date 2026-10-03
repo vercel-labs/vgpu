@@ -1,4 +1,4 @@
-import { degToRad, perspectiveCamera, type Camera, type Vec3 } from "../../../src/scene/geometry-src/index.ts";
+import { group, perspective, viewMatrices, type Mat4 } from "../../../src/scene.ts";
 
 export type PrimitiveCameraAngle = "front" | "iso" | "side";
 
@@ -8,17 +8,18 @@ const POSITIONS = {
   side: [3, 0.75, 0.25],
 } as const;
 
-export function primitiveCamera(angle: PrimitiveCameraAngle): Camera {
-  return perspectiveCamera({
-    fovYRadians: degToRad(45),
-    aspect: 1,
-    near: 0.1,
-    far: 100,
-    position: vec3(POSITIONS[angle]),
-    target: vec3([0, 0, 0]),
-  });
+export interface PrimitiveCamera {
+  readonly viewProjection: Mat4;
 }
 
-function vec3(values: readonly [number, number, number]): Vec3 {
-  return new Float32Array(values) as Vec3;
+export function primitiveCamera(angle: PrimitiveCameraAngle): PrimitiveCamera {
+  const node = group({ position: POSITIONS[angle] }).lookAt([0, 0, 0]);
+  const projection = perspective({ fov: 45, near: 0.1, far: 100 }, 1, new Float32Array(16));
+  const matrices = { view: new Float32Array(16), viewProjection: new Float32Array(16) };
+  viewMatrices(
+    { position: new Float32Array(node.worldPosition), quaternion: new Float32Array(node.quaternion) },
+    projection,
+    matrices,
+  );
+  return { viewProjection: matrices.viewProjection };
 }

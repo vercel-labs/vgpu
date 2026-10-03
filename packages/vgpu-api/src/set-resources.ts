@@ -2,10 +2,10 @@ import type { UniformValue } from "./frame-uniforms.ts";
 import { Buffer, Texture, type ResourceIdentity, type UnsubscribeResourceDestroy } from "@vgpu/core";
 import type { BindingInfo } from "@vgpu/wgsl/reflect-source";
 import type { BindGroupIdentityPart } from "./bind-cache.ts";
-import { destroyedBindingError, incompatibleResourceError, textureFilterabilityError } from "./errors.ts";
+import { destroyedBindingError, incompatibleResourceError, surfaceNotBindableError, textureFilterabilityError } from "./errors.ts";
 import type { Target } from "./target.ts";
 import { assertBufferUsable } from "./lifecycle.ts";
-import { BINDING_RESOURCE, bindingResourceOf } from "./draw-protocols.ts";
+import { BINDING_RESOURCE, bindingResourceOf, isSurfaceTarget } from "./draw-protocols.ts";
 
 export interface NormalizedBindingResource {
   readonly uniformValue?: () => UniformValue;
@@ -46,6 +46,7 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
 
 /** Normalizes resources for the reflected binding kind and rejects incompatible values with vgpu fix-its. */
 export function normalizeResource(binding: BindingInfo, value: unknown, context: ResourceNormalizationContext): NormalizedBindingResource {
+  assertResourceBindable(binding, value, context.sourceHint);
   try { return normalizeLiveResource(binding, value, context); }
   catch (error) {
     if ((error as { code?: string })?.code === "VGPU-CORE-TEXTURE-DESTROYED") {
@@ -57,6 +58,7 @@ export function normalizeResource(binding: BindingInfo, value: unknown, context:
 }
 
 function normalizeLiveResource(binding: BindingInfo, value: unknown, context: ResourceNormalizationContext): NormalizedBindingResource {
+  assertResourceBindable(binding, value, context.sourceHint);
   switch (binding.bindingLayout?.kind) {
     case "buffer": return normalizeBufferResource(binding, value, context);
     case "texture": return normalizeTextureResource(binding, value, context);
@@ -65,6 +67,10 @@ function normalizeLiveResource(binding: BindingInfo, value: unknown, context: Re
     case "externalTexture": throw incompatibleResourceError(binding, "external texture", "Pass a compatible GPUExternalTexture.");
     default: throw incompatibleResourceError(binding, "reflected resource", "Fix shader reflection bindingLayout.");
   }
+}
+
+export function assertResourceBindable(binding: BindingInfo, value: unknown, label: string): void {
+  if (isSurfaceTarget(value)) throw surfaceNotBindableError(label, binding);
 }
 
 function normalizeBufferResource(binding: BindingInfo, value: unknown, context: ResourceNormalizationContext): NormalizedBindingResource {

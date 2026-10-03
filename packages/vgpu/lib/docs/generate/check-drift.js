@@ -86,7 +86,7 @@ function diffManifest(committedPath, freshPath) {
 }
 
 function diffSkillDir(committedDir, freshDir) {
-  // Blender references are authored in place; only generated files can drift from this generator.
+  // Scene and Blender references are authored in place; only generated files can drift from this generator.
   const committedFiles = new Set(
     [...listFiles(committedDir)].filter(path => !isAuthoredSkillPath(path.split(sep).join("/"))),
   );

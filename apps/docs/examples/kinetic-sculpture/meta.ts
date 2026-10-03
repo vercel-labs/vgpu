@@ -1,0 +1,33 @@
+export const meta = {
+  slug: 'kinetic-sculpture',
+  title: 'Kinetic Sculpture',
+  guide: '/docs/guides/scene-composition',
+  description:
+    'A balanced brass mobile sways over a studio plinth: nested vgpu/scene nodes drive bound instances, drawn by four instanced, shadow-mapped WGSL draws.',
+  tags: ['3d', 'scene-graph', 'shadows', 'instancing', 'animation', 'lighting'],
+  capabilities: [
+    'webgpu',
+    'instanced-rendering',
+    'render-targets',
+    'multi-pass',
+    'pointer-orbit',
+    'controls',
+    'responsive-canvas',
+    'continuous-rendering',
+  ],
+  thumb: { warmupFrames: 1, dt: 1 / 60, time: 6.5 },
+  files: [
+    'index.tsx',
+    'renderer.ts',
+    'scene.ts',
+    'pipeline.ts',
+    'camera.ts',
+    'input.ts',
+    'controls.ts',
+    'studio.wgsl',
+    'sculpture.wgsl',
+    'shadow.wgsl',
+    'backdrop.wgsl',
+    'present.wgsl',
+  ],
+} as const;

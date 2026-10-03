@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   draw: vi.fn(),
   geometry: vi.fn(),
   icosphere: vi.fn(() => ({ shape: "icosphere" })),
-  perspectiveCamera: vi.fn((_options: any) => ({
+  cameraMatrices: vi.fn((_options: any) => ({
     viewProjection: new Float32Array(16),
   })),
 }));
@@ -16,8 +16,8 @@ vi.mock("vgpu", () => ({ draw: mocks.draw, geometry: mocks.geometry }));
 vi.mock("vgpu/scene", () => ({
   disk: mocks.disk,
   icosphere: mocks.icosphere,
-  perspectiveCamera: mocks.perspectiveCamera,
 }));
+vi.mock("./camera", () => ({ cameraMatrices: mocks.cameraMatrices }));
 
 import { createScene, destroyScene, renderScene } from "./scene";
 
@@ -41,7 +41,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.disk.mockReturnValue({ shape: "disk" });
   mocks.icosphere.mockReturnValue({ shape: "icosphere" });
-  mocks.perspectiveCamera.mockImplementation((_options: any) => ({
+  mocks.cameraMatrices.mockImplementation((_options: any) => ({
     viewProjection: new Float32Array(16),
   }));
 });
@@ -94,7 +94,7 @@ describe.each([
 
     renderScene(currentFrame as never, scene, output as never, time);
 
-    expect(mocks.perspectiveCamera).toHaveBeenCalledWith({
+    expect(mocks.cameraMatrices).toHaveBeenCalledWith({
       fov: 36,
       aspect: 800 / 450,
       near: 0.1,
@@ -132,7 +132,7 @@ test("reads the responsive target aspect on every frame", () => {
   renderScene(currentFrame as never, scene, output as never, 2.4);
 
   expect(
-    mocks.perspectiveCamera.mock.calls.map(([options]) => options.aspect)
+    mocks.cameraMatrices.mock.calls.map(([options]) => options.aspect)
   ).toEqual([800 / 450, 390 / 844]);
 });
 

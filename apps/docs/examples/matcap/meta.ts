@@ -12,5 +12,5 @@ export const meta = {
     "responsive-canvas",
   ],
   thumb: { time: 3.1 },
-  files: ["index.tsx", "renderer.ts", "scene.ts", "bake-matcap.wgsl", "matcap.wgsl"],
+  files: ["index.tsx", "renderer.ts", "camera.ts", "scene.ts", "bake-matcap.wgsl", "matcap.wgsl"],
 } as const;

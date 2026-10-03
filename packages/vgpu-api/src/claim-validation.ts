@@ -1,5 +1,8 @@
 import type { Device } from "@vgpu/core";
 import { claimedGroupNativeValidationError, type VGPUError } from "./errors.ts";
+import { submittedWorkDone } from "./submitted-work-done.ts";
+
+export { submittedWorkDone };
 
 export interface ClaimedGroupValidationContext {
   readonly label: string;
@@ -91,16 +94,6 @@ export function discardClaimedGroupValidationScopes(device: Device): void {
 /** Suppresses already-popped validation promises when their frame/draw will not submit. */
 export function discardClaimedGroupValidationResults(results: readonly ClaimedGroupValidationResult[]): void {
   for (const result of results) suppressClaimedGroupValidationResult(result);
-}
-
-/**
- * Resolves after the device queue reports submitted work completion, when supported.
- *
- * This is feature-guarded because the mock and some compatibility environments
- * may omit `onSubmittedWorkDone`.
- */
-export function submittedWorkDone(device: Device): Promise<void> {
-  return device.gpu.queue.onSubmittedWorkDone?.() ?? Promise.resolve();
 }
 
 /**

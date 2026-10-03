@@ -46,6 +46,11 @@
       "import": "./dist/scene.js",
       "default": "./dist/scene.js"
     },
+    "./scene/gpu": {
+      "types": "./dist/scene/gpu.d.ts",
+      "import": "./dist/scene/gpu.js",
+      "default": "./dist/scene/gpu.js"
+    },
     "./client": {
       "types": "./client.d.ts",
       "import": "./dist/client.js",
@@ -107,28 +112,30 @@
     "./node": "tooling",
     "./mock": "tooling",
     "./scene": "client",
+    "./scene/gpu": "client",
     "./client": "client",
     "./core": "client",
     "./three": "client"
   },
   "vgpuExportBundleBudgetsGzipBytes": {
-    ".": 51712,
-    "./node": 51712,
-    "./mock": 51712,
-    "./scene": 12800,
+    ".": 53760,
+    "./node": 53760,
+    "./mock": 53760,
+    "./scene": 19456,
     "./client": 512,
     "./core": 3584,
-    "./three": 2560
+    "./three": 2560,
+    "./scene/gpu": 6656
   },
   "bin": {
     "vgpu": "./bin/vgpu.js"
   },
   "vgpuExperienceBundleBudgetsGzipBytes": {
     "init-only": 1536,
-    "effect-only": 37376,
-    "triangle-low-level": 40448,
-    "draw-recipe-box": 40960,
-    "full-root": 51712
+    "effect-only": 38912,
+    "triangle-low-level": 41984,
+    "draw-recipe-box": 43008,
+    "full-root": 53760
   },
   "vgpuSceneBundleBudgetNote": "The scene barrel retains all recipe builders after the geometry redesign; direct primitive imports retain only their selected mesh, as the experience fixtures assert."
 }

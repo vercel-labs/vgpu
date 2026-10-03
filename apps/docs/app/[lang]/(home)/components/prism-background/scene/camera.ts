@@ -14,7 +14,10 @@
  * swing is enough to reveal their separation from the wall.
  */
 
-import { perspectiveCamera, type SceneCamera } from "vgpu/scene";
+import {
+  createCameraState,
+  type CameraState,
+} from "../../../../../../lib/scene-camera";
 
 import {
   CAMERA_DISTANCE,
@@ -39,7 +42,7 @@ let memoizedFov = 0;
 let memoizedHalfHeight = 0;
 
 export interface CameraView {
-  readonly camera: SceneCamera;
+  readonly camera: CameraState;
   /** View-projection used by the hero draws; responsive framing may replace it. */
   readonly viewProjection: Float32Array;
   readonly position: Vec3;
@@ -73,7 +76,7 @@ export function cameraView(
   ];
   const forward = normalize([-position[0], -position[1], -position[2]]);
   const right = normalize(cross(forward, [0, 1, 0]));
-  const camera = perspectiveCamera({
+  const camera = createCameraState({
     fov,
     aspect,
     // The whole scene sits between the wall at z = 0 and the glass in front of

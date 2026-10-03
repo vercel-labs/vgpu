@@ -181,6 +181,10 @@ merging a PR to `main`.
 
 Classify with `vgpuBundleAudience` (package-wide) or `vgpuExportBundleAudiences` (per export subpath). Tarball budgets measure published dist bytes: `*.docs.md` files, sourcemap `sourcesContent` and the budget metadata itself are excluded, so documenting the API never competes with the size gate.
 
+The private CLI package embeds its documentation corpus as JavaScript, which remains measured.
+Its `vgpuBundleBudgetGrowthThreshold: 0` preserves a hard ceiling, so intentional corpus growth
+requires an explicit tool-generated rebaseline.
+
 When growth is intentional, re-baseline instead of hand-editing numbers:
 
 ```bash

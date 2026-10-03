@@ -530,7 +530,9 @@ async function loadRenderers(slugs) {
     platform: 'node',
     format: 'esm',
     sourcemap: false,
-    external: ['pngjs', 'vgpu', 'vgpu/node'],
+    // Let Node load cannon-es's CommonJS entry (and its perf_hooks require) normally.
+    // Inlining it into this ESM bundle would need a global require shim.
+    external: ['pngjs', 'vgpu', 'vgpu/node', 'cannon-es'],
     plugins: docsRendererPlugins(),
     logLevel: 'silent',
   });

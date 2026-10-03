@@ -1,8 +1,8 @@
 import type { Effect, Frame, Geometry, Gpu, Surface, Target } from "vgpu";
 import { bundle, draw, effect, geometry, sampler } from "vgpu";
-import { perspectiveCamera } from "vgpu/scene";
 
 import blitWgsl from "./blit.wgsl";
+import { cameraMatrices } from "./camera";
 import sceneWgsl from "./scene.wgsl";
 
 type Output = Surface | Target;
@@ -89,7 +89,7 @@ export function renderScene(
 ): void {
   const radius = scene.extent * 1.55;
   const angle = time * 0.06 + 0.55;
-  const camera = perspectiveCamera({
+  const camera = cameraMatrices({
     fov: 42,
     aspect: output.size[0] / Math.max(1, output.size[1]),
     near: 0.1,

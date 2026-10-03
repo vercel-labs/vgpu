@@ -1,12 +1,14 @@
 {
   "title": "vgpu/scene",
   "pages": [
-    "camera",
-    "orthographic-camera",
-    "perspective-camera",
+    "transforms",
+    "nodes",
+    "hierarchy",
+    "instances",
+    "camera-state",
+    "geometry",
     "deg-to-rad",
     "srgb",
-    "orbit",
     "..."
   ]
 }

@@ -1,4 +1,4 @@
-import { readFile, readdir, stat } from 'node:fs/promises';
+import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
@@ -10,6 +10,35 @@ const chunksDir = process.env.VGPU_EXAMPLE_CHUNKS_DIR
 const sourceDir = process.env.VGPU_EXAMPLE_SOURCE_DIR
   ? path.resolve(process.env.VGPU_EXAMPLE_SOURCE_DIR)
   : docsDir;
+
+// After a fresh production build, update approved examples with
+// `node scripts/check-example-bundles.mjs --update=earth,other-slug`.
+function parseUpdateSlugs(args) {
+  let updateSlugs = null;
+  for (const arg of args) {
+    if (arg === '--update') {
+      throw new Error('--update requires at least one slug; use --update=slug,slug.');
+    }
+    if (!arg.startsWith('--update=')) {
+      throw new Error(`Unknown argument: ${arg}. Expected --update=slug,slug.`);
+    }
+    if (updateSlugs !== null) throw new Error('--update may be supplied only once.');
+
+    const value = arg.slice('--update='.length);
+    if (!value) throw new Error('--update requires at least one slug.');
+    updateSlugs = value.split(',');
+    if (updateSlugs.some((slug) => !slug)) throw new Error('Missing update slug in --update list.');
+
+    const seen = new Set();
+    for (const slug of updateSlugs) {
+      if (seen.has(slug)) throw new Error(`Duplicate update slug: ${slug}.`);
+      seen.add(slug);
+    }
+  }
+  return updateSlugs;
+}
+
+const requestedUpdateSlugs = parseUpdateSlugs(process.argv.slice(2));
 
 /**
  * Everything that can change what lands in an example chunk. Deliberately not
@@ -52,6 +81,11 @@ if (missingBudgets.length || staleBudgets.length) {
     + `Stale: ${staleBudgets.join(', ') || 'none'}.`,
   );
 }
+const unknownUpdateSlugs = requestedUpdateSlugs?.filter((slug) => !canonicalSlugs.includes(slug)) ?? [];
+if (unknownUpdateSlugs.length > 0) {
+  throw new Error(`Unknown update slug${unknownUpdateSlugs.length === 1 ? '' : 's'}: ${unknownUpdateSlugs.join(', ')}.`);
+}
+const updateSlugs = new Set(requestedUpdateSlugs ?? []);
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -176,12 +210,22 @@ for (const slug of slugs) {
     Math.ceil(baseline * budgets.exampleGrowth.percent / 100),
   );
   const limit = baseline + allowedGrowth;
-  if (gzip > limit) throw new Error(`/preview/${slug} chunks are ${gzip} B gzip; budget is ${limit} B (${baseline} B baseline + ${allowedGrowth} B growth).`);
+  if (gzip > limit && !updateSlugs.has(slug)) throw new Error(`/preview/${slug} chunks are ${gzip} B gzip; budget is ${limit} B (${baseline} B baseline + ${allowedGrowth} B growth).`);
   results.push({ slug, chunks, raw, gzip, baseline, limit });
+}
+
+if (requestedUpdateSlugs !== null) {
+  for (const result of results) {
+    if (updateSlugs.has(result.slug)) budgets.examples[result.slug] = result.gzip;
+  }
+  await writeFile(budgetsFile, `${JSON.stringify(budgets, null, 2)}\n`, 'utf8');
 }
 
 console.log(`shared-preview-host ${hostName}: ${hostGzip} B gzip (baseline ${budgets.sharedHost.gzipBytes} B, limit ${hostLimit} B)`);
 for (const result of results) {
   console.log(`${result.slug}: ${result.gzip} B gzip / ${result.raw} B raw (baseline ${result.baseline} B, limit ${result.limit} B; chunks ${result.chunks.join(', ')})`);
+}
+if (requestedUpdateSlugs !== null) {
+  console.log(`Updated example bundle baselines for ${requestedUpdateSlugs.join(', ')}.`);
 }
 console.log(`Example bundle isolation and budgets passed for ${results.length} preview routes.`);

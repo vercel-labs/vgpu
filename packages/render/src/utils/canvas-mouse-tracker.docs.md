@@ -1,3 +1,8 @@
+---
+title: Canvas mouse tracking
+summary: Track pointer coordinates relative to a canvas layout and drawing buffer.
+---
+
 # canvasMouseTracker
 
 Tracks pointer coordinates relative to a canvas layout and drawing buffer.

@@ -60,19 +60,20 @@ describe("GPU debug preview host", () => {
     host.bridge.attachPreview({ canvas, source: debugSource("scene-hdr") });
 
     renderHost(gpu, host, 0);
+    expect(contextOf(canvas).getCurrentTexture).not.toHaveBeenCalled();
     await settle();
     renderHost(gpu, host, 0);
-    expect(contextOf(canvas).getCurrentTexture).toHaveBeenCalledTimes(2);
+    expect(contextOf(canvas).getCurrentTexture).toHaveBeenCalledTimes(1);
     expect(createDebugDraws).not.toHaveBeenCalled();
 
     host.invalidate();
     const callsAfterInvalidation = requestRender.mock.calls.length;
     renderHost(gpu, host, 0.05);
     renderHost(gpu, host, 0.06);
-    expect(contextOf(canvas).getCurrentTexture).toHaveBeenCalledTimes(2);
+    expect(contextOf(canvas).getCurrentTexture).toHaveBeenCalledTimes(1);
     expect(requestRender).toHaveBeenCalledTimes(callsAfterInvalidation);
     renderHost(gpu, host, 0.11);
-    expect(contextOf(canvas).getCurrentTexture).toHaveBeenCalledTimes(4);
+    expect(contextOf(canvas).getCurrentTexture).toHaveBeenCalledTimes(2);
     expect(requestRender).toHaveBeenCalled();
 
     dispose(gpu, host);
@@ -94,16 +95,18 @@ describe("GPU debug preview host", () => {
     host.bridge.attachPreview({ canvas, source: debugSource("raw-caustic") });
 
     renderHost(gpu, host, 0);
+    expect(contextOf(canvas).getCurrentTexture).not.toHaveBeenCalled();
     await settle();
     renderHost(gpu, host, 0);
+    expect(contextOf(canvas).getCurrentTexture).not.toHaveBeenCalled();
     await settle();
     renderHost(gpu, host, 0);
-    expect(contextOf(canvas).getCurrentTexture).toHaveBeenCalledTimes(2);
+    expect(contextOf(canvas).getCurrentTexture).toHaveBeenCalledTimes(1);
     expect(createDebugDraws).toHaveBeenCalledTimes(1);
 
     host.invalidate();
     renderHost(gpu, host, 1);
-    expect(contextOf(canvas).getCurrentTexture).toHaveBeenCalledTimes(2);
+    expect(contextOf(canvas).getCurrentTexture).toHaveBeenCalledTimes(1);
     expect(bind).toHaveBeenCalledTimes(2);
 
     dispose(gpu, host);
@@ -120,9 +123,10 @@ describe("GPU debug preview host", () => {
     });
 
     renderHost(gpu, host, 0);
+    expect(contextOf(canvas).getCurrentTexture).not.toHaveBeenCalled();
     await settle();
     renderHost(gpu, host, 0);
-    expect(contextOf(canvas).getCurrentTexture).toHaveBeenCalledTimes(2);
+    expect(contextOf(canvas).getCurrentTexture).toHaveBeenCalledTimes(1);
 
     host.dispose();
     expect(contextOf(canvas).unconfigure).toHaveBeenCalledTimes(1);

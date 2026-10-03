@@ -159,8 +159,12 @@ function titleFromSlug(slug) {
 }
 
 function headingAnchorForSymbol(markdown, symbol) {
+  const headings = headingEntries(markdown);
+  const exact = headings.find((heading) => heading.text === symbol);
+  if (exact) return exact.anchor;
+
   const symbolSlug = slugifyHeading(symbol);
-  const entry = headingEntries(markdown).find((heading) => heading.text === symbol || slugifyHeading(heading.text) === symbolSlug);
+  const entry = headings.find((heading) => slugifyHeading(heading.text) === symbolSlug);
   return entry?.anchor ?? null;
 }
 
@@ -173,16 +177,23 @@ function sectionForAnchor(markdown, anchor) {
 }
 
 function headingEntries(markdown) {
-  const counts = new Map();
+  // Fumadocs serves headings with github-slugger: suffixes start at 1 and emitted suffixes are
+  // themselves reserved, so "name", "NAME", "name-1" becomes name, name-1, name-1-1.
+  const occurrences = new Map();
   return [...markdown.matchAll(/^(#{1,6})\s+(.+)$/gmu)].map((match) => {
     const baseAnchor = slugifyHeading(match[2]);
-    const count = counts.get(baseAnchor) ?? 0;
-    counts.set(baseAnchor, count + 1);
+    let anchor = baseAnchor;
+    while (occurrences.has(anchor)) {
+      const count = (occurrences.get(baseAnchor) ?? 0) + 1;
+      occurrences.set(baseAnchor, count);
+      anchor = `${baseAnchor}-${count}`;
+    }
+    occurrences.set(anchor, 0);
     return {
       level: match[1].length,
       text: match[2].trim(),
       index: match.index ?? 0,
-      anchor: count === 0 ? baseAnchor : `${baseAnchor}-${count + 1}`,
+      anchor,
     };
   });
 }

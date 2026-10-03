@@ -2,8 +2,8 @@ import { expect, test } from "vitest";
 import { compareVisualSnapshot } from "../../../../scripts/lib/visual-snapshot.mjs";
 import { createNodeAdapter } from "@vgpu/adapter-node";
 
-import { perspectiveCamera, type Vec3 } from "vgpu/scene";
 import { meshToWireframe, wireframeMaterial } from "@vgpu/render/inspect";
+import { testCamera } from "./camera.ts";
 import { createReadableBoxMesh, renderInspectFrame } from "./helpers.ts";
 
 const SNAPSHOT_DIR = "packages/render/tests/inspect/__snapshots__";
@@ -20,14 +20,7 @@ for (const [angle, { position }] of Object.entries(CAMERAS)) {
       const mesh = createReadableBoxMesh(device, 1);
       const wireframe = await meshToWireframe(mesh, device);
       const material = wireframeMaterial({ device, color: [1, 1, 1], targetFormat: "rgba8unorm-srgb" });
-      const camera = perspectiveCamera({
-        fov: 45,
-        aspect: 1,
-        near: 0.1,
-        far: 100,
-        position: vec3(position),
-        target: vec3([0, 0, 0]),
-      });
+      const camera = testCamera(position);
 
       const pngBytes = await renderInspectFrame({
         device,
@@ -49,8 +42,4 @@ for (const [angle, { position }] of Object.entries(CAMERAS)) {
 
 async function expectSnapshot(name: string, pngBytes: Uint8Array): Promise<void> {
   await compareVisualSnapshot(SNAPSHOT_DIR, name, pngBytes, { onMismatch: (message: string) => expect.soft(false, message).toBe(true) });
-}
-
-function vec3(values: readonly [number, number, number]): Vec3 {
-  return new Float32Array(values) as Vec3;
 }

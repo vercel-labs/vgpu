@@ -1,6 +1,6 @@
 // The repository skill is deliberately version-neutral. API and workflow documentation ships in
 // the public `vgpu` package, so the skill only routes agents to the CLI from the version installed
-// in the project. Authored, version-neutral asset guidance lives alongside this router. This keeps
+// in the project. Authored, version-neutral scene and asset guidance lives alongside this router. This keeps
 // `npx skills add vercel-labs/vgpu` safe even while the default branch contains unreleased work.
 
 const SKILL = `---
@@ -23,6 +23,11 @@ The public skill install command has no branch pin:
 \`\`\`sh
 npx skills add vercel-labs/vgpu
 \`\`\`
+
+## 3D scenes
+
+If you need to work with 3D scenes, read [Scene composition](./scene.md) before implementing
+scene hierarchies, transforms, instances, cameras, or animation and physics integration.
 
 ## Blender assets
 
@@ -107,7 +112,7 @@ switch versions. Report the mismatch and change versions only when the user's ta
 // These skill resources are authored in place, not generated from the versioned CLI corpus.
 // Share the ownership boundary between regeneration and drift checking.
 export function isAuthoredSkillPath(relativePath) {
-  return relativePath === "blender" || relativePath.startsWith("blender/");
+  return relativePath === "scene.md" || relativePath === "blender" || relativePath.startsWith("blender/");
 }
 
 /** @returns {Map<string, string>} relative skill path to file content */

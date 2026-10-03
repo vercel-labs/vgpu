@@ -21,6 +21,7 @@ conditions apply; the linked steps are mandatory, not optional reference materia
 | When | Read before proceeding |
 | --- | --- |
 | Starting authorized maintainer implementation, including documentation or policy edits. | [Implementation](.github/guides/implementation.md) |
+| Designing or changing scene utilities or their guides. | [Scene library boundary](.github/guides/scene-scope.md) |
 | Changing published behavior, writing a changeset, or deciding whether consumers need migration. | [Changesets and migrations](.github/guides/migrations.md) |
 | Preparing, editing, reviewing, or merging a maintainer integration PR. | [Pull requests](.github/guides/pull-requests.md) and [CONTRIBUTING.md](CONTRIBUTING.md) |
 | Preparing/reviewing an RC or stable release, changing package versions for release, or publishing packages. | [Releases](.github/guides/releases.md) |
