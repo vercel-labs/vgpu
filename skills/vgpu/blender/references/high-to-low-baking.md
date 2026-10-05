@@ -10,9 +10,11 @@ Compare the evaluated source against the current delivered asset. Hidden authori
 
 Check that the source collection participates in the evaluated dependency graph before trusting modifier counts. A tiny known beveled part should show its expected additional geometry. Change visibility only in the working copy; an inventory that silently measures the base cage can misidentify the entire cost distribution.
 
-Record matched target views and a baseline wireframe. Wireframe brightness is a diagnostic, not a performance measurement: measure solid-render geometry, passes, texture residency and timings separately.
+Record matched target views using the [solid wireframe review views](../index.md#6-verify-the-observable-result). Wireframe brightness is a diagnostic, not a performance measurement: measure solid-render geometry, passes, texture residency and timings separately.
 
 ## 2. Allocate geometry by visible effect
+
+First choose the [representation for each part family](shape-and-assembly.md#reduce-geometry-by-visible-surface), then allocate polygons to the surfaces that still need geometry.
 
 | Feature | First candidate | Required check |
 | --- | --- | --- |
@@ -69,7 +71,7 @@ When baking only geometric transfer, remove material bump/normal contributions f
 
 ## 4. Prove one representative transfer
 
-Before a whole-scene bake, select a part that exercises the difficult cases: a beveled edge, an inset/neighboring surface, a curved region and relevant UV orientations. Use the final exporter and runtime material path, not only a flat bake plane.
+Before a whole-scene bake, select a part that exercises the difficult cases: a beveled edge, an inset/neighboring surface, a curved region and relevant UV orientations. Use the final exporter and runtime material path, not only a flat bake plane. Check the separate [bake input inventories](baking-and-diagnostics.md#prepare-the-final-low-poly-mesh) before choosing the scene for each pass.
 
 1. Match HIGH/LOW parts by stable identity and transform. Explicitly select source objects and make LOW active. Set the receiving image node active in every participating LOW material.
 2. Initialize a lossless normal target to neutral and AO to unoccluded values. Do not assume every missed ray produces those defaults. Use an explicit coverage/hit diagnostic to distinguish an unhit pixel from genuinely neutral detail.
@@ -88,7 +90,7 @@ Compare HIGH, LOW with projected normals disabled, and baked LOW under the same 
 
 For focused VGPU checks, use `vgpu/node` in project-owned scripts to render isolated components or shader fixtures into offscreen targets and read back PNGs or numeric results. Reuse the production WGSL, asset decoding and material bindings; a separate approximate shader does not validate the application. Keep diagnostic fixtures and probe entry points outside the shipped application. Record the actual adapter, inputs and errors, then use browser captures for the complete scene, interaction and browser-specific behavior.
 
-For a difficult frame mismatch, bake an object-space normal reference and an explicit source-hit mask with the same projection settings. Compare decoded tangent normals against that reference on covered texels, separating chart-boundary filtering from interior errors. Include a smooth curved receiver; flat charts alone cannot test interpolation parity. Inspect error outliers rather than hiding them in a mean or relaxing the threshold.
+For a difficult frame mismatch, bake an object-space normal reference and an explicit source-hit mask with the same projection settings. Compare decoded tangent normals against that reference on covered texels, separating chart-boundary filtering from interior errors. Include a smooth curved receiver; flat charts alone cannot test interpolation parity. Use the [frame validation criteria](baking-and-diagnostics.md#prepare-the-final-low-poly-mesh) to distinguish direction, sign and precision faults; inspect outliers rather than hiding them in a mean or relaxing the threshold.
 
 That comparison verifies decoding, not source selection: both normal passes can hit the same unintended surface and still agree. Check the intended source part or region independently, for example with a constant source-face ID diagnostic under the same projection settings. Inspect unexpected source locations and distances, especially through thin or concave geometry. Complete coverage and a small normal-decoding error do not establish correct correspondence.
 

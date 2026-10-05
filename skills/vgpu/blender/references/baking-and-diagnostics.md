@@ -10,11 +10,13 @@ Inspect hard, smooth, or weighted normals across flat panels and bevel transitio
 
 Before raytracing, check finite UVs, collapsed triangles, unintended overlap, padding and actual texel coverage at the final resolution. Positive chart area or a large bounding box does not guarantee coverage of a narrow exposed strip. Repeat fragile checks after export or LOD simplification. Compare whole-view AO-on/off images as well as repaired crops; a new atlas can fix one seam while making another face black.
 
-Use stable names or groups to pair parts. An explicit cage must match LOW topology and transforms; an automatic extrusion still needs inspection. Choose projection distances for local thickness, curvature, and nearby surfaces rather than copying a universal offset.
+Use stable names or groups to pair parts. Inventory receivers, projected-detail sources and cages, and the complete occluder set separately. A partial edit scene may be sufficient for a matched projection but must not silently define assembled AO or illumination when relevant occluders are absent. An explicit cage must match LOW topology and transforms; an automatic extrusion still needs inspection. Choose projection distances for local thickness, curvature, and nearby surfaces rather than copying a universal offset.
 
 For selected-to-active normal baking, verify the source selection, active LOW, source visibility, active image target in each receiving material, tangent space, and Y convention. Initialize unused normal texels to neutral (0.5, 0.5, 1) and AO to 1. Disable clearing between passes that accumulate into one atlas.
 
-Isolate matched HIGH/LOW pairs when projection picks up adjacent parts. Move an explicit cage with its pair. Use compact, deterministic offsets: extreme coordinates lose precision around narrow bevels. Restore the assembly before export.
+Isolate matched HIGH/LOW pairs when projection picks up adjacent parts. Move an explicit cage with its pair. Use compact, deterministic offsets: extreme coordinates lose precision around narrow bevels. Restore the intended assembled occluders for AO or illumination, and restore LOW to its intended arrangement for export.
+
+Validate a tangent frame as separate properties: normal/tangent direction by angular error, tangent handedness, unit lengths, and orthogonality. Account for UV precision and native normal/tangent quantization when deriving tolerances from the representation and runtime use. Preserve exact canonical input identities separately from approximate diagnostic comparisons, and run the diagnostic before an expensive bake. Do not relax a failing threshold merely to accept output or copy constants from an unrelated asset.
 
 ## Directional tile mapping
 
@@ -49,7 +51,7 @@ Record pass-specific cache inputs, including source identity, evaluated geometry
 | Material reflectance, lights or environment | Illumination passes that depend on them; independent AO need not change |
 | Compression, channels or mip generation only | Delivery textures and runtime validation; preserve unchanged lossless bake masters |
 
-If the affected receiver set cannot be established, invalidate the dependent assembly pass conservatively. Reuse an entry only when its real dependency identity and validated outputs match. Never relabel stale lighting with a new key. Byte identity can justify reuse of those exact outputs, but does not prove visual equivalence of a changed scene. A packaging failure does not invalidate completed bakes whose inputs remain unchanged.
+If the affected receiver set cannot be established, invalidate the dependent assembly pass conservatively. Otherwise determine which receivers the changed occluder can affect and inspect adjacent contacts with AO and lightmaps independently enabled and disabled. A finite AO distance can bound its influence; do not assume the same bound applies to indirect illumination. Reuse an entry only when its real dependency identity and validated outputs match. Never relabel stale lighting with a new key. Byte identity can justify reuse of those exact outputs, but does not prove that neighboring lightmaps are physically fresh after a scene change. Record accepted approximations and their affected regions. A packaging failure does not invalidate completed bakes whose inputs remain unchanged.
 
 ## Texture filtering and runtime conventions
 
