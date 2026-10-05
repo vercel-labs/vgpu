@@ -19,19 +19,23 @@ Give expensive stages explicit commands, inputs, outputs and validation. A task-
 
 | Stage | Evidence needed before its outputs can be reused |
 | --- | --- |
-| Prepare | Saved source/LOW checkpoint, resolved transforms and reproducible parameters |
+| Prepare | Saved source/LOW checkpoint, resolved transforms, stable part identities and reproducible parameters |
 | Validate geometry | Openings, contacts, normals and UV checks on evaluated/exported LOW; simple-material views, including relevant LODs |
 | Bake | Lossless masters, actual pass settings and dependency identities, coverage and representative pixel checks |
 | Export | Decodable serialized meshes, map/UV bindings and measured counts; reconcile exporter changes with prepared geometry |
 | Package | Required files, decoded texture error, channels/mips and delivery manifest with hashes |
 | Verify runtime | Actual target-backend captures from matched cameras, independent map toggles, measured costs and renderer errors |
 
-For each attempt, save the exact command, input/dependency hashes, tool identities, exit outcome, output hashes, validation results and failure reason. Mark a stage complete only after its outputs pass its checks. Keep failed attempts and logs distinct from completed checkpoints. File existence or a successful process alone is not proof of completion.
+For each attempt, save the exact command, input/dependency hashes, stable part identities, tool identities, exit outcome, output hashes, validation results and failure reason. Mark a stage complete only after its outputs pass its checks. Keep receipts and failed attempts distinct from completed checkpoints. File existence or a successful process alone is not proof of completion.
 
 On retry, start at the earliest invalid stage and revalidate dependent outputs. If packaging fails after a verified bake/export, resume packaging from those artifacts; do not regenerate the scene merely to rerun a copy step. When geometry, normals or lighting change, use the [bake dependency rules](baking-and-diagnostics.md#reuse-bakes-by-their-dependencies) to decide which passes need new identities.
 
 ## Validate a candidate before replacing delivery assets
 
 Keep candidate assets separate from the last working delivery. Verify the candidate manifest and served build/asset identities before capture; avoid a preview that silently loads missing files from the old asset set. Promote only the validated files together with their matching manifest, retain a recoverable previous version, and smoke-check the delivered URL after replacement. Report whether the replacement is atomic; per-file writes do not make the whole asset set atomic.
+
+Before deleting a scripted pipeline's working intermediates, prove that the saved recovery inputs are sufficient. For example, use a new temporary directory to regenerate the export from the saved editable source, scripts, settings and lossless maps, without reading the old temporary files. Compare triangle connectivity, vertex/corner attributes, map values and material/UV bindings. Require exact equality for saved input fields; declare justified tolerances for recomputed outputs. A `.blend` saved again may have different file bytes without changing those contents, but a changed UV is a real input change. Keep both file hashes for provenance and the content comparison results.
+
+Retain the final editable source, lossless masters and receipts, plus inputs needed for recovery. After reconstruction, comparison and delivery validation succeed, remove only task-owned disposable duplicates; preserve failed-attempt logs and the evidence supporting acceptance.
 
 Checks establish structural and runtime evidence, not aesthetic acceptance. Pair them with the matched visual review in the [asset workflow](../index.md#6-verify-the-observable-result).
