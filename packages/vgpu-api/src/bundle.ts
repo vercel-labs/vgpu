@@ -1,5 +1,5 @@
 import { createRenderBundle } from "./core/render-bundle.ts";
-import { InternalDraw, drawGeometrySnapshot, drawLifecycleToken, drawResourceSnapshots, drawUsesBlendConstant, drawUsesStencilReference, encodeDraw, type BundleBackReference, type BundleStaleEvent, type Draw, type DrawCallOptions, type DrawLifecycleToken } from "./draw.ts";
+import { InternalDraw, assertDrawUsable, drawGeometrySnapshot, drawLifecycleToken, drawResourceSnapshots, drawUsesBlendConstant, drawUsesStencilReference, encodeDraw, type BundleBackReference, type BundleStaleEvent, type Draw, type DrawCallOptions, type DrawLifecycleToken } from "./draw.ts";
 import { InternalEffect, effectDraw, type Effect } from "./effect.ts";
 import type { CompileTarget, Target, TargetSignature } from "./target.ts";
 import { normalizeSignature, signatureKeyOf, validateTargetSignature } from "./pipeline-store.ts";
@@ -221,7 +221,7 @@ class ExplicitBundleRecorder implements BundleRecorder {
     // Blend/writeMask are constructor-only draw pipeline state. If they ever become mutable or per-call,
     // bundles need a new staleness dimension beyond the target signature checked at replay.
     const draw = drawable instanceof InternalEffect ? effectDraw(drawable) : drawable as InternalDraw;
-    draw.assertUsable("draw");
+    assertDrawUsable(draw, "draw");
     // The blend constant is render-pass state; GPURenderBundleEncoder has no setBlendConstant, so reject at recording.
     if (drawUsesBlendConstant(draw)) throw bundleBlendConstantError(this.bundle.id, draw.label);
     // Likewise the stencil reference: GPURenderBundleEncoder has no setStencilReference. Stencil pipeline state without ref records fine.

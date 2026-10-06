@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { bindGroupCacheTestState, createBindGroupCache } from "../src/bind-cache.ts";
+import { CAPTURE_PAGE_KIND, bindGroupCacheTestState, bindGroupClock, createBindGroupCache } from "../src/bind-cache.ts";
 
 const layout = (name: string): GPUBindGroupLayout => ({ label: name }) as GPUBindGroupLayout;
 const group = (name: string): GPUBindGroup => ({ label: name }) as GPUBindGroup;
@@ -136,4 +136,48 @@ test("rotating maintenance passes live records and removes a dead record within 
     expect(state.lifetime.maintenanceVisits - before).toBeLessThanOrEqual(16);
   }
   expect(state.lifetime.records).toBe(19);
+});
+
+test("age-gated page eviction keeps recent entries registered, drops stale and dead ones, and stays within the page bucket", () => {
+  const cache = createBindGroupCache();
+  const state = bindGroupCacheTestState(cache);
+  const bgl = layout("pages");
+  const [stale, recent, dead, other] = [{}, {}, {}, {}];
+  const range = (offset: number) => ({ kind: CAPTURE_PAGE_KIND, id: 7, offset, size: 16 });
+  const take = (owner: object, offset: number, name: string) =>
+    cache.getOrCreate(owner, 0, bgl, [{ binding: 0, key: range(offset) }], [range(offset)], () => group(name));
+  take(stale, 0, "stale");
+  take(dead, 512, "dead");
+  cache.getOrCreate(other, 0, bgl, [{ binding: 0, key: "unrelated" }], ["unrelated"], () => group("unrelated"));
+  const mark = bindGroupClock();
+  const kept = take(recent, 256, "recent");
+  state.lifetime.forceDead(state.lifetime.recordIds[1]!);
+
+  const targetedBefore = state.lifetime.targetedVisits;
+  cache.evictIdentity({ kind: CAPTURE_PAGE_KIND, id: 7 }, mark);
+  // Only the page bucket is visited; maintenance may already have swept the dead record.
+  expect(state.lifetime.targetedVisits - targetedBefore).toBeLessThanOrEqual(3);
+  expect(state.ownerEntries(stale)).toBe(0);
+  expect(state.ownerEntries(recent)).toBe(1);
+  expect(state.ownerEntries(other)).toBe(1);
+  expect(state.lifetime.records).toBe(2);
+  expect(take(recent, 256, "unexpected")).toBe(kept);
+
+  cache.evictIdentity({ kind: CAPTURE_PAGE_KIND, id: 7 });
+  expect(state.ownerEntries(recent)).toBe(0);
+  expect(state.lifetime.records).toBe(1);
+});
+
+test("clearing one group retires its entries across layouts and keeps the owner's other groups", () => {
+  const cache = createBindGroupCache();
+  const state = bindGroupCacheTestState(cache);
+  const owner = {};
+  const kept = cache.getOrCreate(owner, 0, layout("static-0"), [{ binding: 0, key: "A" }], ["A"], () => group("group-0"));
+  cache.getOrCreate(owner, 1, layout("static-1"), [{ binding: 0, key: "A" }], ["A"], () => group("group-1"));
+  cache.getOrCreate(owner, 1, layout("dynamic-1"), [{ binding: 0, key: "A" }], ["A"], () => group("group-1-dynamic"));
+
+  cache.clearOwner(owner, 1);
+  expect(state.ownerEntries(owner)).toBe(1);
+  expect(state.lifetime.records).toBe(1);
+  expect(cache.getOrCreate(owner, 0, layout("unused"), [{ binding: 0, key: "A" }], ["A"], () => group("other-layout"))).not.toBe(kept);
 });

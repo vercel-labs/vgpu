@@ -154,7 +154,15 @@ test("invalid raw ranges fail transactionally with binding-specific fixes", asyn
     }
 
     const wrongUsage = gpu.gpu.createBuffer({ size: alignment, usage: 8 });
-    expect(() => kernel.set({ params: wrongUsage })).toThrowError(expect.objectContaining({ code: "VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE" }));
+    expect(() => kernel.set({ params: wrongUsage })).toThrowError(expect.objectContaining({
+      code: "VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE",
+      fix: expect.stringMatching(/uniform usage.*aligned.*size.*buffer\.size/i),
+    }));
+    const trackedWrongUsage = gpu.device.createBuffer({ size: alignment, usage: ["copy_dst"] });
+    expect(() => kernel.set({ params: trackedWrongUsage })).toThrowError(expect.objectContaining({
+      code: "VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE",
+      fix: "Create with usage: ['uniform','copy_dst'].",
+    }));
     expect(() => kernel.set({ params: { buffer: raw, offset: 0, size: 17 } })).not.toThrow();
   } finally {
     gpu.dispose();
@@ -185,32 +193,111 @@ test("storage ranges require four-byte sizes and enforce granted maximums", asyn
   }
 });
 
+test("raw and JS binding ownership cannot flip, and rejected raw candidates do not latch ownership", async () => {
+  const gpu = await init();
+  try {
+    const alignment = gpu.gpu.limits.minUniformBufferOffsetAlignment;
+    const raw = gpu.gpu.createBuffer({ size: alignment, usage: 64 });
+    const wrongUsage = gpu.gpu.createBuffer({ size: alignment, usage: 8 });
+    const shader = `
+      @group(0) @binding(0) var<uniform> params: vec4f;
+      @compute @workgroup_size(1) fn main() { let value = params; }
+    `;
+
+    const rawFirst = compute(gpu, shader, { set: { params: raw } });
+    expect(() => rawFirst.set({ params: [1, 2, 3, 4] })).toThrowError(expect.objectContaining({ code: "VGPU-R1-OWNERSHIP-FLIP" }));
+
+    const jsFirst = compute(gpu, shader, { set: { params: [1, 2, 3, 4] } });
+    expect(() => jsFirst.set({ params: raw })).toThrowError(expect.objectContaining({ code: "VGPU-R1-OWNERSHIP-FLIP" }));
+
+    const rejectedFirst = compute(gpu, shader);
+    expect(() => rejectedFirst.set({ params: wrongUsage })).toThrowError(expect.objectContaining({ code: "VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE" }));
+    expect(() => rejectedFirst.set({ params: [1, 2, 3, 4] }).dispatch(1)).not.toThrow();
+  } finally {
+    gpu.dispose();
+  }
+});
+
 test("writable storage aliasing compares native allocation across ranges and spellings", async () => {
   const gpu = await init();
   try {
     const alignment = gpu.gpu.limits.minStorageBufferOffsetAlignment;
     const raw = gpu.gpu.createBuffer({ size: alignment * 2, usage: 128 });
     const other = gpu.gpu.createBuffer({ size: alignment, usage: 128 });
+    const tracked = gpu.device.wrapBuffer(raw);
     const shader = `
       @group(0) @binding(0) var<storage, read> source: array<u32>;
       @group(0) @binding(1) var<storage, read_write> destination: array<u32>;
       @compute @workgroup_size(1) fn main() { destination[0] = source[0]; }
     `;
-    const aliased = compute(gpu, shader, { set: {
-      source: { buffer: raw, offset: 0, size: 4 },
-      destination: { buffer: raw, offset: alignment, size: 4 },
-    } });
     const mock = getMockGPUDeviceInstrumentation(gpu.gpu);
-    const encoders = mock.calls.createCommandEncoder;
-    expect(() => aliased.dispatch(1)).toThrowError(expect.objectContaining({ code: "VGPU-R1-STORAGE-ALIASING" }));
-    expect(mock.calls.createCommandEncoder).toBe(encoders);
-    const pending = frame(gpu);
-    expect(() => pending.computePass(pass => pass.dispatch(aliased, 1))).toThrowError(expect.objectContaining({ code: "VGPU-R1-STORAGE-ALIASING" }));
-    pending.cancel();
+    let nativeDispatches = 0;
+    const originalCreateCommandEncoder = gpu.gpu.createCommandEncoder.bind(gpu.gpu);
+    vi.spyOn(gpu.gpu, "createCommandEncoder").mockImplementation((desc?: GPUCommandEncoderDescriptor) => {
+      const encoder = originalCreateCommandEncoder(desc);
+      return {
+        ...encoder,
+        beginComputePass(passDesc?: GPUComputePassDescriptor) {
+          const pass = encoder.beginComputePass(passDesc);
+          return {
+            ...pass,
+            dispatchWorkgroups(x: number, y?: number, z?: number) {
+              nativeDispatches += 1;
+              pass.dispatchWorkgroups(x, y, z);
+            },
+            dispatchWorkgroupsIndirect(buffer: GPUBuffer, offset: number) {
+              nativeDispatches += 1;
+              pass.dispatchWorkgroupsIndirect(buffer, offset);
+            },
+          } as GPUComputePassEncoder;
+        },
+      } as GPUCommandEncoder;
+    });
 
-    const tracked = gpu.device.wrapBuffer(raw);
-    const mixed = compute(gpu, shader, { set: { source: tracked, destination: { buffer: raw, offset: alignment, size: 4 } } });
-    expect(() => mixed.dispatch(1)).toThrowError(expect.objectContaining({ code: "VGPU-R1-STORAGE-ALIASING" }));
+    const variants = [
+      {
+        name: "disjoint ranges",
+        source: { buffer: raw, offset: 0, size: 4 },
+        destination: { buffer: raw, offset: alignment, size: 4 },
+      },
+      {
+        name: "overlapping ranges at aligned offsets",
+        source: { buffer: raw, offset: 0, size: alignment + 4 },
+        destination: { buffer: raw, offset: alignment, size: 4 },
+      },
+      {
+        name: "equal offsets with different sizes",
+        source: { buffer: raw, offset: 0, size: 4 },
+        destination: { buffer: raw, offset: 0, size: 8 },
+      },
+      {
+        name: "tracked and raw spellings",
+        source: tracked,
+        destination: { buffer: raw, offset: alignment, size: 4 },
+      },
+    ];
+
+    for (const variant of variants) {
+      const aliased = compute(gpu, shader, { label: variant.name, set: {
+        source: variant.source,
+        destination: variant.destination,
+      } });
+      const standaloneEncoders = mock.calls.createCommandEncoder;
+      const standaloneDispatches = nativeDispatches;
+      expect(() => aliased.dispatch(1), `${variant.name}: standalone`).toThrowError(expect.objectContaining({ code: "VGPU-R1-STORAGE-ALIASING" }));
+      expect(mock.calls.createCommandEncoder, `${variant.name}: standalone encoder`).toBe(standaloneEncoders);
+      expect(nativeDispatches, `${variant.name}: standalone dispatch`).toBe(standaloneDispatches);
+
+      const pending = frame(gpu);
+      const frameEncoders = mock.calls.createCommandEncoder;
+      const frameDispatches = nativeDispatches;
+      expect(() => pending.computePass(pass => pass.dispatch(aliased, 1)), `${variant.name}: frame`).toThrowError(
+        expect.objectContaining({ code: "VGPU-R1-STORAGE-ALIASING" }),
+      );
+      expect(mock.calls.createCommandEncoder, `${variant.name}: frame encoder`).toBe(frameEncoders);
+      expect(nativeDispatches, `${variant.name}: frame dispatch`).toBe(frameDispatches);
+      pending.cancel();
+    }
 
     const distinct = compute(gpu, shader, { set: { source: raw, destination: other } });
     expect(() => distinct.dispatch(1)).not.toThrow();

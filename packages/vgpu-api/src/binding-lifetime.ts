@@ -31,7 +31,8 @@ export interface BindingLifetimeService {
   ): ResourceLifetimeMarker;
   register(target: LifetimeDependent, dependencies: readonly string[]): number | undefined;
   unregister(record: number | undefined): void;
-  invalidate(dependency: string): void;
+  /** Invalidates the dependency's records; with `filter`, records it rejects stay registered. */
+  invalidate(dependency: string, filter?: (target: LifetimeDependent) => boolean): void;
   maintain(): void;
   dispose(): void;
 }
@@ -42,6 +43,8 @@ export interface BindingLifetimeTestState {
   readonly dependencyBuckets: number;
   readonly maintenanceVisits: number;
   readonly targetedVisits: number;
+  /** Records whose dependent is still reachable. */
+  liveTargets(): LifetimeDependent[];
   forceDead(record: number): void;
   maintain(): void;
 }
@@ -117,7 +120,7 @@ export function createBindingLifetimeService(): BindingLifetimeService {
     unregister(record) {
       if (record !== undefined) removeRecord(state, record);
     },
-    invalidate(dependency) {
+    invalidate(dependency, filter) {
       service.maintain();
       const bucket = state.dependencies.get(dependency);
       if (!bucket) return;
@@ -126,6 +129,7 @@ export function createBindingLifetimeService(): BindingLifetimeService {
         const record = state.records.get(id);
         if (!record) continue;
         const target = record.target.deref();
+        if (target && filter && !filter(target)) continue;
         if (target) target.invalidateLifetime(id, dependency);
         removeRecord(state, id);
       }
@@ -193,6 +197,14 @@ export function bindingLifetimeTestState(service: BindingLifetimeService): Bindi
     get dependencyBuckets() { return state.dependencies.size; },
     get maintenanceVisits() { return state.maintenanceVisits; },
     get targetedVisits() { return state.targetedVisits; },
+    liveTargets() {
+      const targets: LifetimeDependent[] = [];
+      for (const record of state.records.values()) {
+        const target = record.target.deref();
+        if (target) targets.push(target);
+      }
+      return targets;
+    },
     forceDead(record) {
       const entry = state.records.get(record);
       if (entry) entry.target = { deref: () => undefined };

@@ -1105,6 +1105,8 @@ export function drawGeometrySnapshot(draw: InternalDraw): GeometryLive | undefin
 
 export function drawCacheOwnerTestState(draw: InternalDraw): SetCoreTestState { return setCoreTestState(drawState(draw, "cacheOwner").setCore); }
 
+export function assertDrawUsable(draw: Draw, operation: string): void { drawState(draw, operation); }
+
 export function registerDrawBundle(draw: Draw, bundle: BundleBackReference): void { drawState(draw, "bundle").lifecycle.recordedIn.add(bundle); }
 
 export function unregisterDrawBundle(draw: Draw, bundle: BundleBackReference): void { drawState(draw, "bundle").lifecycle.recordedIn.delete(bundle); }

@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { draw, effect, frame, getMockGPUDeviceInstrumentation, init, target, uniforms, type Frame } from "../../src/mock.ts";
-import { CAPTURE_PAGE_KIND, createBindGroupCache, type BufferRangeIdentity } from "../../src/bind-cache.ts";
+import { CAPTURE_PAGE_KIND, bindGroupCacheTestState, createBindGroupCache, type BindGroupCache, type BindGroupIdentityPart, type BufferRangeIdentity } from "../../src/bind-cache.ts";
 import { FrameUniforms, MAX_RETAINED_UNIFORM_PAGES, disposeFrameUniforms } from "../../src/frame-uniforms.ts";
 import { liveKernel } from "../../src/live-kernel.ts";
 import { renderService } from "../../src/render-service.ts";
@@ -13,6 +13,12 @@ const SHADER = `struct Camera { value:f32 } struct Params { value:f32 }
 @fragment fn main() -> @location(0) vec4f { return vec4f(camera.value + params.value); }`;
 const PAGE_LABEL = "vgpu.frame.uniforms";
 afterEach(() => vi.restoreAllMocks());
+
+const LAYOUT = {} as GPUBindGroupLayout;
+/** Caches one bind group for `owner` over a captured range, keyed and tracked like a draw's group. */
+function cacheRange(cache: BindGroupCache, owner: object, identity: BindGroupIdentityPart) {
+  cache.getOrCreate(owner, 0, LAYOUT, [{ binding: 0, key: identity }], [identity], () => ({}) as GPUBindGroup);
+}
 
 /** Records bind groups as they are set, page buffers as they are created/destroyed, and holds queue completion. */
 function instrument(gpu: Gpu) {
@@ -232,10 +238,11 @@ test("idle pages are bounded by count and bytes; destroyed pages take their bind
     const probe = instrument(gpu);
     (gpu.gpu.limits as { minUniformBufferOffsetAlignment: number }).minUniformBufferOffsetAlignment = 32768;
     const cache = createBindGroupCache();
+    const owners: object[] = [];
     const capture = (frameUniforms: FrameUniforms, count: number, bytes = 16) => {
       for (let i = 0; i < count; i++) {
         const { identity } = frameUniforms.capture({ owner: {}, revision: 1, bytes: new Uint8Array(bytes) }, cache);
-        cache.getOrCreate(i, 0, [identity], () => ({}) as GPUBindGroup);
+        cacheRange(cache, owners[i] ??= {}, identity);
       }
     };
     const first = new FrameUniforms(gpu.device);
@@ -243,7 +250,7 @@ test("idle pages are bounded by count and bytes; destroyed pages take their bind
     expect(probe.pages.length).toBe(MAX_RETAINED_UNIFORM_PAGES + 7);
     first.release();
     expect(probe.destroyed.size).toBe(7);
-    expect(cache.stats().entries).toBe(MAX_RETAINED_UNIFORM_PAGES * 2);
+    expect(bindGroupCacheTestState(cache).trackedEntries()).toBe(MAX_RETAINED_UNIFORM_PAGES * 2);
 
     const second = new FrameUniforms(gpu.device);
     capture(second, MAX_RETAINED_UNIFORM_PAGES * 2);
@@ -314,12 +321,13 @@ test("page identities are unique across devices", async () => {
     const ia = fa.capture(value, cache).identity as BufferRangeIdentity;
     const ib = fb.capture(value, cache).identity as BufferRangeIdentity;
     expect(ia.id).not.toBe(ib.id);
-    cache.getOrCreate(1, 0, [ia], () => ({}) as GPUBindGroup);
-    cache.getOrCreate(1, 0, [ib], () => ({}) as GPUBindGroup);
+    const owner = {};
+    cacheRange(cache, owner, ia);
+    cacheRange(cache, owner, ib);
     fa.release();
     fb.release();
     disposeFrameUniforms(a.device);
-    expect(cache.stats().entries).toBe(1);
+    expect(bindGroupCacheTestState(cache).trackedEntries()).toBe(1);
   } finally { a.dispose(); b.dispose(); }
 });
 
@@ -363,7 +371,7 @@ test("changing draw order and discarded draws keep the cache bounded", async () 
       const ranges = probe.take();
       expectFrameValues(ranges.slice(0, order.length * 2), i * 1000, order);
       await f.done;
-      sizes.push(binds.stats().entries);
+      sizes.push(bindGroupCacheTestState(binds).trackedEntries());
     }
     expect(Math.max(...sizes.slice(10))).toBeLessThanOrEqual(Math.max(...sizes.slice(0, 10)) + 4);
     expect(Math.max(...sizes)).toBeLessThan(40 * 2 * 3);

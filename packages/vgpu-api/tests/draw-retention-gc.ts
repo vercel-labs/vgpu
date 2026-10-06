@@ -1,6 +1,6 @@
 import { bindGroupCacheTestState, createBindGroupCache } from "../src/bind-cache.ts";
 import { bindingTextureView, bindingViewCacheTestState } from "../src/binding-views.ts";
-import { bundle, compute, draw, effect, frame, init, target, texture } from "../src/mock.ts";
+import { bundle, compute, draw, effect, frame, init, target, texture, uniforms } from "../src/mock.ts";
 import { effectDraw } from "../src/effect.ts";
 
 const SAMPLED = `
@@ -29,6 +29,18 @@ const gc = (globalThis as typeof globalThis & { gc?: () => void }).gc;
 if (!gc) throw new Error("draw retention probe requires process.execPath --expose-gc");
 
 const gpu = await init();
+let pagesCreated = 0;
+let pagesDestroyed = 0;
+const createBuffer = gpu.gpu.createBuffer.bind(gpu.gpu);
+gpu.gpu.createBuffer = (descriptor) => {
+  const created = createBuffer(descriptor);
+  if (descriptor.label === "vgpu.frame.uniforms") {
+    pagesCreated += 1;
+    const destroy = created.destroy.bind(created);
+    created.destroy = () => { pagesDestroyed += 1; destroy(); };
+  }
+  return created;
+};
 try {
   const output = target(gpu, { size: [4, 4] });
   const source = target(gpu, { size: [4, 4] });
@@ -39,6 +51,7 @@ try {
   const rawUniformBuffer = gpu.gpu.createBuffer({ size: uniformAlignment * 2, usage: 0x40 | 0x08 });
   const rawStorageBuffer = gpu.gpu.createBuffer({ size: storageAlignment * 2, usage: 0x80 | 0x08 });
   const rawView = source.color.view;
+  const retainedShared: ReturnType<typeof uniforms<{ value: number }>>[] = [];
   let textureListeners = 0;
   let targetListeners = 0;
   let bufferListeners = 0;
@@ -61,6 +74,7 @@ try {
     ...makeComputes(16, true),
     ...makeRawEffects(),
     ...makeRawComputes(),
+    ...(await makePooledUniformEffects(24)),
   ];
   const pending = frame(gpu);
   const pendingRefs = [
@@ -137,6 +151,14 @@ try {
     return true;
   });
   if (retainedRef.deref() !== retained) throw new Error("retained control was collected");
+  const pooledPagesAlive = pagesCreated > 0 && pagesDestroyed === 0;
+  // The shared blocks are positive controls: still set and drawn after the consumers bound to them were collected.
+  for (const shared of retainedShared) {
+    shared.set({ value: 4 });
+    const reuse = effect(gpu, UNIFORM, { label: "pooled-shared-reuse", set: { params: shared } });
+    await frame(gpu, current => current.pass(output, pass => pass.draw(reuse))).done;
+    reuse.dispose();
+  }
   frame(gpu, current => current.pass(output, pass => pass.draw(retained)));
   pending.submit();
   await pending.done;
@@ -146,6 +168,7 @@ try {
     collected,
     pendingCollected: pendingRefs.every((reference) => reference.deref() === undefined),
     retained: retainedRef.deref() === retained,
+    pooledPagesAlive,
     disposedRetained,
     releasedDisposedMetadata,
     releasedDisposedComputeConstructorSet,
@@ -194,6 +217,28 @@ try {
       if (dispose) pipeline.dispose();
       return new WeakRef(pipeline);
     });
+  }
+
+  /** Repeated completed frames over a retained shared block: the pages stay pooled while the consumers go. */
+  async function makePooledUniformEffects(count: number): Promise<WeakRef<object>[]> {
+    const shared = uniforms(gpu, { value: 1 });
+    const references: WeakRef<object>[] = [];
+    const drawables = Array.from({ length: count }, (_, index) => {
+      const drawable = effect(gpu, UNIFORM, { label: `pooled-effect-${index}`, set: { params: index % 2 === 0 ? shared : { value: index } } });
+      references.push(new WeakRef(drawable), new WeakRef(effectDraw(drawable)));
+      return drawable;
+    });
+    for (let round = 0; round < 3; round += 1) {
+      shared.set({ value: round });
+      await frame(gpu, current => current.pass(output, pass => {
+        for (const [index, drawable] of drawables.entries()) {
+          if (index % 2 === 1) drawable.set({ params: { value: round === 2 ? index : round } });
+          pass.draw(drawable);
+        }
+      })).done;
+    }
+    retainedShared.push(shared);
+    return references;
   }
 
   function makePendingEffect(pendingFrame: ReturnType<typeof frame>, dispose = false): WeakRef<object>[] {
