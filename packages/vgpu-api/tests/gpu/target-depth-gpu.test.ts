@@ -40,6 +40,19 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("sampleable depth on Dawn"
       expect(pixels[1]).toBe(255);
       expect(pixels[(7 * 8 + 7) * 4]).toBe(0);
       expect(pixels[(7 * 8 + 7) * 4 + 1]).toBe(255);
+
+      scene.resize([4, 4]);
+      for (let passIndex = 0; passIndex < 2; passIndex += 1) {
+        await frame(gpu, (current) => {
+          current.pass({ target: scene, clear: [0, 0, 0, 1] }, (pass) => pass.draw(geometry));
+          current.pass({ target: output, clear: [0, 0, 0, 1] }, (pass) => pass.draw(fog));
+        }).done;
+        const refreshed = await output.color.read({ mipLevel: 0, region: "all" });
+        expect(refreshed[0]).toBe(0);
+        expect(refreshed[1]).toBe(255);
+        expect(refreshed[(7 * 8 + 7) * 4]).toBe(0);
+        expect(refreshed[(7 * 8 + 7) * 4 + 1]).toBe(255);
+      }
     } finally {
       gpu.dispose();
     }

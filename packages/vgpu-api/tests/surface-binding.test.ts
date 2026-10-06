@@ -83,28 +83,22 @@ test("a JS-owned buffer cannot bypass Surface rejection and remains usable after
   } finally { gpu.dispose(); }
 });
 
-test("a failed Surface set preserves a sampled Target binding and its replacement subscription", async () => {
+test("a failed Surface set preserves a sampled Target binding and follows its replacement", async () => {
   const gpu = await init();
   try {
     const { canvasSurface, getCurrentTexture } = createSurface(gpu);
     const source = target(gpu, { size: [4, 4] });
     const output = target(gpu, { size: [4, 4] });
-    const subscribe = source.onTexturesRecreated!.bind(source);
-    const unsubscribes: ReturnType<typeof vi.fn>[] = [];
-    vi.spyOn(source, "onTexturesRecreated").mockImplementation((cb) => {
-      const unsubscribe = vi.fn(subscribe(cb));
-      unsubscribes.push(unsubscribe);
-      return unsubscribe;
-    });
+    const original = source.color;
     const post = effect(gpu, SAMPLED_DRAW, { label: "post", set: { source } });
 
     expectSurfaceError(() => post.set({ source: canvasSurface }), "post", "source");
-    expect(unsubscribes).toHaveLength(1);
-    expect(unsubscribes[0]).not.toHaveBeenCalled();
     source.resize([8, 8]);
-    expect(unsubscribes).toHaveLength(2);
-    expect(unsubscribes[0]).toHaveBeenCalledTimes(1);
+    const replacement = source.color;
+    const replacementViews = vi.spyOn(replacement.gpu, "createView");
+    expect(replacement).not.toBe(original);
     expect(() => frame(gpu, (currentFrame) => currentFrame.pass(output, post))).not.toThrow();
+    expect(replacementViews).toHaveBeenCalledTimes(1);
     expect(getCurrentTexture).not.toHaveBeenCalled();
   } finally { gpu.dispose(); }
 });
