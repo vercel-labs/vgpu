@@ -24,6 +24,7 @@ interface DispatchOptions {
 }
 
 interface Compute {
+  dispose(): void;
   set(values: Record<string, unknown>): this;
   compile(): Promise<this>;
   compileSync(): this;
@@ -61,14 +62,15 @@ interface StorageBuffer {
 | compute.dispatch.y | `number` | ✖ | `1` | Workgroup count Y. |
 | compute.dispatch.z | `number` | ✖ | `1` | Workgroup count Z. |
 | compute.dispatch.opts.indirect | `StorageBuffer \| { buffer, offset? }` | ✔ in the overload | — | GPU-driven dispatch via `dispatchWorkgroupsIndirect`: the GPU reads `[x, y, z]` workgroup counts (3 tightly packed u32, 12 bytes) from the buffer at the byte `offset` (default `0`). Use it when an earlier pass decides how much work exists — variable particle populations, stream compaction. Requires a buffer created with `storage(gpu, bytes, { indirect: true })`; `offset` must be a multiple of 4 and `offset + 12 <= size`. Cannot be combined with explicit counts. |
+| compute.dispose | `() => void` | ✖ | not called — a compute you stop referencing is collected without it | Takes no arguments. Synchronous and idempotent; valid after `gpu.dispose()` or device loss. Retires the compute: every later member call throws `VGPU-COMPUTE-DISPOSED`, and it releases its bindings, values, and cached bind groups. Never destroys borrowed storage buffers, textures, `uniforms()` blocks, or the shared pipeline. See Disposal below. |
 | storage.bytes | `number` | ✔ | — | Byte size for a main API (`vgpu`) storage buffer. |
 | storage.access | `StorageAccess \| StorageOptions` | ✖ | `"read-write"` | Access string, or a `StorageOptions` bag with `access` and `indirect`. Stored on the resource facade and used by binding normalization. |
 | storage.access.indirect | `boolean` | ✖ | `false` | Appends the `"indirect"` buffer usage so the buffer can supply GPU-read draw/dispatch arguments. |
 | storage.write.data | `BufferSource` | ✔ | — | `ArrayBuffer` or `ArrayBufferView`; writes at offset `0` in the public main API (`vgpu`) type. |
 
-**Returns:** `compute(gpu)` returns `Compute`; `set()` and `compileSync()` return the same `Compute`; `compile()` resolves to that object after successful validation; `dispatch()` returns `void` after submitting; `storage(gpu)` returns a main API (`vgpu`) `StorageBuffer`; `StorageBuffer.read()` resolves an `ArrayBuffer` copy.
+**Returns:** `compute(gpu)` returns `Compute`; `set()` and `compileSync()` return the same `Compute`; `compile()` resolves to that object after successful validation; `dispatch()` returns `void` after submitting; `dispose()` returns `void`; `storage(gpu)` returns a main API (`vgpu`) `StorageBuffer`; `StorageBuffer.read()` resolves an `ArrayBuffer` copy.
 
-**Throws:** `VGPU-RING1-UNSUPPORTED` when the shader has no `@compute` entry point; `VGPU-INDIRECT-INVALID` at dispatch time for a malformed `indirect` (neither a `StorageBuffer` nor `{ buffer, offset? }`), a buffer created without the indirect flag (use `storage(gpu, bytes, { indirect: true })`), an `offset` that is not a non-negative integer multiple of 4, counts that do not fit the buffer (`offset + 12 > size`), or `indirect` combined with explicit workgroup counts in the same call; `VGPU-CONSTANTS-INVALID` for a malformed `constants` option (non-object value, a key that matches no override in the shader — the message lists the available overrides — or a value that is neither a finite number nor a boolean), and for an override declared without a default that `constants` does not provide; `VGPU-ENTRY-INVALID` for a non-string `entry`, a name that matches no entry point in the shader, or a name whose entry point is not `@compute` — the message lists the shader's available entry points with their stages; `VGPU-SET-VALUE-INVALID` when a JS-owned binding has the wrong reflected shape or an out-of-range integer; `VGPU-R1-STORAGE-ALIASING` when the same storage buffer is bound more than once and at least one reflected binding is writable; `VGPU-R1-BINDING-NEVER-SET`, `VGPU-R1-OWNERSHIP-FLIP`, and `VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE` for binding errors, including storage textures without `storage_binding` usage or whose format/dimension differs from WGSL; `VGPU-SURFACE-NOT-BINDABLE` when a `Surface` is passed as a binding value in `opts.set` or a later `set()`, inside or outside a frame — `where` is `<label>.<binding>`, vgpu throws before reading the surface's attachments or acquiring a canvas texture, and the rejected binding keeps its previous value (keys earlier in the same `set()` call are already applied); render to an offscreen target and bind that target or its texture, and use the `Surface` only as a render destination; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`; `TypeError` if `StorageBuffer.write()` receives a non-buffer source.
+**Throws:** `VGPU-COMPUTE-DISPOSED` when any member other than `dispose()` is used after `dispose()` — `set()`, either `dispatch()` overload, `compile()`, `compileSync()`, or `FrameComputePass.dispatch(compute, ...)`. The message is `Compute '<label>' has been disposed.`, `where` is `<label>.<operation>`, and `detail` is `{ label }`. The check runs before this compute's argument, binding, aliasing, and device checks; frame and pass errors keep their own precedence. `compile()` throws synchronously when already disposed, and a pending `compile()` rejects with this code once its preparation settles. Create a new `compute(gpu, ...)`; a disposed compute cannot be reused. `VGPU-RING1-UNSUPPORTED` when the shader has no `@compute` entry point; `VGPU-INDIRECT-INVALID` at dispatch time for a malformed `indirect` (neither a `StorageBuffer` nor `{ buffer, offset? }`), a buffer created without the indirect flag (use `storage(gpu, bytes, { indirect: true })`), an `offset` that is not a non-negative integer multiple of 4, counts that do not fit the buffer (`offset + 12 > size`), or `indirect` combined with explicit workgroup counts in the same call; `VGPU-CONSTANTS-INVALID` for a malformed `constants` option (non-object value, a key that matches no override in the shader — the message lists the available overrides — or a value that is neither a finite number nor a boolean), and for an override declared without a default that `constants` does not provide; `VGPU-ENTRY-INVALID` for a non-string `entry`, a name that matches no entry point in the shader, or a name whose entry point is not `@compute` — the message lists the shader's available entry points with their stages; `VGPU-SET-VALUE-INVALID` when a JS-owned binding has the wrong reflected shape or an out-of-range integer; `VGPU-R1-STORAGE-ALIASING` when the same storage buffer is bound more than once and at least one reflected binding is writable; `VGPU-R1-BINDING-NEVER-SET`, `VGPU-R1-OWNERSHIP-FLIP`, and `VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE` for binding errors, including storage textures without `storage_binding` usage or whose format/dimension differs from WGSL; `VGPU-SURFACE-NOT-BINDABLE` when a `Surface` is passed as a binding value in `opts.set` or a later `set()`, inside or outside a frame — `where` is `<label>.<binding>`, vgpu throws before reading the surface's attachments or acquiring a canvas texture, and the rejected binding keeps its previous value (keys earlier in the same `set()` call are already applied); render to an offscreen target and bind that target or its texture, and use the `Surface` only as a render destination; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`; `TypeError` if `StorageBuffer.write()` receives a non-buffer source.
 
 ## Examples
 
@@ -156,6 +158,39 @@ step.dispatch({ indirect: args }); // GPU reads the counts; JS never sees them
 
 GPU-driven dispatch: the first pass writes the workgroup counts from GPU-side state, so the population can vary every frame without a readback stall.
 
+## Disposal
+
+`dispose()` is optional. A compute you stop referencing is collected eventually, like any JavaScript object. Call `dispose()` to retire it at a known point: every later call throws `VGPU-COMPUTE-DISPOSED`, and the compute releases its bindings, packed values, and cached bind groups synchronously. It is idempotent and needs no live device, so it is safe after `gpu.dispose()` or device loss.
+
+```ts
+import { init, compute, frame, storage } from "vgpu/mock";
+
+const gpu = await init();
+const particles = storage(gpu, 4 * 256);
+
+// ---cut---
+const integrate = compute(gpu, `
+  @group(0) @binding(0) var<storage, read_write> particles: array<f32>;
+  @group(0) @binding(1) var<uniform> dt: f32;
+  @compute @workgroup_size(64)
+  fn cs_main(@builtin(global_invocation_id) id: vec3u) { particles[id.x] += dt; }
+`, { label: "integrate", set: { particles, dt: 0.016 } });
+await integrate.compile();
+
+const pending = frame(gpu); // manual frame: nothing submits until submit()
+pending.computePass((pass) => pass.dispatch(integrate, 4)); // captures dt now
+integrate.dispose(); // retire the compute before the frame submits
+pending.submit(); // the encoded dispatch still runs with dt = 0.016
+await pending.done;
+
+particles.write(new Float32Array(256)); // the borrowed storage buffer stays yours
+// integrate.set(...), integrate.dispatch(...), and pass.dispatch(integrate, ...) now throw VGPU-COMPUTE-DISPOSED
+```
+
+Disposal retires the facade, not the work already handed to WebGPU. An encoded dispatch keeps the uniform values captured when it was encoded, and canceling its frame still discards it. Borrowed storage buffers, textures, and `uniforms()` blocks are never destroyed. The compiled pipeline stays in the device-wide store, so another compute built from the same shader keeps using it.
+
+A `compile()` still pending when you call `dispose()` is not canceled. It settles with the underlying native compilation, then rejects with `VGPU-COMPUTE-DISPOSED` at `<label>.compile`, whether compilation succeeded or failed; a live compute sharing that pipeline resolves normally. That rejection belongs to the promise only and is not delivered again through `gpu.onError`. Neither collection nor `dispose()` promises when GPU memory is reclaimed: a private uniform buffer native work might still reference is released by reference, not destroyed.
+
 ## Notes
 
 - Use explicit `dispatch(x, y, z)` when the CPU already knows stable workgroup counts. Use `dispatch({ indirect })` when a preceding GPU pass decides the count (compaction, particles), so no CPU readback is needed.
@@ -169,6 +204,7 @@ GPU-driven dispatch: the first pass writes the workgroup counts from GPU-side st
 - Direct dispatch counts must be finite integers from zero through `gpu.device.limits.maxComputeWorkgroupsPerDimension`. Zero is legal. Workgroup axes and their product must fit the granted device limits; unresolved WGSL expressions are validated natively. Default examples use portable sizes. For a larger workgroup, explicitly request the supported axis and `maxComputeInvocationsPerWorkgroup` limits using `init({ requiredLimits: ... })`.
 - Write indirect counts from another compute pass (bind the same buffer as storage) or from JS via `write()`. The same option shape drives GPU-driven draws via `DrawCallOptions.indirect`.
 - `storage(gpu)` creates storage buffers with `copy_src` and `copy_dst`, so they can be read back and rewritten from JS.
+- Standalone `dispatch()` submits immediately, so disposing a compute right after it cannot affect that dispatch. Do not dispose a compute that a running `frameLoop(gpu)` still dispatches; stop the loop first.
 - **See also:** `compute`, `Draw.set`, `SharedUniforms`, `Target`, `StorageBuffer` from `vgpu/core`.
 
 ## Preparation and frame-owned execution

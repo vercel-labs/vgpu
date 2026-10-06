@@ -264,6 +264,43 @@ frameLoop(gpu, (frame) => {
 
 Collecting the effect does not make the bundle stale. The snapshots still catch later changes on their own: destroying a captured texture, buffer, or target, or replacing a sampled `Target`'s attachment, makes replay throw `VGPU-R3-BUNDLE-STALE`, and destroying recorded geometry makes replay throw that geometry's liveness error. Keep the draw only when you still `set()` its uniforms, rebind it, or draw it outside the bundle — while you hold it, its uniform updates keep reaching every bundle that recorded it.
 
+## Disposing a recorded draw stales its bundles
+
+Letting a draw go and disposing it are different. Collection is silent: the bundle keeps replaying. [`draw.dispose()`](/reference/vgpu/draw#draw) and [`effect.dispose()`](/reference/vgpu/effect#effect) are explicit retirements: every bundle that recorded the draw goes permanently stale — even one whose recording callback is still running — and `pass.bundles()` throws `VGPU-R3-BUNDLE-STALE` naming the disposed draw. Replace the draw and its bundle together:
+
+```ts
+import { init, bundle, effect, frameLoop, surface } from "vgpu";
+
+const gpu = await init();
+const canvas = document.querySelector("canvas")!;
+const canvasTarget = surface(gpu, canvas);
+
+// ---cut---
+let backdrop = effect(gpu, `
+  @fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.1, 0.3, 0.6, 1.0); }
+`, { label: "dayBackdrop" });
+let backdropBundle = bundle(gpu, { target: canvasTarget, label: "day" }, (b) => b.draw(backdrop));
+
+function useNightBackdrop(): void {
+  const nextBackdrop = effect(gpu, `
+    @fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.02, 0.03, 0.1, 1.0); }
+  `, { label: "nightBackdrop" });
+  const nextBundle = bundle(gpu, { target: canvasTarget, label: "night" }, (b) => b.draw(nextBackdrop));
+  const previousBackdrop = backdrop;
+  const previousBundle = backdropBundle;
+  backdrop = nextBackdrop;
+  backdropBundle = nextBundle; // swap only after recording succeeded
+  previousBackdrop.dispose(); // stales the day bundle permanently
+  previousBundle.dispose(); // then release that bundle too
+}
+
+frameLoop(gpu, (frame) => {
+  frame.pass(canvasTarget, (pass) => pass.bundles(backdropBundle));
+});
+```
+
+Between the two `dispose()` calls, replaying the day bundle would throw `VGPU-R3-BUNDLE-STALE` with `Bundle 'day' is stale: draw 'dayBackdrop' was disposed. Create a new draw/effect and re-record the bundle.` Disposal does not reach native work: commands already encoded still submit, and a `GPURenderBundle` you read from `bundle.gpu` keeps replaying the last uniform contents the draw wrote.
+
 ## Release bundles you no longer need
 
 You do not have to release a bundle. The draws and resources a bundle recorded do not keep it alive, so once your code drops its last reference, the bundle is collected eventually like any other object. vgpu makes no promise about when that happens or when the driver frees the native bundle's memory.
@@ -294,13 +331,13 @@ console.log(scene.id); // "ocean" — the id stays readable
 ocean.draw(sceneTarget); // the effect was borrowed, not destroyed
 ```
 
-`dispose()` is synchronous. It unregisters the bundle from the draws and resources it watched and drops its snapshots and native handle reference. It never destroys what the bundle borrowed — draws, effects, geometry, textures, buffers, and targets stay yours.
+`dispose()` is synchronous. It unregisters the bundle from the draws and resources it watched and drops its snapshots and native handle reference. It never destroys or disposes what the bundle borrowed — draws, effects, geometry, textures, buffers, and targets stay yours.
 
 > Warning: After `dispose()`, reading `scene.gpu` or replaying the bundle throws `VGPU-BUNDLE-DISPOSED`. Record a new bundle before replaying. In `pass.bundles(a, b)`, one disposed entry means none of the list replays.
 
-Disposal cannot reach what already left the bundle, and neither can collecting the draws it recorded. Work encoded before `dispose()` still runs, and a `GPURenderBundle` you read from `scene.gpu` earlier stays usable for as long as native WebGPU keeps it valid — vgpu cannot revoke it, and only `pass.bundles()` checks staleness, not native replay of that handle. While you hold the recorded draw, its `set()` uniform updates keep reaching that handle.
+Disposal cannot reach what already left the bundle, and neither can collecting the draws it recorded. Work encoded before `dispose()` still runs, and a `GPURenderBundle` you read from `scene.gpu` earlier stays usable for as long as native WebGPU keeps it valid — vgpu cannot revoke it, and only `pass.bundles()` checks staleness, not native replay of that handle. While you hold the recorded draw and have not disposed it, its `set()` uniform updates keep reaching that handle.
 
-A bundle that goes permanently stale — a captured resource was rebound or destroyed, or a sampled `Target` replaced its attachment — detaches from its draws and resources on its own, and replay keeps reporting the first cause. A replay on a target with a different signature is not permanent: it throws `VGPU-R3-BUNDLE-STALE` for that call only, and replaying on a matching target afterwards works.
+A bundle that goes permanently stale — a captured resource was rebound or destroyed, a sampled `Target` replaced its attachment, or a recorded draw was disposed — detaches from its draws and resources on its own, and replay keeps reporting the first cause. A replay on a target with a different signature is not permanent: it throws `VGPU-R3-BUNDLE-STALE` for that call only, and replaying on a matching target afterwards works.
 
 ## When not to bother
 

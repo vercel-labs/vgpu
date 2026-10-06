@@ -171,6 +171,37 @@ try {
 
 The lazy path is different: since `draw()` returns immediately, a pipeline that fails to compile on first use reports through [`gpu.onError`](/reference/vgpu/gpu#onerror), and `gpu.settled()` lets tests wait for those deliveries. Pre-warmed or not, the failure never lands twice.
 
+## Disposing while a compile is pending
+
+Compiled pipelines belong to the device-wide cache, not to the draw that requested them. Two draws or effects with the same shader and options compiling for the same signature share one compilation and one pipeline. [`dispose()`](/reference/vgpu/draw#draw) retires only its own owner, so it never cancels or poisons that shared work:
+
+```ts
+import { init, effect, VGPUError } from "vgpu";
+
+const gpu = await init();
+const oceanSource = `
+  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+    return vec4f(uv, 0.8, 1.0);
+  }
+`;
+
+// ---cut---
+const signature = { colors: [navigator.gpu.getPreferredCanvasFormat()] };
+const preview = effect(gpu, oceanSource, { label: "preview" });
+const ocean = effect(gpu, oceanSource, { label: "ocean" });
+
+const previewReady = preview.compile(signature).catch((error: unknown) => {
+  if (error instanceof VGPUError && error.code === "VGPU-DRAW-DISPOSED") return; // retired on purpose
+  throw error;
+});
+const oceanReady = ocean.compile(signature); // shares the preview's pipeline compilation
+
+preview.dispose(); // the preview closed before its pipeline was ready
+await Promise.all([previewReady, oceanReady]); // ocean resolves; its pipeline stays cached
+```
+
+The pending `preview.compile()` is not rejected at `dispose()`. It settles when the shared compilation does, then rejects with `VGPU-DRAW-DISPOSED` at `preview.compile` — whether the pipeline compiled or failed — and is not reported again through `gpu.onError`. `ocean.compile()` resolves or fails exactly as it would have without the disposal. A disposed compute behaves the same way with `VGPU-COMPUTE-DISPOSED`. After `dispose()`, a new `compile()` or `compileSync()` on that owner throws synchronously; create a new draw, effect, or compute instead.
+
 ## Render bundles
 
 Recording a [bundle](/concepts/render-bundles) needs every pipeline immediately, so anything you didn't pre-warm compiles synchronously at record time. See [compilation at record time](/concepts/render-bundles#compilation-at-record-time) for that flow.

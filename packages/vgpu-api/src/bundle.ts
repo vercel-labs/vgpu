@@ -102,7 +102,7 @@ class RecordedBundle implements Bundle, BundleBackReference {
   markStale(event: BundleStaleEvent): void {
     // Set() while recording may deliberately encode different resources. Destruction of any
     // captured resource is never safe, including during recording or after the Draw was rebound.
-    if (this.#recording && !(event.kind === "binding-identity" && event.newIdentity.startsWith("destroyed:"))) return;
+    if (this.#recording && event.kind !== "draw-disposed" && !(event.kind === "binding-identity" && event.newIdentity.startsWith("destroyed:"))) return;
     if (this.#staleEvent) return;
     this.#staleEvent = event;
     this.#detach();
@@ -221,6 +221,7 @@ class ExplicitBundleRecorder implements BundleRecorder {
     // Blend/writeMask are constructor-only draw pipeline state. If they ever become mutable or per-call,
     // bundles need a new staleness dimension beyond the target signature checked at replay.
     const draw = drawable instanceof InternalEffect ? effectDraw(drawable) : drawable as InternalDraw;
+    draw.assertUsable("draw");
     // The blend constant is render-pass state; GPURenderBundleEncoder has no setBlendConstant, so reject at recording.
     if (drawUsesBlendConstant(draw)) throw bundleBlendConstantError(this.bundle.id, draw.label);
     // Likewise the stencil reference: GPURenderBundleEncoder has no setStencilReference. Stencil pipeline state without ref records fine.
@@ -241,6 +242,9 @@ function targetSignatureStaleMessage(id: string, recordedKey: string, actualKey:
 }
 
 function staleEventMessage(id: string, event: BundleStaleEvent): string {
+  if (event.kind === "draw-disposed") {
+    return `Bundle '${id}' is stale: draw '${event.drawLabel}' was disposed. Create a new draw/effect and re-record the bundle.`;
+  }
   if (event.kind === "group-claim") {
     return `bundle '${id}' is stale: group ${event.group} of draw\n  '${event.drawLabel}' changed bind group after recording. Bundles freeze commands and bind groups.\n  Fix: re-record it → ${id} = bundle(gpu, { target: scene }, ...)\n  (re-recording is always your responsibility; the library only detects this).`;
   }

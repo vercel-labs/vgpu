@@ -22,9 +22,13 @@ test("abandoned render and compute consumers collect while resources and control
     const probe = spawnSync(process.execPath, ["--expose-gc", outfile], { encoding: "utf8", timeout: 60_000 });
     expect(probe.status, `GC probe failed\nstdout:\n${probe.stdout}\nstderr:\n${probe.stderr}`).toBe(0);
     expect(JSON.parse(probe.stdout.trim())).toEqual({
-      collected: 290,
+      collected: 358,
       pendingCollected: true,
       retained: true,
+      disposedRetained: true,
+      releasedDisposedMetadata: true,
+      releasedDisposedComputeConstructorSet: true,
+      retainedDisposedBundle: true,
       ownerShardCollected: true,
       bindGroupCollected: true,
       textureListeners: 1,

@@ -98,6 +98,7 @@ interface GeometryLike {
 interface Draw {
   readonly gpu: GPURenderPipeline | undefined;
   readonly targets: readonly Target[] | undefined;
+  dispose(): void;
   set(values: SetBag): this;
   group(n: number, bindGroup: GPUBindGroup): this;
   layout(n: number, opts?: DrawLayoutOptions): GPUBindGroupLayout;
@@ -144,6 +145,7 @@ interface Draw {
 | opts.firstVertex | `number` | ✖ | `0` | Non-indexed first vertex; indexed geometries use firstIndex/baseVertex `0`. |
 | opts.firstInstance | `number` | ✖ | `DrawOptions.firstInstance ?? 0` | Per-call first instance. |
 | opts.indirect | `StorageBuffer \| { buffer, offset? }` | ✖ | `undefined` | GPU-driven draw: the GPU reads the draw arguments from the buffer at byte `offset` (default `0`) instead of CPU-side counts. Use it when a culling compute pass decides what to draw — the arguments are written on the GPU and the CPU never round-trips. Create the buffer with `storage(gpu, bytes, { indirect: true })`; argument layouts are in Notes. |
+| draw.dispose | `() => void` | ✖ | not called — a draw you stop referencing is collected without it | Takes no arguments. Synchronous and idempotent; valid after `gpu.dispose()` or device loss. Retires the draw: every later member call throws `VGPU-DRAW-DISPOSED`, every managed `Bundle` that recorded it goes stale, and the draw releases its bindings, values, claimed groups, and cached bind groups. Never destroys borrowed resources or shared pipelines. See Disposal below. |
 
 **`DepthOptions`** — the object form of `opts.depth`:
 
@@ -174,7 +176,7 @@ interface Draw {
 | depthFail | `GPUStencilOperation` | ✖ | `"keep"` | Operation when the stencil comparison passes but the depth test fails. |
 | pass | `GPUStencilOperation` | ✖ | `"keep"` | Operation when both comparisons pass. `"replace"` writes `ref`, marking the region for later draws. |
 
-**Returns:** `draw(gpu)` returns `Draw`; `set()`, `group()`, and `compileSync()` return the same `Draw`; `layout()` returns a `GPUBindGroupLayout`; one-shot `draw()` returns `void`; `compile()` returns `Promise<this>`.
+**Returns:** `draw(gpu)` returns `Draw`; `set()`, `group()`, and `compileSync()` return the same `Draw`; `layout()` returns a `GPUBindGroupLayout`; one-shot `draw()` returns `void`; `compile()` returns `Promise<this>`; `dispose()` returns `void`.
 
 **Throws:** one `VGPU-*` code per condition below. Checks marked † resolve against the target signature at compile/draw time; with `targets: [...]` they surface from `draw(gpu)` itself, because that option compiles at construction.
 
@@ -206,6 +208,7 @@ interface Draw {
 - `VGPU-R4-GROUP-INCOMPATIBLE` — a claimed bind group does not match the draw's layout. Build it from `draw.layout(n, { dynamicOffsets? })` before calling `group(n, bindGroup)`.
 - `VGPU-R4-GROUP-VALIDATION` — WebGPU rejected a claimed group at draw time; delivered asynchronously through `gpu.onError`. Build the group from `draw.layout(n)` and pass offsets via the draw call.
 - `VGPU-SHADER-SOURCE-INVALID` — malformed `ShaderSource`. Pass WGSL text or a loader-produced `{ version, wgsl }` object.
+- `VGPU-DRAW-DISPOSED` — any member other than `dispose()` was used after `dispose()`: `set()`, `group()`, `layout()`, one-shot `draw()`, `compile()`, `compileSync()`, the `gpu` and `targets` getters, `currentFrame.pass(target, draw)`, `FramePass.draw(drawable)`, or `BundleRecorder.draw(drawable)`. The message is `Draw '<label>' has been disposed.`, `where` is `<label>.<operation>`, and `detail` is `{ label }`. The check runs before this draw's argument, target, binding, and device checks, so a disposed draw always reports this code; frame and pass errors, such as using an ended pass, keep their own precedence. `compile()` throws synchronously when the draw is already disposed, and a `compile()` still pending at `dispose()` rejects with this code once its preparation settles. Create a new `draw(gpu, ...)`; a disposed draw cannot be reused.
 
 ## Examples
 
@@ -480,6 +483,52 @@ The default surface shown above and the equivalent signature `{ colors: [canvasS
 
 Each color/depth/sample-count variant is a different pipeline. A missed variant sync-compiles on first use, which can jank; fire-and-forget pre-warms should always use `.catch(...)` or `gpu.onError`/`gpu.settled()` will not observe the returned promise rejection. `targets: [target]` is kept as creation-time `compileSync()` sugar for non-browser hot paths.
 
+## Disposal
+
+`dispose()` is optional. A draw you stop referencing is collected eventually, like any JavaScript object, and its bundles keep replaying. Call `dispose()` when you want to retire a draw at a known point: it stops every later call, stales the managed bundles that recorded it, and releases the draw's bindings, values, claimed groups, and cached bind groups synchronously. It is idempotent and needs no live device, so it is safe to call after `gpu.dispose()` or device loss.
+
+```ts
+import { init, draw, frame, target } from "vgpu/mock";
+
+const gpu = await init();
+const sceneTarget = target(gpu, { size: [64, 64] });
+
+// ---cut---
+const marker = draw(gpu, {
+  label: "marker",
+  shader: `
+    struct Params { tint: vec4f }
+    @group(0) @binding(0) var<uniform> params: Params;
+    @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
+      var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
+      return vec4f(p[vi], 0, 1);
+    }
+    @fragment fn fs_main() -> @location(0) vec4f { return params.tint; }
+  `,
+  set: { params: { tint: [1, 0, 0, 1] } },
+});
+
+const pending = frame(gpu); // manual frame: nothing submits until submit()
+pending.pass(sceneTarget, (pass) => pass.draw(marker)); // captures the red tint now
+marker.dispose(); // retire the draw before the frame submits
+pending.submit(); // still draws red: encoded work keeps its captured values
+await pending.done;
+
+marker.dispose(); // no-op: dispose() is idempotent
+// marker.set(...), marker.draw(...), and marker.gpu now throw VGPU-DRAW-DISPOSED
+```
+
+Disposal retires the facade, not the work it already handed to WebGPU. A frame pass that drew the draw before `dispose()` still submits with the uniform values captured when it was encoded, and canceling that frame still discards it.
+
+What disposal releases and what it leaves alone:
+
+- **Borrowed resources stay yours.** Textures, buffers, targets, geometry, `uniforms()` blocks, samplers, and bind groups passed to `group(n, bindGroup)` are never destroyed. Pipelines, shader modules, and layouts live in device-wide stores, so another draw built from the same shader keeps using its compiled pipeline.
+- **Managed bundles go stale.** `FramePass.bundles()` throws `VGPU-R3-BUNDLE-STALE` with `Bundle '<id>' is stale: draw '<label>' was disposed. Create a new draw/effect and re-record the bundle.` for every bundle that recorded the draw, including a bundle still recording when `dispose()` runs. Dropping the draw without disposing it does not stale its bundles.
+- **Native handles keep their own lifetime.** A `GPURenderBundle` read from `bundle.gpu` keeps replaying the last uniform contents the draw wrote; `set()` updates stop because `set()` now throws. vgpu cannot revoke that handle or revalidate already encoded commands.
+- **Memory is not reclaimed on a schedule.** A private uniform buffer that native work might still reference is released by reference rather than destroyed, so its memory returns when native WebGPU drops it. Neither collection nor `dispose()` promises when the GPU or driver frees memory.
+
+A `compile()` still pending when you call `dispose()` is not canceled. It settles with its underlying preparation, then rejects with `VGPU-DRAW-DISPOSED` at `<label>.compile`, whether native compilation succeeded or failed. The shared pipeline is not poisoned: another live draw compiling the same shader and signature resolves normally and keeps the pipeline. The disposed draw's rejection belongs to its promise only — it is not delivered again through `gpu.onError`, so handle it with `.catch(...)` like any compile.
+
 ## Notes
 
 - Choose blend by use case: omit it for opaque geometry; use `"alpha"`/`"premultiplied"` for ordinary composition and `"additive"` for glow. Reserve explicit equations for special effects. `blendConstant` is persistent pass state (not pipeline state and not bundle state), so set it when fading or crossfading a layer.
@@ -498,7 +547,8 @@ Each color/depth/sample-count variant is a different pipeline. A missed variant 
 - `indirect` argument layouts: a non-indexed geometry (or no geometry) encodes `drawIndirect` — 4 u32 values, `vertexCount, instanceCount, firstVertex, firstInstance` (16 bytes); an indexed geometry still sets its index buffer and encodes `drawIndexedIndirect` — 5 32-bit values, `indexCount, instanceCount, firstIndex, baseVertex (signed), firstInstance` (20 bytes). Write them from a compute shader (bind the same buffer as storage) or from JS via `write()`. Indirect draws record fine into `bundle()`: `drawIndirect`/`drawIndexedIndirect` exist on render bundle encoders.
 - A non-zero `firstInstance` inside the buffered indirect arguments silently turns the draw into a no-op unless the device has the `"indirect-first-instance"` feature. The value lives on the GPU, so vgpu cannot validate it — request the feature with `init({ requiredFeatures: ["indirect-first-instance"] })` when you need it.
 - One-shot `draw.draw()` has no implicit target and returns `void`; raw claimed-group validation errors are delivered through `gpu.onError`, and tests can `await gpu.settled()`.
-- Changing resource identity after a draw is recorded in a `Bundle` marks that bundle stale; changing JS values in-place does not.
+- Changing resource identity after a draw is recorded in a `Bundle` marks that bundle stale; changing JS values in-place does not. `dispose()` marks every bundle that recorded the draw stale too; letting the draw be collected does not.
+- Do not dispose a draw whose bundles you still replay through `FramePass.bundles()`. Create the replacement draw, record its bundle, swap your references, then dispose the old draw and bundle.
 - Bind an offscreen `Target` (`set({ source: sceneTarget })`) when the draw should follow its attachment: after `sceneTarget.resize(...)`, the binding switches to the replacement texture. Bind a `Texture` (`set({ source: sceneTarget.color })`) to keep that exact texture and its lifetime; it does not follow resize, so rebind the replacement after `sceneTarget.resize(...)` — the released attachment fails at draw time. Do not bind a `Surface` — render into a `Target` and present it with a surface pass; see `Surface` for the full producer → present example.
 - **See also:** `Effect`, `FramePass.draw`, `Bundle`, `Surface`, `Target`, `SharedUniforms`.
 
@@ -506,7 +556,7 @@ Each color/depth/sample-count variant is a different pipeline. A missed variant 
 
 `compile()` waits for native validation even after `compileSync()` created a candidate or took over a pending asynchronous compile. Synchronous creation failures throw; asynchronous validation from synchronous preparation uses `gpu.onError`. A failed pipeline throws on automatic reuse; explicitly compile again to retry.
 
-Direct frame draws capture managed uniform values when encoded, matching compute dispatches. Later `set()` calls do not alter earlier commands. Storage bindings, raw/low-level buffers, claimed bind groups, and render bundles retain their live buffer contents.
+Direct frame draws capture managed uniform values when encoded, matching compute dispatches. Later `set()` calls — and `dispose()` — do not alter earlier commands. Storage bindings, raw/low-level buffers, claimed bind groups, and render bundles retain their live buffer contents.
 
 Managed uniforms are JS values on a `var<uniform>` binding and `uniforms(gpu)` objects adopted as uniform. `set()` validates, packs and stores the CPU value on every call. Frame-only values upload through captured frame pages; one-shot draws upload pending values when used. When the packed bytes equal the previous ones (bitwise: an in-place typed-array change is detected, `+0` and `-0` differ), the update is not a new revision: later commands in the same frame reuse its snapshot, and a pending upload stays pending. You never need to compare values yourself; skipping a redundant `set()` saves only CPU work. Storage bindings and live uniforms (recorded into a bundle, or exposed through `.buffer`/`.gpu`) still write on every `set()`.
 

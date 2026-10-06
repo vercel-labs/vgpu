@@ -93,3 +93,130 @@ test("a mixed live and stale bundle list executes none of the list", async () =>
     expect(executeBundles).not.toHaveBeenCalled();
   } finally { gpu.dispose(); }
 });
+
+test("consumer disposal permanently stales managed replay with the exact draw cause", async () => {
+  const gpu = await init();
+  try {
+    const output = target(gpu, { size: [4, 4] });
+    const drawable = effect(gpu, SOLID, { label: "retired-effect" });
+    const recorded = bundle(gpu, { target: output, label: "retired-bundle" }, recorder => recorder.draw(drawable));
+    const savedNative = recorded.gpu;
+
+    drawable.dispose();
+
+    expect(recorded.gpu).toBe(savedNative);
+
+    expect(() => frame(gpu, current => current.pass(output, pass => pass.bundles(recorded)))).toThrowError(
+      expect.objectContaining({
+        code: "VGPU-R3-BUNDLE-STALE",
+        message: "Bundle 'retired-bundle' is stale: draw 'retired-effect' was disposed. Create a new draw/effect and re-record the bundle.",
+      }),
+    );
+  } finally {
+    gpu.dispose();
+  }
+});
+
+test("recording an already-disposed consumer fails with its tombstone before native encoding", async () => {
+  const gpu = await init();
+  try {
+    const output = target(gpu, { size: [4, 4] });
+    const drawable = effect(gpu, SOLID, { label: "already-retired" });
+    drawable.dispose();
+
+    expect(() => bundle(gpu, { target: output, label: "failed-recording" }, recorder => recorder.draw(drawable))).toThrowError(
+      expect.objectContaining({
+        code: "VGPU-DRAW-DISPOSED",
+        where: "already-retired.draw",
+      }),
+    );
+  } finally {
+    gpu.dispose();
+  }
+});
+
+test("recording an already-disposed plain Draw reports the recorder draw operation", async () => {
+  const gpu = await init();
+  try {
+    const output = target(gpu, { size: [4, 4] });
+    const drawable = draw(gpu, { shader: SOLID, label: "already-retired-draw" });
+    drawable.dispose();
+
+    expect(() => bundle(gpu, { target: output }, recorder => recorder.draw(drawable))).toThrowError(
+      expect.objectContaining({ code: "VGPU-DRAW-DISPOSED", where: "already-retired-draw.draw" }),
+    );
+  } finally {
+    gpu.dispose();
+  }
+});
+
+test("disposal during recording stales immediately", async () => {
+  const gpu = await init();
+  try {
+    const output = target(gpu, { size: [4, 4] });
+    const drawable = effect(gpu, SOLID, { label: "recording-retired" });
+    const recorded = bundle(gpu, { target: output, label: "recording-bundle" }, recorder => {
+      recorder.draw(drawable);
+      drawable.dispose();
+    });
+
+    expect(() => frame(gpu, current => current.pass(output, pass => pass.bundles(recorded)))).toThrowError(
+      expect.objectContaining({
+        code: "VGPU-R3-BUNDLE-STALE",
+        message: "Bundle 'recording-bundle' is stale: draw 'recording-retired' was disposed. Create a new draw/effect and re-record the bundle.",
+      }),
+    );
+  } finally {
+    gpu.dispose();
+  }
+});
+
+test("the first permanent stale cause wins over later consumer disposal", async () => {
+  const gpu = await init();
+  try {
+    const output = target(gpu, { size: [4, 4] });
+    const source = target(gpu, { size: [4, 4] });
+    const drawable = effect(gpu, SAMPLED, { label: "first-cause", set: { source: source.color } });
+    const recorded = bundle(gpu, { target: output, label: "first-cause-bundle" }, recorder => recorder.draw(drawable));
+
+    source.color.destroy();
+    drawable.dispose();
+
+    try {
+      frame(gpu, current => current.pass(output, pass => pass.bundles(recorded)));
+      throw new Error("expected stale bundle");
+    } catch (error) {
+      expect(error).toMatchObject({ code: "VGPU-R3-BUNDLE-STALE" });
+      expect((error as Error).message).toContain("binding `source`");
+      expect((error as Error).message).not.toContain("was disposed");
+    }
+  } finally {
+    gpu.dispose();
+  }
+});
+
+test("consumer disposal stales every bundle that recorded it and leaves unrelated bundles live", async () => {
+  const gpu = await init();
+  try {
+    const output = target(gpu, { size: [4, 4] });
+    const retired = effect(gpu, SOLID, { label: "retired-many" });
+    const live = effect(gpu, SOLID, { label: "live-many" });
+    const first = bundle(gpu, { target: output, label: "first-many" }, recorder => recorder.draw(retired));
+    const second = bundle(gpu, { target: output, label: "second-many" }, recorder => {
+      recorder.draw(live);
+      recorder.draw(retired);
+    });
+    const control = bundle(gpu, { target: output, label: "control-many" }, recorder => recorder.draw(live));
+
+    retired.dispose();
+
+    for (const recorded of [first, second]) {
+      expect(() => frame(gpu, current => current.pass(output, pass => pass.bundles(recorded)))).toThrowError(
+        expect.objectContaining({ code: "VGPU-R3-BUNDLE-STALE" }),
+      );
+    }
+    expect(() => frame(gpu, current => current.pass(output, pass => pass.bundles(control)))).not.toThrow();
+  } finally {
+    gpu.dispose();
+  }
+});

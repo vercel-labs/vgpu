@@ -29,6 +29,7 @@ interface EffectOptions {
 
 interface Effect {
   readonly gpu: GPURenderPipeline | undefined;
+  dispose(): void;
   set(values: SetBag): this;
   draw(target?: Target | DrawCallOptions): void;
   compile(target?: Target | TargetSignature): Promise<this>;
@@ -50,6 +51,7 @@ interface Effect {
 | effect.set.values | `Record<string, unknown>` | ✔ | — | Binding values by WGSL variable name. JS values are lib-owned; resources are user-owned. A `Target` follows its attachment across resizes; a `Texture` stays bound to that exact texture. A `Surface` is rejected in every slot with `VGPU-SURFACE-NOT-BINDABLE`. |
 | effect.draw.target | `Target \| DrawCallOptions` | ✖ | `{}` | One-shot render pass. Pass a bare target for the common case, or an options bag when setting per-call draw options. |
 | opts.target | `Target` | ✖ | — | Required at runtime when an options bag is used. Use an offscreen `Target`, or a `Surface` while a frame is active; outside a frame a surface throws `VGPU-SURFACE-NOT-IN-FRAME`. |
+| effect.dispose | `() => void` | ✖ | not called — an effect you stop referencing is collected without it | Takes no arguments. Synchronous and idempotent; valid after `gpu.dispose()` or device loss. Retires the effect and its one underlying draw: every later member call throws `VGPU-DRAW-DISPOSED`, every managed `Bundle` that recorded it goes stale, and its bindings, values, and cached bind groups are released. Never destroys borrowed resources or shared pipelines. See Disposal below. |
 
 The `uv` varying that `effect(gpu)` injects is top-origin: `(0, 0)` is the
 top-left corner and `v` grows downward — the same convention as WebGPU texture
@@ -59,9 +61,9 @@ image exactly. If you are porting a WebGL or Shadertoy shader that assumes
 `v` grows upward, invert once at the boundary (`1.0 - uv.y`) and keep
 everything else flip-free.
 
-**Returns:** `effect(gpu)` returns `Effect`; `effect.set()` and `effect.compileSync()` return the same `Effect`; `effect.compile()` returns `Promise<this>`; `effect.draw()` returns `void` after starting a one-shot draw path.
+**Returns:** `effect(gpu)` returns `Effect`; `effect.set()` and `effect.compileSync()` return the same `Effect`; `effect.compile()` returns `Promise<this>`; `effect.draw()` returns `void` after starting a one-shot draw path; `effect.dispose()` returns `void`.
 
-**Throws:** `VGPU-ENTRY-INVALID` for malformed `entry`, a vertex override, or a fragment name that is not a string, does not exist, or belongs to another stage; `VGPU-TARGET-REQUIRED` when `effect.draw()` or compile pre-warm is called without `target`; `VGPU-SURFACE-NOT-IN-FRAME` when one-shot `effect.draw()` targets a `Surface` while no frame is active — encode surface draws inside `frame(gpu, ...)`, while `compile(surface)` and `bundle(gpu, { target: surface }, ...)` can prepare outside a frame; `VGPU-SURFACE-DISPOSED` when `compile()` or `compileSync()` receives a disposed `Surface` (`compile()` throws synchronously instead of rejecting) — prepare against a live surface; `VGPU-BLEND-INVALID` for an unknown blend preset or malformed blend object; `VGPU-WRITEMASK-INVALID` for a non-array or unknown write mask channel; `VGPU-RING1-UNSUPPORTED` when `effect(gpu)` receives mesh/vertex data; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`; `VGPU-SET-VALUE-INVALID` when a JS-owned binding has the wrong structure/vector/matrix/fixed-array shape or an out-of-range integer (structured detail contains `reason` and the complete `path`); `VGPU-R1-BINDING-NEVER-SET` when a reflected binding has no value at draw time; `VGPU-R1-OWNERSHIP-FLIP` when a binding switches between JS-value and resource ownership; `VGPU-SET-TEXTURE-FILTERABILITY` when an ordinarily sampled facade texture is not filterable (structured detail names its format/binding and paired sampler; use a filterable format, request `float32-filterable`, or use `textureLoad` without a sampler); `VGPU-SURFACE-NOT-BINDABLE` when a `Surface` is passed as a binding value in `opts.set` or a later `set()`, inside or outside a frame — `where` is `<label>.<binding>`, vgpu throws before reading the surface's attachments or acquiring a canvas texture, and the rejected binding keeps its previous value (keys earlier in the same `set()` call are already applied); render to an offscreen target and bind that target or its texture, and use the `Surface` only as a render destination. Asynchronous draw validation errors are delivered through `gpu.onError`; tests can `await gpu.settled()`.
+**Throws:** `VGPU-DRAW-DISPOSED` when any member other than `dispose()` is used after `dispose()` — `set()`, one-shot `draw()`, `compile()`, `compileSync()`, the `gpu` getter, `FramePass.draw(effect)`, the `currentFrame.pass(target, effect)` shorthand, or `BundleRecorder.draw(effect)`. An effect shares the draw error family: the message is `Draw '<label>' has been disposed.`, `where` is `<label>.<operation>`, and `detail` is `{ label }`, with the effect's label. The check runs before argument normalization and this effect's target, binding, and device checks; frame and pass errors keep their own precedence. `compile()` throws synchronously when already disposed, and a pending `compile()` rejects with this code once its preparation settles. Create a new `effect(gpu, ...)`; a disposed effect cannot be reused. `VGPU-ENTRY-INVALID` for malformed `entry`, a vertex override, or a fragment name that is not a string, does not exist, or belongs to another stage; `VGPU-TARGET-REQUIRED` when `effect.draw()` or compile pre-warm is called without `target`; `VGPU-SURFACE-NOT-IN-FRAME` when one-shot `effect.draw()` targets a `Surface` while no frame is active — encode surface draws inside `frame(gpu, ...)`, while `compile(surface)` and `bundle(gpu, { target: surface }, ...)` can prepare outside a frame; `VGPU-SURFACE-DISPOSED` when `compile()` or `compileSync()` receives a disposed `Surface` (`compile()` throws synchronously instead of rejecting) — prepare against a live surface; `VGPU-BLEND-INVALID` for an unknown blend preset or malformed blend object; `VGPU-WRITEMASK-INVALID` for a non-array or unknown write mask channel; `VGPU-RING1-UNSUPPORTED` when `effect(gpu)` receives mesh/vertex data; `VGPU-SHADER-SOURCE-INVALID` for malformed `ShaderSource`; `VGPU-SET-VALUE-INVALID` when a JS-owned binding has the wrong structure/vector/matrix/fixed-array shape or an out-of-range integer (structured detail contains `reason` and the complete `path`); `VGPU-R1-BINDING-NEVER-SET` when a reflected binding has no value at draw time; `VGPU-R1-OWNERSHIP-FLIP` when a binding switches between JS-value and resource ownership; `VGPU-SET-TEXTURE-FILTERABILITY` when an ordinarily sampled facade texture is not filterable (structured detail names its format/binding and paired sampler; use a filterable format, request `float32-filterable`, or use `textureLoad` without a sampler); `VGPU-SURFACE-NOT-BINDABLE` when a `Surface` is passed as a binding value in `opts.set` or a later `set()`, inside or outside a frame — `where` is `<label>.<binding>`, vgpu throws before reading the surface's attachments or acquiring a canvas texture, and the rejected binding keeps its previous value (keys earlier in the same `set()` call are already applied); render to an offscreen target and bind that target or its texture, and use the `Surface` only as a render destination. Asynchronous draw validation errors are delivered through `gpu.onError`; tests can `await gpu.settled()`.
 
 Managed uniform `set()` calls validate and pack on every call and always update the stored CPU value. Frame-only values upload through captured frame pages; one-shot draws upload pending values when used. When the newly packed bytes equal the previous bytes, the update is not a new revision, so later draws in the same frame reuse the snapshot already captured. Storage bindings and live uniforms (recorded into a bundle, or a `uniforms(gpu)` object whose `.buffer`/`.gpu` was accessed) still write on every `set()`.
 
@@ -136,6 +138,43 @@ frameLoop(gpu, (currentFrame) => currentFrame.pass(canvasSurface, gradient)); //
 ```
 
 Before the surface exists, compile against `{ colors: [navigator.gpu.getPreferredCanvasFormat()] }` for a surface with the default format, no depth, and one sample. A surface created later with those defaults shares that cached pipeline. Include the planned `depth` format and `sampleCount` for a surface using those options, or prefer `compile(surface)` once it exists.
+
+## Disposal
+
+`dispose()` is optional. An effect you stop referencing is collected eventually, like any JavaScript object, and bundles that recorded it keep replaying. Call `dispose()` to retire an effect at a known point — unmounting a component, swapping a post-processing chain. It delegates to the effect's one underlying draw, so it has exactly the [`Draw` disposal](/reference/vgpu/draw#draw) behavior and the same `VGPU-DRAW-DISPOSED` error. It is synchronous, idempotent, and valid after `gpu.dispose()` or device loss.
+
+Stop whatever still calls the effect before you dispose it — the frame loop and any resize subscription that calls `set()`:
+
+```ts
+import { init, effect, frameLoop, surface } from "vgpu";
+
+const gpu = await init();
+const canvasSurface = surface(gpu, document.querySelector("canvas")!);
+
+// ---cut---
+const vignette = effect(gpu, `
+  struct Params { width: f32, height: f32 }
+  @group(0) @binding(0) var<uniform> params: Params;
+
+  @fragment fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
+    let centered = position.xy / vec2f(params.width, params.height) - 0.5;
+    return vec4f(vec3f(1.0 - length(centered)), 1.0);
+  }
+`, { label: "vignette" });
+
+const unsubscribe = canvasSurface.onResize(({ width, height }) => {
+  vignette.set({ params: { width, height } });
+}); // fires once immediately with the current size
+const loop = frameLoop(gpu, (currentFrame) => currentFrame.pass(canvasSurface, vignette));
+
+function teardown(): void {
+  loop.stop(); // no more frames draw the effect
+  unsubscribe(); // no more resize callbacks call set()
+  vignette.dispose(); // then retire the effect
+}
+```
+
+After `teardown()`, the canvas surface and everything the effect sampled stay usable; `dispose()` never destroys borrowed targets, textures, buffers, samplers, or shared pipelines. Work already encoded keeps its captured uniform values, managed bundles that recorded the effect throw `VGPU-R3-BUNDLE-STALE` on replay, and a native `GPURenderBundle` read from `bundle.gpu` keeps its last uniform contents. A pending `compile()` settles with its preparation, then rejects with `VGPU-DRAW-DISPOSED`; a live effect or draw sharing that pipeline is unaffected. Neither collection nor `dispose()` promises when GPU memory is reclaimed.
 
 ## Notes
 

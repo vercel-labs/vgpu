@@ -1,5 +1,5 @@
 import { bindGroupCacheTestState, createBindGroupCache } from "../src/bind-cache.ts";
-import { compute, draw, effect, frame, init, target } from "../src/mock.ts";
+import { bundle, compute, draw, effect, frame, init, target } from "../src/mock.ts";
 import { effectDraw } from "../src/effect.ts";
 
 const SAMPLED = `
@@ -51,10 +51,24 @@ try {
     ...makeDraws(64),
     ...makeEffects(80),
     ...makeComputes(64),
+    ...makeDraws(16, true),
+    ...makeEffects(16, true),
+    ...makeComputes(16, true),
   ];
   const pending = frame(gpu);
-  const pendingRefs = makePendingEffect(pending);
+  const pendingRefs = [
+    ...makePendingEffect(pending),
+    ...makePendingEffect(pending, true),
+  ];
   refs.push(...pendingRefs);
+  const {
+    retainedDisposedFacades,
+    releasedMetadataRefs,
+    computeConstructorSetRef,
+    retainedDisposedBundle,
+    disposedBundleConsumerRefs,
+  } = makeDisposedMetadataControls();
+  refs.push(...disposedBundleConsumerRefs);
   await gpu.settled();
 
   const retained = effect(gpu, SAMPLED, { label: "retained-control", set: { source } });
@@ -64,6 +78,8 @@ try {
   let collected = 0;
   let ownerShardCollected = false;
   let bindGroupCollected = false;
+  let releasedDisposedMetadata = false;
+  let releasedDisposedComputeConstructorSet = false;
   for (let attempt = 0; attempt < 120; attempt += 1) {
     await new Promise<void>((resolve) => setImmediate(resolve));
     gc();
@@ -71,15 +87,23 @@ try {
     collected = refs.filter((reference) => reference.deref() === undefined).length;
     ownerShardCollected = ownerShardRef.deref() === undefined;
     bindGroupCollected = bindGroupRef.deref() === undefined;
-    if (collected === refs.length && ownerShardCollected && bindGroupCollected) break;
+    releasedDisposedMetadata = releasedMetadataRefs.every((reference) => reference.deref() === undefined);
+    releasedDisposedComputeConstructorSet = computeConstructorSetRef.deref() === undefined;
+    if (collected === refs.length && ownerShardCollected && bindGroupCollected && releasedDisposedMetadata && releasedDisposedComputeConstructorSet) break;
   }
 
-  if (collected !== refs.length || !ownerShardCollected || !bindGroupCollected) {
+  if (collected !== refs.length || !ownerShardCollected || !bindGroupCollected || !releasedDisposedMetadata || !releasedDisposedComputeConstructorSet) {
     throw new Error(
       `GC probe inconclusive after bounded pressure: consumers ${collected}/${refs.length}; ` +
-      `owner shard ${ownerShardCollected}; bind group ${bindGroupCollected}`,
+      `owner shard ${ownerShardCollected}; bind group ${bindGroupCollected}; ` +
+      `disposed metadata ${releasedDisposedMetadata}; ` +
+      `disposed Compute constructor set ${releasedDisposedComputeConstructorSet}`,
     );
   }
+  const disposedRetained = retainedDisposedFacades.every((facade) => {
+    facade.dispose();
+    return true;
+  });
   if (retainedRef.deref() !== retained) throw new Error("retained control was collected");
   frame(gpu, current => current.pass(output, pass => pass.draw(retained)));
   pending.submit();
@@ -90,6 +114,10 @@ try {
     collected,
     pendingCollected: pendingRefs.every((reference) => reference.deref() === undefined),
     retained: retainedRef.deref() === retained,
+    disposedRetained,
+    releasedDisposedMetadata,
+    releasedDisposedComputeConstructorSet,
+    retainedDisposedBundle: retainedDisposedBundle.gpu !== undefined,
     ownerShardCollected,
     bindGroupCollected,
     textureListeners,
@@ -98,16 +126,17 @@ try {
     recreateListeners,
   })}\n`);
 
-  function makeDraws(count: number): WeakRef<object>[] {
+  function makeDraws(count: number, dispose = false): WeakRef<object>[] {
     return Array.from({ length: count }, (_, index) => {
       const sourceValue = index % 3 === 0 ? source : index % 3 === 1 ? source.color : rawView;
       const drawable = draw(gpu, { shader: SAMPLED_DRAW, label: `draw-${index}`, set: { source: sourceValue } });
       if (index % 2 === 0) frame(gpu, current => current.pass(output, pass => pass.draw(drawable)));
+      if (dispose) drawable.dispose();
       return new WeakRef(drawable);
     });
   }
 
-  function makeEffects(count: number): WeakRef<object>[] {
+  function makeEffects(count: number, dispose = false): WeakRef<object>[] {
     return Array.from({ length: count }, (_, index) => {
       const variant = index % 5;
       const drawable = variant === 3
@@ -116,22 +145,81 @@ try {
           ? effect(gpu, UNIFORM, { label: `effect-packed-${index}`, set: { params: { value: index } } })
           : effect(gpu, SAMPLED, { label: `effect-${index}`, set: { source: variant === 0 ? source : variant === 1 ? source.color : rawView } });
       if (index % 2 === 0) frame(gpu, current => current.pass(output, pass => pass.draw(drawable)));
-      return [new WeakRef(drawable), new WeakRef(effectDraw(drawable))];
+      const underlying = effectDraw(drawable);
+      if (dispose) drawable.dispose();
+      return [new WeakRef(drawable), new WeakRef(underlying)];
     }).flat();
   }
 
-  function makeComputes(count: number): WeakRef<object>[] {
+  function makeComputes(count: number, dispose = false): WeakRef<object>[] {
     return Array.from({ length: count }, (_, index) => {
       const pipeline = compute(gpu, STORAGE, { label: `compute-${index}`, set: { values: storageBuffer } });
       if (index % 2 === 0) pipeline.dispatch(1);
+      if (dispose) pipeline.dispose();
       return new WeakRef(pipeline);
     });
   }
 
-  function makePendingEffect(pendingFrame: ReturnType<typeof frame>): WeakRef<object>[] {
-    const drawable = effect(gpu, UNIFORM, { label: "pending-effect", set: { params: { value: 1 } } });
+  function makePendingEffect(pendingFrame: ReturnType<typeof frame>, dispose = false): WeakRef<object>[] {
+    const drawable = effect(gpu, UNIFORM, { label: dispose ? "pending-disposed-effect" : "pending-effect", set: { params: { value: 1 } } });
     pendingFrame.pass(output, pass => pass.draw(drawable));
-    return [new WeakRef(drawable), new WeakRef(effectDraw(drawable))];
+    const underlying = effectDraw(drawable);
+    if (dispose) drawable.dispose();
+    return [new WeakRef(drawable), new WeakRef(underlying)];
+  }
+
+  function makeDisposedMetadataControls(): {
+    retainedDisposedFacades: { dispose(): void }[];
+    releasedMetadataRefs: WeakRef<object>[];
+    computeConstructorSetRef: WeakRef<object>;
+    retainedDisposedBundle: ReturnType<typeof bundle>;
+    disposedBundleConsumerRefs: WeakRef<object>[];
+  } {
+    const geometry = { vertexBufferLayouts: [] };
+    const geometryOwner = draw(gpu, { shader: SAMPLED_DRAW, label: "disposed-geometry", geometry });
+    const geometryRef = new WeakRef(geometry);
+    geometryOwner.dispose();
+
+    const claimed = {} as GPUBindGroup;
+    const claimedOwner = draw(gpu, { shader: SAMPLED_DRAW, label: "disposed-claim" });
+    claimedOwner.group(0, claimed);
+    const claimedRef = new WeakRef(claimed);
+    claimedOwner.dispose();
+
+    const rawView = {} as GPUTextureView;
+    const resourceOwner = effect(gpu, SAMPLED, { label: "disposed-resource", set: { source: rawView } });
+    const resourceRef = new WeakRef(rawView);
+    resourceOwner.dispose();
+
+    const packedValue = { value: 3 };
+    const valueOwner = effect(gpu, UNIFORM, { label: "disposed-value", set: { params: packedValue } });
+    const valueRef = new WeakRef(packedValue);
+    valueOwner.dispose();
+
+    const computeConstructorSet = gpu.device.createBuffer({ size: 16, usage: ["storage"] });
+    const computeOwner = compute(gpu, STORAGE, {
+      label: "disposed-compute-constructor-set",
+      set: { values: computeConstructorSet },
+    });
+    const computeConstructorSetRef = new WeakRef(computeConstructorSet);
+    computeOwner.dispose();
+
+    const bundleOwner = effect(gpu, SAMPLED, {
+      label: "disposed-retained-bundle-owner",
+      set: { source },
+    });
+    const bundleDraw = effectDraw(bundleOwner);
+    const retainedDisposedBundle = bundle(gpu, { target: output }, recorder => recorder.draw(bundleOwner));
+    const disposedBundleConsumerRefs = [new WeakRef(bundleOwner), new WeakRef(bundleDraw)];
+    bundleOwner.dispose();
+
+    return {
+      retainedDisposedFacades: [geometryOwner, claimedOwner, resourceOwner, valueOwner, computeOwner],
+      releasedMetadataRefs: [geometryRef, claimedRef, resourceRef, valueRef],
+      computeConstructorSetRef,
+      retainedDisposedBundle,
+      disposedBundleConsumerRefs,
+    };
   }
 
   function makeCacheControl() {
