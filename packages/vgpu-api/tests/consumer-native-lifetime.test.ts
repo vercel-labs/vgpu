@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { bundle, compute, draw, init, target } from "../src/mock.ts";
 import { ComputePipeline } from "../src/compute.ts";
 import { drawBindingState, InternalDraw, registerDrawBundle } from "../src/draw.ts";
@@ -24,7 +25,7 @@ test("dispose destroys a private packed buffer that was never exposed to native 
   try {
     const destroyed = vi.fn();
     vi.spyOn(gpu.gpu, "createBuffer").mockImplementation(descriptor => nativeBuffer(descriptor, destroyed));
-    const drawable = draw(gpu, { shader: PACKED_UNIFORM, set: { params: { value: 1 } } });
+    const drawable = draw(gpu, { shader: prepareShader(PACKED_UNIFORM), set: { params: { value: 1 } } });
 
     drawable.dispose();
 
@@ -39,7 +40,7 @@ test("Draw disposal preserves even a falsy notification failure after completing
   try {
     const destroyed = vi.fn();
     vi.spyOn(gpu.gpu, "createBuffer").mockImplementation(descriptor => nativeBuffer(descriptor, destroyed));
-    const drawable = draw(gpu, { shader: PACKED_UNIFORM, set: { params: { value: 1 } } }) as InternalDraw;
+    const drawable = draw(gpu, { shader: prepareShader(PACKED_UNIFORM), set: { params: { value: 1 } } }) as InternalDraw;
     registerDrawBundle(drawable, { id: "failing-notification", markStale() { throw 0; } });
     const noFailure = Symbol("no failure");
     let failure: unknown = noFailure;
@@ -59,7 +60,7 @@ test("binding inspection permanently protects a private buffer from consumer des
   try {
     const destroyed = vi.fn();
     vi.spyOn(gpu.gpu, "createBuffer").mockImplementation(descriptor => nativeBuffer(descriptor, destroyed));
-    const drawable = draw(gpu, { shader: PACKED_UNIFORM, set: { params: { value: 1 } } }) as InternalDraw;
+    const drawable = draw(gpu, { shader: prepareShader(PACKED_UNIFORM), set: { params: { value: 1 } } }) as InternalDraw;
 
     expect(drawBindingState(drawable, "params")?.resource).toMatchObject({ offset: 0, size: 4 });
     drawable.dispose();
@@ -77,7 +78,7 @@ test("failed native bind-group creation still protects a private buffer", async 
     vi.spyOn(gpu.gpu, "createBuffer").mockImplementation(descriptor => nativeBuffer(descriptor, destroyed));
     vi.spyOn(gpu.gpu, "createBindGroup").mockImplementation(() => { throw new Error("native bind-group failure"); });
     const output = target(gpu, { size: [1, 1] });
-    const drawable = draw(gpu, { shader: PACKED_UNIFORM, set: { params: { value: 1 } } });
+    const drawable = draw(gpu, { shader: prepareShader(PACKED_UNIFORM), set: { params: { value: 1 } } });
 
     expect(() => drawable.draw(output)).toThrow("native bind-group failure");
     drawable.dispose();
@@ -94,7 +95,7 @@ test("failed bundle recording never makes its private buffer safe to destroy", a
     const destroyed = vi.fn();
     vi.spyOn(gpu.gpu, "createBuffer").mockImplementation(descriptor => nativeBuffer(descriptor, destroyed));
     const output = target(gpu, { size: [1, 1] });
-    const drawable = draw(gpu, { shader: PACKED_UNIFORM, set: { params: { value: 1 } } });
+    const drawable = draw(gpu, { shader: prepareShader(PACKED_UNIFORM), set: { params: { value: 1 } } });
     const createEncoder = gpu.gpu.createRenderBundleEncoder.bind(gpu.gpu);
     vi.spyOn(gpu.gpu, "createRenderBundleEncoder").mockImplementation(descriptor => {
       const encoder = createEncoder(descriptor);
@@ -114,7 +115,7 @@ test("failed bundle recording never makes its private buffer safe to destroy", a
 test("a saved SetCore cannot inspect or mutate released Compute state", async () => {
   const gpu = await init();
   try {
-    const pipeline = compute(gpu, PACKED_COMPUTE, { label: "saved-core", set: { params: { value: 1 } } }) as ComputePipeline;
+    const pipeline = compute(gpu, prepareShader(PACKED_COMPUTE), { label: "saved-core", set: { params: { value: 1 } } }) as ComputePipeline;
     const saved = pipeline.setCore;
 
     pipeline.dispose();

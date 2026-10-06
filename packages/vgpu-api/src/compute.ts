@@ -4,7 +4,7 @@ import { deliverOperations, operationError, validateOperation, type OperationVal
 import { submittedWorkDone } from "./claim-validation.ts";
 import type { Device } from "@vgpu/core";
 import type { ShaderSource } from "@vgpu/wgsl";
-import { reflectSource, type BindingInfo, type EntryPointInfo, type Reflection } from "@vgpu/wgsl/reflect-source";
+import type { BindingInfo, EntryPointInfo, Reflection } from "@vgpu/wgsl/reflect-source";
 import { entryMetadata } from "./entry-metadata.ts";
 import { createBindGroupCache, type BindGroupCache } from "./bind-cache.ts";
 import { createSetCore, bindGroupLayoutsForReflection, type SetBag, type SetCore } from "./set-core.ts";
@@ -16,7 +16,7 @@ import { assertDeviceUsable } from "./lifecycle.ts";
 import type { Gpu } from "./kernel.ts";
 import { liveKernel } from "./live-kernel.ts";
 import { renderService } from "./render-service.ts";
-import { toWgsl } from "./shader-source.ts";
+import { snapshotShaderSource, type PreparedShaderSnapshot } from "./shader-source.ts";
 import { resolveIndirect } from "./indirect.ts";
 
 /**
@@ -25,10 +25,10 @@ import { resolveIndirect } from "./indirect.ts";
  * Compute shares the gpu's lazy pipeline lifecycle and bind group caches. Entries remain scoped to their pipeline owner: matching
  * resources alone do not imply compatible layouts. The service tears down the shared cache once.
  */
-export function compute(gpu: Gpu, source: string | ShaderSource, opts: ComputeOptions = {}): Compute {
+export function compute(gpu: Gpu, source: ShaderSource, opts: ComputeOptions = {}): Compute {
   const kernel = liveKernel(gpu, "compute");
   const service = renderService(kernel);
-  return new ComputePipeline(kernel.device, toWgsl(source), opts, service.binds, service.computePipelines, service.shaderModules, service.pipelineLayouts, error => kernel.reportError(error), promise => { void kernel.trackDelivery(promise); });
+  return new ComputePipeline(kernel.device, snapshotShaderSource(source), opts, service.binds, service.computePipelines, service.shaderModules, service.pipelineLayouts, error => kernel.reportError(error), promise => { void kernel.trackDelivery(promise); });
 }
 
 let nextComputeId = 1;
@@ -64,7 +64,7 @@ export class ComputePipeline implements Compute {
 
   constructor(
     device: Device,
-    source: string,
+    shader: PreparedShaderSnapshot,
     opts: ComputeOptions = {},
     cache: BindGroupCache = createBindGroupCache(),
     pipelines: PipelineStore<GPUComputePipeline> = createPipelineStore<GPUComputePipeline>(device),
@@ -76,7 +76,7 @@ export class ComputePipeline implements Compute {
     assertDeviceUsable(device, "Compute.constructor");
     this.label = opts.label ?? "compute";
     const label = this.label;
-    const reflection = reflectSource(source, `${label}.wgsl`);
+    const reflection = shader.reflection;
     // Entry selection runs before everything derived from the selected entry — binding visibility, bind group
     // layouts, and the active-binding set for storage aliasing all reflect the chosen variant.
     const entry = computeEntryPoint(reflection, label, opts.entry);
@@ -84,7 +84,7 @@ export class ComputePipeline implements Compute {
     const { constants, constantsKey } = normalizeConstantsOptions(label, opts.constants, reflection.overrides, "compute");
     const bindGroupLayouts = bindGroupLayoutsForReflection(device, label, reflection, visibilityForEntries(reflection.bindings, [entry]));
     const pipelineLayout = pipelineLayouts.get(bindGroupLayouts);
-    const shaderModule = shaderModules.get(source, `${label}.shader`);
+    const shaderModule = shaderModules.get(shader.wgsl, `${label}.shader`);
     const descriptor: GPUComputePipelineDescriptor = {
       label: `${label}.pipeline`, layout: pipelineLayout,
       compute: { module: shaderModule, entryPoint, ...(constants ? { constants: { ...constants } } : {}) },

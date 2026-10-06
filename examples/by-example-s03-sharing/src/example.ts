@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { init, Uniform, draw, frame, target } from "vgpu/node";
 
 export const SHARED_CAMERA = /* wgsl */ `
@@ -31,6 +32,8 @@ ${SHARED_CAMERA}
   return vec4f(params.color.rgb * camera.exposure, params.color.a);
 }
 `;
+const CUBE_SHADER = prepareShader(CUBE, "by-example-s03-cube.wgsl");
+const FLOOR_SHADER = prepareShader(FLOOR, "by-example-s03-floor.wgsl");
 
 export async function runSharingExample() {
   const gpu = await init();
@@ -38,8 +41,8 @@ export async function runSharingExample() {
   const camera = new Uniform(gpu.device, { size: 16, label: "camera" });
   camera.write(new Float32Array([1, 0, 0, 0]));
 
-  const cube = draw(gpu, { shader: CUBE, label: "cube" });
-  const floor = draw(gpu, { shader: FLOOR, label: "floor" });
+  const cube = draw(gpu, { shader: CUBE_SHADER, label: "cube" });
+  const floor = draw(gpu, { shader: FLOOR_SHADER, label: "floor" });
   cube.set({ camera, params: { color: [1, 0, 0, 1] } });
   floor.set({ camera, params: { color: [0, 1, 0, 1] } });
 

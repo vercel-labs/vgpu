@@ -30,7 +30,12 @@ function formatDiagnostics(diags: readonly ts.Diagnostic[], cwd = fixtureRoot) {
   return ts.formatDiagnosticsWithColorAndContext(diags, compilerHostFor(cwd));
 }
 
-function createPublishedConsumerFixture() {
+function createPublishedConsumerFixture(options: {
+  readonly references?: readonly string[];
+  readonly importClientEnvironment?: boolean;
+} = {}) {
+  const references = options.references ?? ["vgpu/client"];
+  const importClientEnvironment = options.importClientEnvironment ?? true;
   const root = mkdtempSync(join(tmpdir(), "vgpu-client-types-"));
   const nodeModules = join(root, "node_modules");
   mkdirSync(join(root, "src"), { recursive: true });
@@ -38,18 +43,24 @@ function createPublishedConsumerFixture() {
   mkdirSync(join(nodeModules, "@webgpu"), { recursive: true });
   mkdirSync(join(nodeModules, "vgpu"), { recursive: true });
 
-  writeFileSync(join(root, "vgpu-env.d.ts"), "/// <reference types=\"vgpu/client\" />\n");
+  writeFileSync(
+    join(root, "vgpu-env.d.ts"),
+    references.map((reference) => `/// <reference types="${reference}" />`).join("\n") + "\n",
+  );
   writeFileSync(join(root, "src", "shader.wgsl"), "@compute @workgroup_size(1) fn main() {}\n");
   writeFileSync(
     join(root, "src", "index.ts"),
     [
       'import shaderSource from "./shader.wgsl";',
-      'import type { VGPUClientEnvironment } from "vgpu/client";',
-      "const env: VGPUClientEnvironment = {};",
+      ...(importClientEnvironment
+        ? ['import type { VGPUClientEnvironment } from "vgpu/client";', "const env: VGPUClientEnvironment = {};"]
+        : []),
       "const source = shaderSource;",
       "const wgsl: string = source.wgsl;",
-      "const version: 1 = source.version;",
-      "export { env, source, version, wgsl };",
+      "const version: 2 = source.version;",
+      "const checksum: string = source.sourceChecksum;",
+      "const entryPoints = source.reflection.entryPoints;",
+      `export { checksum, entryPoints, ${importClientEnvironment ? "env, " : ""}source, version, wgsl };`,
       "",
     ].join("\n"),
   );
@@ -100,5 +111,29 @@ test("published vgpu/client types resolve WebGPU globals without monorepo tsconf
     expect(diagnostics).toHaveLength(0);
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("WGSL ambient types compile independently and together", () => {
+  for (const references of [
+    ["@vgpu/wgsl/wgsl-types"],
+    ["vgpu/client"],
+    ["@vgpu/wgsl/wgsl-types", "vgpu/client"],
+  ]) {
+    const root = createPublishedConsumerFixture({
+      references,
+      importClientEnvironment: false,
+    });
+    try {
+      const diagnostics = compileTsconfig(join(root, "tsconfig.json"), root);
+      if (diagnostics.length > 0) {
+        throw new Error(
+          `TypeScript reported diagnostics for ${references.join(" + ")}:\n${formatDiagnostics(diagnostics, root)}`,
+        );
+      }
+      expect(diagnostics).toHaveLength(0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   }
 });

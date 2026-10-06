@@ -1,7 +1,7 @@
 import type { UniformCapture } from "./frame-uniforms.ts";
 import type { Device } from "@vgpu/core";
 import type { ShaderSource } from "@vgpu/wgsl";
-import { reflectSource, type BindingInfo, type EntryPointInfo, type Reflection } from "@vgpu/wgsl/reflect-source";
+import type { BindingInfo, EntryPointInfo, Reflection } from "@vgpu/wgsl/reflect-source";
 import { createBindGroupCache, type BindGroupCache } from "./bind-cache.ts";
 import { entryMetadata } from "./entry-metadata.ts";
 import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, discardLastClaimedGroupValidationScope, popLastClaimedGroupValidationScope, preferClaimedGroupValidationResult, pushClaimedGroupValidationScope, submittedWorkDone, type ClaimedGroupValidationContext, type ClaimedGroupValidationResult, type ValidationErrorSink } from "./claim-validation.ts";
@@ -20,7 +20,7 @@ import type { StorageBuffer } from "./api-types.ts";
 import { FRAME_DRAWABLE, type FrameDrawableProtocol } from "./frame-protocols.ts";
 import { liveKernel } from "./live-kernel.ts";
 import { renderService } from "./render-service.ts";
-import { toWgsl } from "./shader-source.ts";
+import { snapshotShaderSource, type PreparedShaderSnapshot } from "./shader-source.ts";
 import type { Gpu } from "./kernel.ts";
 
 /**
@@ -35,11 +35,12 @@ import type { Gpu } from "./kernel.ts";
 export function draw(gpu: Gpu, opts: DrawOptions): Draw {
   const kernel = liveKernel(gpu, "draw");
   const render = renderService(kernel);
-  const shader = toWgsl(opts.shader);
+  const shader = snapshotShaderSource(opts.shader);
+  const { shader: _artifact, ...internalOpts } = opts;
   return new InternalDraw(
     kernel.device,
     shader,
-    { ...opts, shader },
+    internalOpts,
     render.binds,
     undefined,
     render.pipelines,
@@ -103,7 +104,7 @@ export interface StencilOptions {
 }
 
 export interface DrawOptions {
-  readonly shader: string | ShaderSource;
+  readonly shader: ShaderSource;
   readonly geometry?: GeometryLike;
   readonly set?: SetBag;
   readonly label?: string;
@@ -218,7 +219,7 @@ let nextDrawId = 1;
 type DrawState = {
   readonly id: number;
   readonly device: Device;
-  readonly opts: DrawOptions;
+  readonly opts: InternalDrawOptions;
   readonly vertexBufferLayouts?: readonly GPUVertexBufferLayout[];
   readonly cache: BindGroupCache;
   readonly defaultTarget?: Target;
@@ -229,7 +230,8 @@ type DrawState = {
   readonly setCore: SetCore;
   readonly bindGroupLayouts: Map<number, GPUBindGroupLayout>;
   pipelineLayout: GPUPipelineLayout;
-  readonly shaderModule: GPUShaderModule;
+  readonly vertexShaderModule: GPUShaderModule;
+  readonly fragmentShaderModule: GPUShaderModule;
   readonly pipelineStore: PipelineStore;
   readonly pipelineLayouts: PipelineLayoutCache;
   readonly errorSink?: ValidationErrorSink;
@@ -261,6 +263,9 @@ type DrawTombstone = { readonly disposed: true; readonly label: string };
 const drawStates = new WeakMap<Draw, DrawState | DrawTombstone>();
 const noCleanupFailure = Symbol("no cleanup failure");
 
+type InternalDrawOptions = Omit<DrawOptions, "shader">;
+export type BuiltinVertexStage = { readonly source: string; readonly entry: EntryPointInfo };
+
 export interface Draw {
   readonly gpu: GPURenderPipeline | undefined;
   readonly targets: readonly Target[] | undefined;
@@ -282,8 +287,8 @@ export class InternalDraw implements Draw {
 
   constructor(
     device: Device,
-    source: string,
-    opts: DrawOptions,
+    shader: PreparedShaderSnapshot,
+    opts: InternalDrawOptions,
     cache: BindGroupCache = createBindGroupCache(),
     defaultTarget?: Target,
     pipelineStore: PipelineStore = createPipelineStore(device),
@@ -291,17 +296,18 @@ export class InternalDraw implements Draw {
     pipelineLayouts: PipelineLayoutCache = createPipelineLayoutCache(device),
     errorSink?: ValidationErrorSink,
     trackSettled?: (promise: Promise<unknown>) => void,
+    builtinVertexStage?: BuiltinVertexStage,
   ) {
     assertDeviceUsable(device, "Draw.constructor");
     this.label = opts.label ?? "draw";
     const id = nextDrawId++;
-    const reflection = reflectSource(source, `${this.label}.wgsl`);
+    const reflection = shader.reflection;
     // Entry selection runs before everything derived from the selected entries — binding visibility,
     // storage-stage limits, bind group layouts, and vertex input layouts all reflect the chosen variant.
     const entryNames = normalizeEntryOptions(this.label, opts.entry);
-    const vertexEntry = selectEntryPoint(this.label, reflection.entryPoints, "vertex", entryNames.vertex, "draw");
+    const vertexEntry = builtinVertexStage?.entry ?? selectEntryPoint(this.label, reflection.entryPoints, "vertex", entryNames.vertex, "draw");
     const fragmentEntry = selectEntryPoint(this.label, reflection.entryPoints, "fragment", entryNames.fragment, "draw");
-    const entryKey = entryKeyFor(reflection, vertexEntry, fragmentEntry);
+    const entryKey = entryKeyFor(vertexEntry, fragmentEntry);
     const selectedEntries = [vertexEntry, fragmentEntry].filter((entry): entry is EntryPointInfo => !!entry);
     const visibility = visibilityForEntries(reflection.bindings, selectedEntries);
     validateStorageStageLimits(device, this.label, reflection.bindings, selectedEntries, visibility);
@@ -310,7 +316,10 @@ export class InternalDraw implements Draw {
     const vertexBufferLayouts = geometry && geometryLayoutResolver in geometry ? geometry[geometryLayoutResolver]!(inputs, `${this.label}.geometry`) : geometry?.vertexBufferLayouts;
     const bindGroupLayouts = new Map(bindGroupLayoutsForReflection(device, this.label, reflection, visibility));
     const pipelineLayout = pipelineLayouts.get(bindGroupLayouts);
-    const shaderModule = shaderModules.get(source, `${this.label}.shader`);
+    const fragmentShaderModule = shaderModules.get(shader.wgsl, `${this.label}.shader`);
+    const vertexShaderModule = builtinVertexStage
+      ? shaderModules.get(builtinVertexStage.source, `${this.label}.fullscreen.shader`)
+      : fragmentShaderModule;
     const recordedIn = createBundleRegistry();
     const lifecycle: DrawLifecycleToken = { label: this.label, recordedIn };
     const fragmentState = normalizeFragmentState(this.label, opts);
@@ -330,7 +339,7 @@ export class InternalDraw implements Draw {
       disposedError: (operation) => drawDisposedError(disposedLabel, operation),
     });
     const { set: initialSet, ...retainedOpts } = opts;
-    drawStates.set(this, { id, device, opts: retainedOpts, vertexBufferLayouts, cache, defaultTarget, reflection, visibility, vertexEntry: vertexEntry?.name ?? "vs_main", fragmentEntry: fragmentEntry?.name ?? "fs_main", entryKey, setCore, bindGroupLayouts, pipelineLayout, shaderModule, pipelineStore, pipelineLayouts, errorSink, trackSettled, resolvedPipelineKeys: new Set(), lifecycle, ...fragmentState, ...blendConstantOptions, ...primitiveOptions, ...depthOptions, ...stencilOptions, ...multisampleOptions, ...constantsOptions });
+    drawStates.set(this, { id, device, opts: retainedOpts, vertexBufferLayouts, cache, defaultTarget, reflection, visibility, vertexEntry: vertexEntry?.name ?? "vs_main", fragmentEntry: fragmentEntry?.name ?? "fs_main", entryKey, setCore, bindGroupLayouts, pipelineLayout, vertexShaderModule, fragmentShaderModule, pipelineStore, pipelineLayouts, errorSink, trackSettled, resolvedPipelineKeys: new Set(), lifecycle, ...fragmentState, ...blendConstantOptions, ...primitiveOptions, ...depthOptions, ...stencilOptions, ...multisampleOptions, ...constantsOptions });
     if (initialSet) this.set(initialSet);
     for (const target of opts.targets ?? []) this.compileSync(target);
   }
@@ -511,8 +520,8 @@ export class InternalDraw implements Draw {
     const state = drawState(this, "compile");
     assertDeviceUsable(state.device, `${this.label}.compile`);
     const { key, signature, signatureKey } = this.#compileKey(state, target, `${this.label}.compile`);
-    const { device, pipelineStore, shaderModule, pipelineLayout } = state;
-    const promise = pipelineStore.getAsync(key, () => device.gpu.createRenderPipelineAsync(this.#pipelineDescriptor(state, signature)), { where: `${this.label}.compile`, signature: signatureKey, dependencies: [shaderModule, pipelineLayout] });
+    const { device, pipelineStore } = state;
+    const promise = pipelineStore.getAsync(key, () => device.gpu.createRenderPipelineAsync(this.#pipelineDescriptor(state, signature)), { where: `${this.label}.compile`, signature: signatureKey, dependencies: pipelineDependencies(state) });
     return promise.then(
       () => {
         const current = drawState(this, "compile");
@@ -531,7 +540,7 @@ export class InternalDraw implements Draw {
     const state = drawState(this, "compileSync");
     assertDeviceUsable(state.device, `${this.label}.compileSync`);
     const { key, signature, signatureKey } = this.#compileKey(state, target, `${this.label}.compileSync`);
-    const pipeline = state.pipelineStore.getSync(key, () => state.device.gpu.createRenderPipeline(this.#pipelineDescriptor(state, signature)), { where: `${this.label}.compileSync`, retry: true, signature: signatureKey, dependencies: [state.shaderModule, state.pipelineLayout] });
+    const pipeline = state.pipelineStore.getSync(key, () => state.device.gpu.createRenderPipeline(this.#pipelineDescriptor(state, signature)), { where: `${this.label}.compileSync`, retry: true, signature: signatureKey, dependencies: pipelineDependencies(state) });
     if (pipeline) state.resolvedPipelineKeys.add(key);
     return this;
   }
@@ -540,7 +549,7 @@ export class InternalDraw implements Draw {
     const state = drawState(this, "pipelineFor");
     assertDeviceUsable(state.device, `${this.label}.pipelineFor`);
     const { key, signature, signatureKey } = this.#compileKey(state, target, `${this.label}.pipelineFor`);
-    const pipeline = state.pipelineStore.getSync(key, () => state.device.gpu.createRenderPipeline(this.#pipelineDescriptor(state, signature)), { where: `${this.label}.pipelineFor`, signature: signatureKey, dependencies: [state.shaderModule, state.pipelineLayout] });
+    const pipeline = state.pipelineStore.getSync(key, () => state.device.gpu.createRenderPipeline(this.#pipelineDescriptor(state, signature)), { where: `${this.label}.pipelineFor`, signature: signatureKey, dependencies: pipelineDependencies(state) });
     if (pipeline) state.resolvedPipelineKeys.add(key);
     return pipeline;
   }
@@ -549,7 +558,7 @@ export class InternalDraw implements Draw {
     const state = drawState(this, "pipelineForAsync");
     assertDeviceUsable(state.device, `${this.label}.pipelineForAsync`);
     const { key, signature, signatureKey } = this.#compileKey(state, target, `${this.label}.pipelineForAsync`);
-    const promise = state.pipelineStore.getAsync(key, () => state.device.gpu.createRenderPipelineAsync(this.#pipelineDescriptor(state, signature)), { where: `${this.label}.pipelineForAsync`, signature: signatureKey, dependencies: [state.shaderModule, state.pipelineLayout] });
+    const promise = state.pipelineStore.getAsync(key, () => state.device.gpu.createRenderPipelineAsync(this.#pipelineDescriptor(state, signature)), { where: `${this.label}.pipelineForAsync`, signature: signatureKey, dependencies: pipelineDependencies(state) });
     return promise.then(
       pipeline => {
         const current = drawState(this, "pipelineForAsync");
@@ -597,7 +606,7 @@ export class InternalDraw implements Draw {
     const geometry = state.opts.geometry;
     // The key must use the same stripIndexFormat the descriptor derives (primitiveState), or strip geometries that only
     // differ in indexFormat collide on one pipeline.
-    return pipelineKeyOf({ module: state.shaderModule, pipelineLayout: state.pipelineLayout, vertexBufferLayouts: state.vertexBufferLayouts, signature, fragmentKey: state.fragmentKey, topology: geometry?.topology, stripIndexFormat: stripIndexFormatFor(geometry), cullMode: state.cullMode, frontFace: state.frontFace, unclippedDepth: state.unclippedDepth, depthKey: state.depthKey, stencilKey: state.stencilKey, multisampleKey: state.multisampleKey, constantsKey: state.constantsKey, entryKey: state.entryKey });
+    return pipelineKeyOf({ vertexModule: state.vertexShaderModule, fragmentModule: state.fragmentShaderModule, pipelineLayout: state.pipelineLayout, vertexBufferLayouts: state.vertexBufferLayouts, signature, fragmentKey: state.fragmentKey, topology: geometry?.topology, stripIndexFormat: stripIndexFormatFor(geometry), cullMode: state.cullMode, frontFace: state.frontFace, unclippedDepth: state.unclippedDepth, depthKey: state.depthKey, stencilKey: state.stencilKey, multisampleKey: state.multisampleKey, constantsKey: state.constantsKey, entryKey: state.entryKey });
   }
 
   #encodeGeometry(pass: GPURenderPassEncoder, callOpts: DrawCallOptions = {}): void {
@@ -633,8 +642,8 @@ export class InternalDraw implements Draw {
     return {
       label: `${this.label}.pipeline`,
       layout: state.pipelineLayout,
-      vertex: { module: state.shaderModule, entryPoint: state.vertexEntry, buffers: [...(state.vertexBufferLayouts ?? [])], ...(state.constants ? { constants: state.constants } : {}) },
-      fragment: { module: state.shaderModule, entryPoint: state.fragmentEntry, targets: fragmentTargets(signature, state), ...(state.constants ? { constants: state.constants } : {}) },
+      vertex: { module: state.vertexShaderModule, entryPoint: state.vertexEntry, buffers: [...(state.vertexBufferLayouts ?? [])], ...(state.vertexShaderModule === state.fragmentShaderModule && state.constants ? { constants: state.constants } : {}) },
+      fragment: { module: state.fragmentShaderModule, entryPoint: state.fragmentEntry, targets: fragmentTargets(signature, state), ...(state.constants ? { constants: state.constants } : {}) },
       primitive: primitiveState(state.opts.geometry, state.cullMode, state.frontFace, state.unclippedDepth),
       depthStencil: depthStencilState(signature, state),
       multisample: multisampleStateFor(signature, state),
@@ -677,7 +686,7 @@ function fragmentTargets(signature: TargetSignature, state: DrawState): GPUColor
   });
 }
 
-function resolveDrawCounts(label: string, geometry: GeometryLike | undefined, drawOpts: DrawOptions, callOpts: DrawCallOptions): DrawCounts {
+function resolveDrawCounts(label: string, geometry: GeometryLike | undefined, drawOpts: InternalDrawOptions, callOpts: DrawCallOptions): DrawCounts {
   validateOptionalDrawCount(label, "DrawOptions.instances", drawOpts.instances);
   validateOptionalDrawCount(label, "DrawOptions.vertices", drawOpts.vertices);
   validateOptionalDrawCount(label, "DrawOptions.firstInstance", drawOpts.firstInstance);
@@ -764,7 +773,7 @@ type NormalizedFragmentState = {
   readonly fragmentKey?: string;
 };
 
-function normalizeFragmentState(label: string, opts: DrawOptions): NormalizedFragmentState {
+function normalizeFragmentState(label: string, opts: InternalDrawOptions): NormalizedFragmentState {
   const blendState = opts.blend === undefined ? undefined : normalizeBlend(label, opts.blend);
   const writeMask = opts.writeMask === undefined ? undefined : normalizeWriteMask(label, opts.writeMask);
   const colorStates = opts.colors === undefined ? undefined : normalizeColorStates(label, opts.colors);
@@ -815,7 +824,7 @@ type NormalizedBlendConstantOptions = {
   readonly blendConstant?: GPUColorDict;
 };
 
-function normalizeBlendConstantOptions(label: string, opts: DrawOptions, fragmentState: NormalizedFragmentState): NormalizedBlendConstantOptions {
+function normalizeBlendConstantOptions(label: string, opts: InternalDrawOptions, fragmentState: NormalizedFragmentState): NormalizedBlendConstantOptions {
   if (opts.blendConstant === undefined) return {};
   const value = opts.blendConstant;
   if (!Array.isArray(value) || value.length !== 4 || value.some((component) => typeof component !== "number" || !Number.isFinite(component))) {
@@ -847,13 +856,16 @@ function normalizeEntryOptions(label: string, value: DrawOptions["entry"]): { re
   return value;
 }
 
-// Resolved entries determine cache identity, so explicit and automatic selections of the same functions share.
-// Keep the compact key for first-of-stage entries; other selections include their names.
-function entryKeyFor(reflection: Reflection, vertexEntry: EntryPointInfo | undefined, fragmentEntry: EntryPointInfo | undefined): string | undefined {
-  const firstVertex = reflection.entryPoints.find((entry) => entry.stage === "vertex");
-  const firstFragment = reflection.entryPoints.find((entry) => entry.stage === "fragment");
-  if (vertexEntry === firstVertex && fragmentEntry === firstFragment) return undefined;
+// Resolved entry identities always participate: independently supplied metadata can reorder complete valid entry
+// records for byte-identical WGSL, so "first of stage" is not a stable module-level cache identity.
+function entryKeyFor(vertexEntry: EntryPointInfo | undefined, fragmentEntry: EntryPointInfo | undefined): string {
   return `en~${vertexEntry?.name ?? ""}~${fragmentEntry?.name ?? ""}`;
+}
+
+function pipelineDependencies(state: DrawState): readonly object[] {
+  return state.vertexShaderModule === state.fragmentShaderModule
+    ? [state.vertexShaderModule, state.pipelineLayout]
+    : [state.vertexShaderModule, state.fragmentShaderModule, state.pipelineLayout];
 }
 
 type NormalizedPrimitiveOptions = {
@@ -862,7 +874,7 @@ type NormalizedPrimitiveOptions = {
   readonly unclippedDepth?: true;
 };
 
-function normalizePrimitiveOptions(device: Device, label: string, opts: DrawOptions): NormalizedPrimitiveOptions {
+function normalizePrimitiveOptions(device: Device, label: string, opts: InternalDrawOptions): NormalizedPrimitiveOptions {
   const cullMode = opts.cull === undefined ? undefined : normalizeCull(label, opts.cull);
   const frontFace = opts.frontFace === undefined ? undefined : normalizeFrontFace(label, opts.frontFace);
   const unclippedDepth = opts.unclippedDepth === undefined ? undefined : normalizeUnclippedDepth(device, label, opts.unclippedDepth);
@@ -918,7 +930,7 @@ function depthStencilState(signature: TargetSignature, state: DrawState): GPUDep
   return { format: signature.depth, ...(state.depthState ?? DEFAULT_DEPTH_STATE), ...(state.stencilState ?? {}) };
 }
 
-function normalizeDepthOptions(device: Device, label: string, opts: DrawOptions): NormalizedDepthOptions {
+function normalizeDepthOptions(device: Device, label: string, opts: InternalDrawOptions): NormalizedDepthOptions {
   if (opts.depth === undefined) return {};
   const depthState = normalizeDepth(device, label, opts.depth, opts.geometry?.topology ?? "triangle-list");
   return { depthState, depthKey: depthKeyFor(depthState) };
@@ -969,7 +981,7 @@ type NormalizedStencilOptions = {
 
 const STENCIL_OPERATIONS: readonly GPUStencilOperation[] = ["keep", "zero", "replace", "invert", "increment-clamp", "decrement-clamp", "increment-wrap", "decrement-wrap"];
 
-function normalizeStencilOptions(label: string, opts: DrawOptions): NormalizedStencilOptions {
+function normalizeStencilOptions(label: string, opts: InternalDrawOptions): NormalizedStencilOptions {
   if (opts.stencil === undefined) return {};
   const value = opts.stencil;
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw stencilInvalidError(label, `received ${preview(value)}; expected { front?, back?, readMask?, writeMask?, ref? }.`);
@@ -1036,7 +1048,7 @@ function multisampleStateFor(signature: TargetSignature, state: DrawState): GPUM
   return { count: signature.sampleCount ?? 1, ...(state.multisampleState ?? {}) };
 }
 
-function normalizeMultisampleOptions(label: string, opts: DrawOptions): NormalizedMultisampleOptions {
+function normalizeMultisampleOptions(label: string, opts: InternalDrawOptions): NormalizedMultisampleOptions {
   if (opts.multisample === undefined) return {};
   const value = opts.multisample;
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw multisampleInvalidError(label, `received ${preview(value)}; expected { alphaToCoverage?, mask? }.`);

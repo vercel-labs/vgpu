@@ -61,29 +61,31 @@ declare class StorageBuffer {
 ```ts
 import { init, compute } from "vgpu/mock";
 import { StorageBuffer } from "vgpu/core";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const values = new StorageBuffer(gpu.device, { size: 4 * 16, label: "values" });
 values.write(new Float32Array(16));
 
-const sim = compute(gpu, `
+const sim = compute(gpu, prepareShader(`
   @group(0) @binding(0) var<storage, read> values: array<f32>;
   @compute @workgroup_size(1)
   fn cs_main(@builtin(global_invocation_id) id: vec3u) { _ = values[id.x]; }
-`, { set: { values } });
+`), { set: { values } });
 sim.dispatch(1);
 ```
 
 ```ts
 import { init, draw } from "vgpu/mock";
 import { StorageBuffer } from "vgpu/core";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
-const drawable = draw(gpu, { shader: `
+const drawable = draw(gpu, { shader: prepareShader(`
   @group(0) @binding(0) var<storage, read> positions: array<vec4f>;
   @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f { return positions[vi]; }
   @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }
-` });
+`) });
 const positions = new StorageBuffer(gpu.device, {
   size: 3 * 16,
   visibility: GPUShaderStage.VERTEX,

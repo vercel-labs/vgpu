@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { bundle, compute, effect, frame, getMockGPUDeviceInstrumentation, init, target } from "../src/mock.ts";
 import { identityKey } from "../src/bind-cache.ts";
@@ -16,7 +17,7 @@ afterEach(() => vi.restoreAllMocks());
 const uniformBuffer = (gpu: Gpu) => gpu.gpu.createBuffer({ size: 512, usage: 0x40 | 0x08 });
 
 function setup(gpu: Gpu, value: unknown) {
-  const fx = effect(gpu, UNIFORM, { set: { p: value } });
+  const fx = effect(gpu, prepareShader(UNIFORM), { set: { p: value } });
   const color = target(gpu, { size: [1, 1] });
   const mock = getMockGPUDeviceInstrumentation(gpu.gpu);
   const descriptors = () => mock.createBindGroupDescriptors.map(desc => [...desc.entries][0]!.resource as GPUBufferBinding);
@@ -91,7 +92,7 @@ describe("raw GPUBuffer and GPUBufferBinding values", () => {
     try {
       const buffer = gpu.gpu.createBuffer({ size: 512, usage: 0x80 | 0x08 });
       const writes = vi.spyOn(gpu.gpu.queue, "writeBuffer");
-      const sim = compute(gpu, STORAGE, { set: { p: { buffer, offset: 256, size: 16 } } });
+      const sim = compute(gpu, prepareShader(STORAGE), { set: { p: { buffer, offset: 256, size: 16 } } });
       sim.dispatch(1);
       expect(writes).not.toHaveBeenCalled();
       const resource = [...getMockGPUDeviceInstrumentation(gpu.gpu).createBindGroupDescriptors[0]!.entries][0]!.resource;
@@ -102,7 +103,7 @@ describe("raw GPUBuffer and GPUBufferBinding values", () => {
   test("a struct member cannot take a raw buffer", async () => {
     const gpu = await init();
     try {
-      const fx = effect(gpu, UNIFORM);
+      const fx = effect(gpu, prepareShader(UNIFORM));
       expect(() => fx.set({ value: uniformBuffer(gpu) })).toThrow(/Member 'value' needs a JS value; set resource 'p' instead/);
     } finally { gpu.dispose(); }
   });
@@ -113,8 +114,8 @@ describe("structs with a buffer-named field stay plain values", () => {
     const gpu = await init();
     try {
       const color = target(gpu, { size: [1, 1] });
-      const fields = effect(gpu, FIELDS, { set: { s: { buffer: 1, offset: 2, size: 3 } } });
-      const nested = effect(gpu, NESTED, { set: { s: { buffer: { x: 1 }, values: [1, 2, 3, 4] } } });
+      const fields = effect(gpu, prepareShader(FIELDS), { set: { s: { buffer: 1, offset: 2, size: 3 } } });
+      const nested = effect(gpu, prepareShader(NESTED), { set: { s: { buffer: { x: 1 }, values: [1, 2, 3, 4] } } });
       expect(drawBindingState(effectDraw(fields), "s")!.ownership).toBe("lib");
       expect(drawBindingState(effectDraw(nested), "s")!.ownership).toBe("lib");
       const descriptors = getMockGPUDeviceInstrumentation(gpu.gpu).createBindGroupDescriptors;

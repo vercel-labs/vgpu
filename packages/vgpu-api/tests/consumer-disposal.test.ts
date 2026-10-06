@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
 import { expect, test } from "vitest";
 import { compute, draw, effect, frame, init, target, type FramePass } from "../src/mock.ts";
@@ -56,7 +57,7 @@ struct Params { value: u32 }
 
 test("Draw disposal is idempotent and guards set before argument validation", async () => {
   const gpu = await init();
-  const drawable = draw(gpu, { shader: DRAW_SHADER, label: "retired-draw" });
+  const drawable = draw(gpu, { shader: prepareShader(DRAW_SHADER), label: "retired-draw" });
 
   expect(() => drawable.dispose()).not.toThrow();
   expect(() => drawable.dispose()).not.toThrow();
@@ -73,7 +74,7 @@ test("Draw disposal is idempotent and guards set before argument validation", as
 
 test("every Draw operation and inspection hook uses the disposed tombstone", async () => {
   const gpu = await init();
-  const drawable = draw(gpu, { shader: DRAW_SHADER, label: "guarded-draw" }) as InternalDraw;
+  const drawable = draw(gpu, { shader: prepareShader(DRAW_SHADER), label: "guarded-draw" }) as InternalDraw;
   const mock = getMockGPUDeviceInstrumentation(gpu.gpu);
   const before = { ...mock.calls };
   const backReference: BundleBackReference = { id: "probe", markStale() {} };
@@ -118,7 +119,7 @@ test("every Draw operation and inspection hook uses the disposed tombstone", asy
 
 test("Effect delegates one Draw tombstone before normalizing arguments", async () => {
   const gpu = await init();
-  const shader = effect(gpu, EFFECT_SHADER, { label: "retired-effect" }) as InternalEffect;
+  const shader = effect(gpu, prepareShader(EFFECT_SHADER), { label: "retired-effect" }) as InternalEffect;
   shader.dispose();
   shader.dispose();
 
@@ -144,7 +145,7 @@ test("Effect delegates one Draw tombstone before normalizing arguments", async (
 
 test("Compute keeps only a guarded tombstone after disposal", async () => {
   const gpu = await init();
-  const pipeline = compute(gpu, COMPUTE_SHADER, { label: "retired-compute" }) as ComputePipeline;
+  const pipeline = compute(gpu, prepareShader(COMPUTE_SHADER), { label: "retired-compute" }) as ComputePipeline;
   const mock = getMockGPUDeviceInstrumentation(gpu.gpu);
   const before = { ...mock.calls };
   pipeline.dispose();
@@ -179,9 +180,9 @@ test("Compute keeps only a guarded tombstone after disposal", async () => {
 
 test("consumer disposal remains idempotent after GPU teardown", async () => {
   const gpu = await init();
-  const drawable = draw(gpu, { shader: DRAW_SHADER, label: "draw-after-gpu" });
-  const fullscreen = effect(gpu, EFFECT_SHADER, { label: "effect-after-gpu" });
-  const pipeline = compute(gpu, COMPUTE_SHADER, { label: "compute-after-gpu" });
+  const drawable = draw(gpu, { shader: prepareShader(DRAW_SHADER), label: "draw-after-gpu" });
+  const fullscreen = effect(gpu, prepareShader(EFFECT_SHADER), { label: "effect-after-gpu" });
+  const pipeline = compute(gpu, prepareShader(COMPUTE_SHADER), { label: "compute-after-gpu" });
 
   gpu.dispose();
 
@@ -197,9 +198,9 @@ test("dispose is the only added consumer lifetime method", async () => {
   const gpu = await init();
   try {
     const consumers = [
-      draw(gpu, { shader: DRAW_SHADER }),
-      effect(gpu, EFFECT_SHADER),
-      compute(gpu, COMPUTE_SHADER),
+      draw(gpu, { shader: prepareShader(DRAW_SHADER) }),
+      effect(gpu, prepareShader(EFFECT_SHADER)),
+      compute(gpu, prepareShader(COMPUTE_SHADER)),
     ];
     for (const consumer of consumers) {
       expect("destroy" in consumer).toBe(false);
@@ -214,8 +215,8 @@ test("outer frame and pass validity retain precedence over a disposed consumer",
   const gpu = await init();
   try {
     const output = target(gpu, { size: [1, 1] });
-    const drawable = draw(gpu, { shader: DRAW_SHADER });
-    const fullscreen = effect(gpu, EFFECT_SHADER, { label: "disposed-shorthand" });
+    const drawable = draw(gpu, { shader: prepareShader(DRAW_SHADER) });
+    const fullscreen = effect(gpu, prepareShader(EFFECT_SHADER), { label: "disposed-shorthand" });
     const canceled = frame(gpu);
     canceled.cancel();
     drawable.dispose();
@@ -230,7 +231,7 @@ test("outer frame and pass validity retain precedence over a disposed consumer",
       where: "disposed-shorthand.drawable",
     }));
 
-    const live = draw(gpu, { shader: DRAW_SHADER });
+    const live = draw(gpu, { shader: prepareShader(DRAW_SHADER) });
     let retainedPass!: FramePass;
     frame(gpu, current => current.pass(output, pass => { retainedPass = pass; }));
     live.dispose();
@@ -247,9 +248,9 @@ test("compilation remains valid before bindings are set", async () => {
   const gpu = await init();
   try {
     const output = target(gpu, { size: [1, 1] });
-    const drawable = draw(gpu, { shader: BOUND_DRAW_SHADER });
-    const fullscreen = effect(gpu, BOUND_EFFECT_SHADER);
-    const pipeline = compute(gpu, BOUND_COMPUTE_SHADER);
+    const drawable = draw(gpu, { shader: prepareShader(BOUND_DRAW_SHADER) });
+    const fullscreen = effect(gpu, prepareShader(BOUND_EFFECT_SHADER));
+    const pipeline = compute(gpu, prepareShader(BOUND_COMPUTE_SHADER));
 
     await expect(drawable.compile(output)).resolves.toBe(drawable);
     await expect(fullscreen.compile(output)).resolves.toBe(fullscreen);

@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { expect, test, vi } from "vitest";
 import { init, bundle, draw, frame, storage, target } from "../src/mock.ts";
 
@@ -54,7 +55,7 @@ test("draw(gpu, opts) records storage-driven vertices and instances without vert
   const drawCalls = spyRenderPassDraws(gpu.device.gpu);
   try {
     const count = 8;
-    const dots = draw(gpu, { shader: PARTICLES_STORAGE, label: "dots", instances: count, vertices: 6 });
+    const dots = draw(gpu, { shader: prepareShader(PARTICLES_STORAGE), label: "dots", instances: count, vertices: 6 });
     const particles = storage(gpu, count * 8, "read");
     dots.set({ particles });
     const colorTarget = target(gpu, { size: [4, 4] });
@@ -72,7 +73,7 @@ test("instances zero is a valid no-instance draw", async () => {
   const gpu = await init();
   const drawCalls = spyRenderPassDraws(gpu.device.gpu);
   try {
-    const dots = draw(gpu, { shader: INSTANCED_SHADER, label: "zero-dots", instances: 0, vertices: 6 });
+    const dots = draw(gpu, { shader: prepareShader(INSTANCED_SHADER), label: "zero-dots", instances: 0, vertices: 6 });
     const colorTarget = target(gpu, { size: [4, 4] });
 
     frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (pass) => pass.draw(dots)));
@@ -88,7 +89,7 @@ test("per-call instances override draw defaults while vertices fall back to draw
   const gpu = await init();
   const drawCalls = spyRenderPassDraws(gpu.device.gpu);
   try {
-    const dots = draw(gpu, { shader: INSTANCED_SHADER, label: "dots", instances: 10, vertices: 6, firstInstance: 2 });
+    const dots = draw(gpu, { shader: prepareShader(INSTANCED_SHADER), label: "dots", instances: 10, vertices: 6, firstInstance: 2 });
     const colorTarget = target(gpu, { size: [4, 4] });
 
     frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (pass) => pass.draw(dots, { instances: 3 })));
@@ -105,7 +106,7 @@ test("geometry vertexCount wins over DrawOptions.vertices unless call vertices o
   const drawCalls = spyRenderPassDraws(gpu.device.gpu);
   try {
     const geometry = { vertexCount: 5 };
-    const drawable = draw(gpu, { shader: INSTANCED_SHADER, label: "geometry-draw", geometry, vertices: 6, instances: 2 });
+    const drawable = draw(gpu, { shader: prepareShader(INSTANCED_SHADER), label: "geometry-draw", geometry, vertices: 6, instances: 2 });
     const colorTarget = target(gpu, { size: [4, 4] });
 
     frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (pass) => {
@@ -128,7 +129,7 @@ test("bundle recording preserves per-call instance counts and replays the bundle
   const bundleDrawCalls = spyRenderBundleDraws(gpu.device.gpu);
   const bundleExecutions = spyRenderPassBundleExecutions(gpu.device.gpu);
   try {
-    const dots = draw(gpu, { shader: INSTANCED_SHADER, label: "bundle-dots", instances: 9, vertices: 6 });
+    const dots = draw(gpu, { shader: prepareShader(INSTANCED_SHADER), label: "bundle-dots", instances: 9, vertices: 6 });
     const colorTarget = target(gpu, { size: [4, 4] });
 
     const recorded1 = bundle(gpu, { target: colorTarget, label: "instanced-dots" }, (recorder) => {
@@ -163,7 +164,7 @@ test("draw count options reject negative and non-integer values with VGPU errors
     const gpu = await init();
     try {
       const colorTarget = target(gpu, { size: [4, 4] });
-      const drawable = draw(gpu, { shader: INSTANCED_SHADER, label: testCase.name, vertices: 6, ...testCase.drawOpts });
+      const drawable = draw(gpu, { shader: prepareShader(INSTANCED_SHADER), label: testCase.name, vertices: 6, ...testCase.drawOpts });
 
       expect(() => frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (pass) => pass.draw(drawable, testCase.callOpts)))).toThrowError(
         /VGPU-R1-DRAW-COUNT|must be an integer >= 0/,

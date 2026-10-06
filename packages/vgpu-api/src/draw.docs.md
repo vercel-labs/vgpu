@@ -1,6 +1,6 @@
 # Draw
 
-Target-agnostic renderable shader unit created by `draw(gpu)`. It reflects WGSL bindings, caches pipelines per target format/depth/sample count, and supports geometries, explicit vertex counts, instancing, and raw group claims.
+Target-agnostic renderable shader unit created by `draw(gpu)`. It reads bindings from a prepared `ShaderSource`, caches pipelines per target format/depth/sample count, and supports geometries, explicit vertex counts, instancing, and raw group claims.
 
 ## Import
 
@@ -43,7 +43,7 @@ interface StencilOptions {
 }
 
 interface DrawOptions {
-  readonly shader: string | ShaderSource;
+  readonly shader: ShaderSource;
   readonly geometry?: GeometryLike;
   readonly set?: SetBag;
   readonly label?: string;
@@ -112,7 +112,7 @@ interface Draw {
 
 | Param | Type | Required | Default | Notes |
 |---|---|---:|---|---|
-| opts.shader | `string \| ShaderSource` | ✔ | — | WGSL string or loader-produced `ShaderSource`. Must contain compatible vertex/fragment entry points. With no explicit selection, each stage uses its unique entry regardless of name; with multiple entries it prefers `vs_main` / `fs_main`, otherwise its first entry. |
+| opts.shader | `ShaderSource` | ✔ | — | Prepared `version: 2` artifact: a `.wgsl` import through the `@vgpu/wgsl` Vite/webpack loader, a prebuilt asset, or `prepareShader(wgsl)` from `@vgpu/wgsl/prepare`. Raw WGSL strings and `version: 1` artifacts are rejected. `draw(gpu)` keeps its own validated snapshot, so changing the artifact object afterwards does not affect an existing draw. Must contain compatible vertex/fragment entry points. With no explicit selection, each stage uses its unique entry regardless of name; with multiple entries it prefers `vs_main` / `fs_main`, otherwise its first entry. |
 | opts.geometry | `GeometryLike` | ✖ | `undefined` | Supplies vertex/index buffers and layouts. Omit for generated vertex-index drawing. |
 | opts.set | `Record<string, unknown>` | ✖ | `undefined` | Initial `.set()` call. |
 | opts.label | `string` | ✖ | `"draw"` | Debug/error label. |
@@ -208,47 +208,60 @@ interface Draw {
 - `VGPU-R4-GROUP-CLAIMED` — `set()` tried to update a claimed group. Call `set()` before claiming, or keep updating the group yourself from `draw.layout(n)`.
 - `VGPU-R4-GROUP-INCOMPATIBLE` — a claimed bind group does not match the draw's layout. Build it from `draw.layout(n, { dynamicOffsets? })` before calling `group(n, bindGroup)`.
 - `VGPU-R4-GROUP-VALIDATION` — WebGPU rejected a claimed group at draw time; delivered asynchronously through `gpu.onError`. Build the group from `draw.layout(n)` and pass offsets via the draw call.
-- `VGPU-SHADER-SOURCE-INVALID` — malformed `ShaderSource`. Pass WGSL text or a loader-produced `{ version, wgsl }` object.
+- `VGPU-SHADER-SOURCE-UNPREPARED` — `shader` is a raw WGSL string or a `version: 1` artifact. Import the `.wgsl` file through a compatible `@vgpu/wgsl` loader, rebuild prebuilt assets, or wrap the source: `shader: prepareShader(wgsl)` from `@vgpu/wgsl/prepare`.
+- `VGPU-SHADER-SOURCE-VERSION` — `shader.version` is an integer other than `2`; the message names the received version, the supported version, and the artifact's `producer`. Align the `@vgpu/wgsl` tooling and `vgpu` runtime versions, then regenerate the artifact.
+- `VGPU-SHADER-SOURCE-INVALID` — `shader` is not an object; `version` is missing or not an integer; a required field is missing, accessor-backed, or malformed; the reflection metadata is inconsistent (dangling binding or sampler references, duplicate bindings or entry points, layouts whose offsets, alignment, stride, or size disagree); or `sourceChecksum` does not match `wgsl`. Structured detail gives the field `path` and the `reason`. Regenerate the artifact with a supported producer instead of editing its `reflection`.
 - `VGPU-DRAW-DISPOSED` — any member other than `dispose()` was used after `dispose()`: `set()`, `group()`, `layout()`, one-shot `draw()`, `compile()`, `compileSync()`, the `gpu` and `targets` getters, `currentFrame.pass(target, draw)`, `FramePass.draw(drawable)`, or `BundleRecorder.draw(drawable)`. The message is `Draw '<label>' has been disposed.`, `where` is `<label>.<operation>`, and `detail` is `{ label }`. The check runs before this draw's argument, target, binding, and device checks, so a disposed draw always reports this code; frame and pass errors, such as using an ended pass, keep their own precedence. `compile()` throws synchronously when the draw is already disposed, and a `compile()` still pending at `dispose()` rejects with this code once its preparation settles. Create a new `draw(gpu, ...)`; a disposed draw cannot be reused.
+
+The three `VGPU-SHADER-SOURCE-*` errors throw synchronously from `draw(gpu)`, before any other draw option is validated.
 
 ## Examples
 
+Static shaders live in `.wgsl` files. The `@vgpu/wgsl` Vite/webpack loader prepares them at build time, so the import is already a `ShaderSource`:
+
+```wgsl
+// triangle.wgsl
+@vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
+  var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
+  return vec4f(p[vi], 0, 1);
+}
+@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0, 1, 0, 1); }
+```
+
 ```ts
 import { init, draw, target } from "vgpu/mock";
+import triangleShader from "./triangle.wgsl";
 
 const gpu = await init();
 const colorTarget = target(gpu, { size: [64, 64] });
 const tri = draw(gpu, {
   label: "tri",
   targets: [colorTarget],
-  shader: `
-    @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
-      var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
-      return vec4f(p[vi], 0, 1);
-    }
-    @fragment fn fs_main() -> @location(0) vec4f { return vec4f(0, 1, 0, 1); }
-  `,
+  shader: triangleShader, // prepared by the loader; no WGSL parsing at runtime
 });
 
 tri.draw({ target: colorTarget, vertices: 3, instances: 1 });
 ```
 
+The remaining examples keep the WGSL inline and wrap it in `prepareShader()` from `@vgpu/wgsl/prepare` so the source stays visible. Preparing in browser code bundles the WGSL parser; use it for WGSL you build at runtime, and prefer `.wgsl` imports for static shaders.
+
 Backface culling for a closed imported geometry:
 
 ```ts
 import { init, draw, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const scene = target(gpu, { size: [256, 256], depth: true });
 const statue = { vertexCount: 36 }; // closed geometry; vertex data omitted for brevity
 const opaque = draw(gpu, {
-  shader: `
+  shader: prepareShader(`
     @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
       var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
       return vec4f(p[vi % 3u], 0, 1);
     }
     @fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.8, 0.8, 0.7, 1); }
-  `,
+  `),
   geometry: statue,
   cull: "back",    // closed geometry: faces pointing away are never visible
   frontFace: "cw", // the importer produced clockwise triangles
@@ -262,6 +275,7 @@ Shadow map with depth bias and pancaking:
 
 ```ts
 import { init, createMockAdapter, draw, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init({
   adapter: createMockAdapter({ features: ["depth-clip-control"] }),
@@ -269,13 +283,13 @@ const gpu = await init({
 });
 const shadowMap = target(gpu, { size: [1024, 1024], depth: true });
 const casters = draw(gpu, {
-  shader: `
+  shader: prepareShader(`
     @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
       var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
       return vec4f(p[vi], 0, 1);
     }
     @fragment fn fs_main() -> @location(0) vec4f { return vec4f(0); }
-  `,
+  `),
   // Nudge stored depth away from the light to stop shadow acne.
   depth: { bias: 2, biasSlopeScale: 2 },
   // Pancake casters behind the light's near plane instead of clipping them away.
@@ -290,6 +304,7 @@ MRT decal into a G-buffer:
 
 ```ts
 import { init, draw, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 // Deferred-shading G-buffer: albedo + world-space normals.
@@ -299,14 +314,14 @@ const gbuffer = target(gpu, {
   depth: true,
 });
 const decal = draw(gpu, {
-  shader: `
+  shader: prepareShader(`
     struct Frag { @location(0) albedo: vec4f, @location(1) normal: vec4f }
     @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
       var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
       return vec4f(p[vi], 0, 1);
     }
     @fragment fn fs_main() -> Frag { return Frag(vec4f(0.6, 0.1, 0.1, 0.8), vec4f(0, 1, 0, 0)); }
-  `,
+  `),
   colors: [
     { blend: "alpha" },   // blend the decal into the albedo
     { writeMask: [] },    // leave the normals untouched
@@ -322,18 +337,19 @@ Alpha-tested foliage without transparency sorting:
 
 ```ts
 import { init, draw, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const scene = target(gpu, { size: [256, 256], depth: true, msaa: true });
 const foliage = draw(gpu, {
-  shader: `
+  shader: prepareShader(`
     @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
       var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
       return vec4f(p[vi], 0, 1);
     }
     // In a real scene, alpha comes from the leaf texture.
     @fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.1, 0.5, 0.1, 0.4); }
-  `,
+  `),
   multisample: { alphaToCoverage: true },
 });
 foliage.draw(scene);
@@ -345,16 +361,18 @@ Stencil-masked portal:
 
 ```ts
 import { init, draw, frame, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const scene = target(gpu, { size: [256, 256], depth: "depth24plus-stencil8" });
-const SHADER = `
+// Prepare once, reuse the artifact for both draws.
+const SHADER = prepareShader(`
   @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
     var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
     return vec4f(p[vi], 0, 1);
   }
   @fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.2, 0.2, 1, 1); }
-`;
+`);
 // Mark the portal's pixels with stencil value 1; write no color, no depth.
 const portalMask = draw(gpu, { shader: SHADER, writeMask: [], depth: false, stencil: { front: { pass: "replace" }, ref: 1 } });
 // Draw the far world only where the mask matches.
@@ -374,17 +392,18 @@ Per-draw layer fade with the blend constant:
 
 ```ts
 import { init, draw, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const colorTarget = target(gpu, { size: [128, 128] });
 const overlay = draw(gpu, {
-  shader: `
+  shader: prepareShader(`
     @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
       var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
       return vec4f(p[vi], 0, 1);
     }
     @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1, 0.5, 0, 1); }
-  `,
+  `),
   // Weight the whole layer by the blend constant, not per-vertex alpha.
   blend: { color: { src: "constant", dst: "one-minus-constant" } },
   blendConstant: [0.25, 0.25, 0.25, 0.25], // the layer shows at 25%
@@ -398,11 +417,12 @@ Pipeline specialization with `constants` and `entry`:
 
 ```ts
 import { init, draw, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const colorTarget = target(gpu, { size: [128, 128] });
 // One module, two fragment variants sharing the vertex stage and helpers.
-const SOURCE = `
+const SOURCE = prepareShader(`
   override STEPS: u32 = 8;
   @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
     var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
@@ -410,7 +430,7 @@ const SOURCE = `
   }
   @fragment fn fs_shaded() -> @location(0) vec4f { return vec4f(f32(STEPS) / 64.0, 0, 0, 1); }
   @fragment fn fs_flat() -> @location(0) vec4f { return vec4f(0.5, 0.5, 0.5, 1); }
-`;
+`);
 const hero = draw(gpu, { shader: SOURCE, constants: { STEPS: 64 } });        // high quality tier
 const backdrop = draw(gpu, { shader: SOURCE, entry: { fragment: "fs_flat" } }); // cheap variant
 
@@ -424,26 +444,27 @@ GPU-driven draw with `indirect`:
 
 ```ts
 import { init, compute, draw, storage, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const scene = target(gpu, { size: [256, 256], depth: true });
 // drawIndirect arguments: vertexCount, instanceCount, firstVertex, firstInstance.
 const args = storage(gpu, 16, { indirect: true });
-const cullPass = compute(gpu, `
+const cullPass = compute(gpu, prepareShader(`
   @group(0) @binding(0) var<storage, read_write> args: array<u32, 4>;
   @compute @workgroup_size(1) fn cs_main() {
     args = array<u32, 4>(3u, 1u, 0u, 0u); // survivors of the culling test
   }
-`);
+`));
 cullPass.set({ args });
 const grass = draw(gpu, {
-  shader: `
+  shader: prepareShader(`
     @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
       var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
       return vec4f(p[vi], 0, 1);
     }
     @fragment fn fs_main() -> @location(0) vec4f { return vec4f(0, 0.6, 0, 1); }
-  `,
+  `),
 });
 cullPass.dispatch(1);                          // the GPU decides the counts
 grass.draw({ target: scene, indirect: args }); // the CPU never reads them back
@@ -457,21 +478,28 @@ The compute pass writes the draw arguments and the draw consumes them on the GPU
 
 Pass a live `Surface` to prepare for a canvas during loading. Preparation reads the surface's configured signature — `format`, resolved depth format, and sample count — and does not acquire the canvas texture, resize the canvas, or submit work, so it runs outside any frame:
 
+```wgsl
+// prewarm-triangle.wgsl
+@vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
+  var p = array<vec2f, 3>(vec2f(-0.5, -0.5), vec2f(0.5, -0.5), vec2f(0.0, 0.5));
+  return vec4f(p[vi], 0, 1);
+}
+
+@fragment fn fs_main() -> @location(0) vec4f {
+  return vec4f(1, 0.4, 0.2, 1);
+}
+```
+
 ```ts
 import { init, draw, frameLoop, surface } from "vgpu";
+import triangleShader from "./prewarm-triangle.wgsl";
 
 const gpu = await init();
 const canvasSurface = surface(gpu, document.querySelector("canvas")!);
 
 // ---cut---
 const tri = draw(gpu, {
-  shader: `
-    @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
-      var p = array<vec2f, 3>(vec2f(-0.5, -0.5), vec2f(0.5, -0.5), vec2f(0.0, 0.5));
-      return vec4f(p[vi], 0, 1);
-    }
-    @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1, 0.4, 0.2, 1); }
-  `,
+  shader: triangleShader,
 });
 await tri.compile(canvasSurface); // outside a frame: no canvas texture is acquired
 
@@ -490,6 +518,7 @@ Each color/depth/sample-count variant is a different pipeline. A missed variant 
 
 ```ts
 import { init, draw, frame, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const sceneTarget = target(gpu, { size: [64, 64] });
@@ -497,7 +526,7 @@ const sceneTarget = target(gpu, { size: [64, 64] });
 // ---cut---
 const marker = draw(gpu, {
   label: "marker",
-  shader: `
+  shader: prepareShader(`
     struct Params { tint: vec4f }
     @group(0) @binding(0) var<uniform> params: Params;
     @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
@@ -505,7 +534,7 @@ const marker = draw(gpu, {
       return vec4f(p[vi], 0, 1);
     }
     @fragment fn fs_main() -> @location(0) vec4f { return params.tint; }
-  `,
+  `),
   set: { params: { tint: [1, 0, 0, 1] } },
 });
 
@@ -536,6 +565,7 @@ Bind a raw `GPUBuffer` you created on `gpu.gpu` (the shared `GPUDevice`) when yo
 
 ```ts
 import { init, draw, frame, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const sceneTarget = target(gpu, { size: [64, 64] });
@@ -551,7 +581,7 @@ const palette = gpu.gpu.createBuffer({ label: "palette", size: coolOffset + TINT
 gpu.gpu.queue.writeBuffer(palette, 0, new Float32Array([1, 0.4, 0.2, 1])); // warm tint
 gpu.gpu.queue.writeBuffer(palette, coolOffset, new Float32Array([0.2, 0.5, 1, 1])); // cool tint
 
-const stripeShader = `
+const stripeShader = prepareShader(`
   struct Tint { color: vec4f }
   struct Stripe { offset: f32, size: f32, buffer: f32 } // plain data that shares member names with a buffer binding
   @group(0) @binding(0) var<uniform> tint: Tint;
@@ -566,7 +596,7 @@ const stripeShader = `
     let coverage = 1.0 - smoothstep(stripe.size, stripe.size + stripe.buffer, gap);
     return vec4f(tint.color.rgb, coverage);
   }
-`;
+`);
 
 const coolRange: GPUBufferBinding = { buffer: palette, offset: coolOffset }; // size defaults to the remaining 16 bytes
 const warmStripe = draw(gpu, {
@@ -611,6 +641,8 @@ The rules for raw buffer bindings:
 
 ## Notes
 
+- `draw(gpu)` never parses WGSL: it validates the prepared artifact and reads its `reflection`, so draws built from loader-imported or prebuilt shaders keep the WGSL parser out of your bundle. `prepareShader()` runs the parser wherever you call it — prepare once per source revision, outside `frame(gpu)` and `frameLoop(gpu)` callbacks, and pass the same artifact to every draw built from that source.
+- An artifact with deeply frozen consumed data (every loader import and `prepareShader()` result) is validated once and reused by later `draw`/`effect`/`compute` calls; mutable ones are revalidated each call; changed source needs a new artifact (`ShaderSource`). Unknown extra fields are ignored. `sourceChecksum` only detects a `wgsl` string replaced after preparation; it does not prove `reflection` matches the WGSL, so regenerate artifacts whenever the source or the `@vgpu/wgsl` tooling changes.
 - Choose blend by use case: omit it for opaque geometry; use `"alpha"`/`"premultiplied"` for ordinary composition and `"additive"` for glow. Reserve explicit equations for special effects. `blendConstant` is persistent pass state (not pipeline state and not bundle state), so set it when fading or crossfading a layer.
 - For MRT, use `colors[i]` to inherit or override blend/write masks per attachment. Use `cull: "back"` on closed geometries, `"none"` on foliage/cards, and `"front"` for shadow passes; pair negative scales with `frontFace: "cw"`. Disable depth for overlays and depth writes for transparent/decals. Stencil needs a depth-stencil target; `multisample.alphaToCoverage` is for alpha-tested foliage with MSAA, not general blending.
 - Use indirect draws when compute produces arguments in storage buffers marked `{ indirect: true }`; this avoids CPU readback and keeps culling GPU-driven.
@@ -631,7 +663,7 @@ The rules for raw buffer bindings:
 - Changing resource identity after a draw is recorded in a `Bundle` marks that bundle stale; changing JS values in-place does not. `dispose()` marks every bundle that recorded the draw stale too; letting the draw be collected does not.
 - Do not dispose a draw whose bundles you still replay through `FramePass.bundles()`. Create the replacement draw, record its bundle, swap your references, then dispose the old draw and bundle.
 - Bind an offscreen `Target` (`set({ source: sceneTarget })`) when the draw should follow its attachment: after `sceneTarget.resize(...)`, the binding switches to the replacement texture. Bind a `Texture` (`set({ source: sceneTarget.color })`) to keep that exact texture and its lifetime; it does not follow resize, so rebind the replacement after `sceneTarget.resize(...)` — the released attachment fails at draw time. Do not bind a `Surface` — render into a `Target` and present it with a surface pass; see `Surface` for the full producer → present example.
-- **See also:** `Effect`, `Compute`, `FramePass.draw`, `Bundle`, `Surface`, `Target`, `SharedUniforms`.
+- **See also:** `ShaderSource`, `prepareShader` (`@vgpu/wgsl/prepare`), `Effect`, `Compute`, `FramePass.draw`, `Bundle`, `Surface`, `Target`, `SharedUniforms`.
 
 ## Compilation validation and uniform capture
 

@@ -22,31 +22,16 @@ A pass is a render-pass section inside a frame. It has one target, one clear col
 
 ```ts
 import { init, effect, frame, surface } from "vgpu";
+import oceanShader from "./ocean.wgsl"; // fullscreen water gradient
+import boatShader from "./boat.wgsl"; // draws only the hull pixels; discards everything else
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
 const canvasSurface = surface(gpu, canvas);
 
-const oceanSource = `
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    let wave = sin(uv.x * 24.0) * 0.01;
-    let depth = smoothstep(0.4 + wave, 1.0, uv.y);
-    return vec4f(0.1, 0.3 + depth * 0.2, 0.55 + depth * 0.3, 1.0);
-  }
-`;
-
-// Draws only the hull pixels; discards everything else.
-const boatSource = `
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    let inHull = abs(uv.x - 0.5) < 0.12 && abs(uv.y - 0.42) < 0.05;
-    if (!inHull) { discard; }
-    return vec4f(0.45, 0.26, 0.13, 1.0);
-  }
-`;
-
 // ---cut---
-const ocean = effect(gpu, oceanSource);
-const boat = effect(gpu, boatSource);
+const ocean = effect(gpu, oceanShader);
+const boat = effect(gpu, boatShader);
 
 frame(gpu, (currentFrame) => {
   currentFrame.pass({ target: canvasSurface, clear: [0, 0, 0, 1] }, (pass) => {
@@ -66,39 +51,20 @@ Now add postprocessing. The pass is the same — the only change is its target: 
 
 ```ts
 import { init, effect, frame, sampler, surface, target } from "vgpu";
+import oceanShader from "./ocean.wgsl";
+import boatShader from "./boat.wgsl";
+import postShader from "./post.wgsl"; // samples `src` with `samp` and applies a vignette
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
 const canvasSurface = surface(gpu, canvas);
 
-const ocean = effect(gpu, `
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    let wave = sin(uv.x * 24.0) * 0.01;
-    let depth = smoothstep(0.4 + wave, 1.0, uv.y);
-    return vec4f(0.1, 0.3 + depth * 0.2, 0.55 + depth * 0.3, 1.0);
-  }
-`);
-const boat = effect(gpu, `
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    let inHull = abs(uv.x - 0.5) < 0.12 && abs(uv.y - 0.42) < 0.05;
-    if (!inHull) { discard; }
-    return vec4f(0.45, 0.26, 0.13, 1.0);
-  }
-`);
-const postSource = `
-  @group(0) @binding(0) var src: texture_2d<f32>;
-  @group(0) @binding(1) var samp: sampler;
-
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    let base = textureSampleLevel(src, samp, uv, 0.0);
-    let vignette = 1.0 - 0.4 * length(uv - vec2f(0.5));
-    return vec4f(base.rgb * vignette, 1.0);
-  }
-`;
+const ocean = effect(gpu, oceanShader);
+const boat = effect(gpu, boatShader);
 
 // ---cut---
 const scene = target(gpu, { size: [canvasSurface.size[0], canvasSurface.size[1]] });
-const postprocessing = effect(gpu, postSource);
+const postprocessing = effect(gpu, postShader);
 postprocessing.set({
   src: scene,
   samp: sampler(gpu, { minFilter: 'linear', magFilter: 'linear' }),

@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { describe, expect, test } from "vitest";
 import { draw, effect, frame, geometry, init, surface, target } from "../../src/node.ts";
 import { instanceGeometry } from "../../src/scene/instance-geometry.ts";
@@ -55,8 +56,8 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Surface depth/MSAA native
     try {
       const withDepth = surface(gpu, gpuCanvasLike(16, 16), { autoResize: false, depth: true, format: "rgba8unorm" });
       const control = surface(gpu, gpuCanvasLike(16, 16), { autoResize: false, format: "rgba8unorm" });
-      const near = draw(gpu, { shader: FULLSCREEN_AT_DEPTH(0.2, [1, 0, 0]), label: "near" });
-      const far = draw(gpu, { shader: FULLSCREEN_AT_DEPTH(0.8, [0, 1, 0]), label: "far" });
+      const near = draw(gpu, { shader: prepareShader(FULLSCREEN_AT_DEPTH(0.2, [1, 0, 0])), label: "near" });
+      const far = draw(gpu, { shader: prepareShader(FULLSCREEN_AT_DEPTH(0.8, [0, 1, 0])), label: "far" });
 
       frame(gpu, (current) => {
         current.pass(withDepth, (pass) => { pass.draw(near); pass.draw(far); });
@@ -75,7 +76,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Surface depth/MSAA native
     try {
       const multisampled = surface(gpu, gpuCanvasLike(32, 32), { autoResize: false, format: "rgba8unorm", msaa: 4 });
       const control = surface(gpu, gpuCanvasLike(32, 32), { autoResize: false, format: "rgba8unorm" });
-      const diagonal = draw(gpu, { shader: DIAGONAL, label: "diagonal" });
+      const diagonal = draw(gpu, { shader: prepareShader(DIAGONAL), label: "diagonal" });
       frame(gpu, (current) => {
         current.pass(multisampled, diagonal);
         current.pass(control, diagonal);
@@ -87,7 +88,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Surface depth/MSAA native
       expect(partialRedPixels(controlPixels)).toBe(0);
 
       multisampled.resize([20, 12]);
-      const cyan = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0, 1, 1, 1); }`);
+      const cyan = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0, 1, 1, 1); }`));
       frame(gpu, (current) => current.pass(multisampled, cyan));
       const resized = await multisampled.color.read({ mipLevel: 0, region: "all" });
       expect(resized.byteLength).toBe(20 * 12 * 4);
@@ -110,8 +111,8 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Surface depth/MSAA native
         derived.resize([width, height]);
       });
       publicResizes.length = 0;
-      const blue = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0, 0, 1, 1); }`);
-      const yellow = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1, 1, 0, 1); }`);
+      const blue = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0, 0, 1, 1); }`));
+      const yellow = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1, 1, 0, 1); }`));
 
       frame(gpu, (current) => {
         current.pass(derived, blue);
@@ -141,12 +142,12 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Surface depth/MSAA native
       const output = target(gpu, { size: [16, 10], format: "rgba8unorm" });
       const oldDepth = screen.depth!;
       const inspectDepth = draw(gpu, {
-        shader: READ_DEPTH_UNFILTERABLE,
+        shader: prepareShader(READ_DEPTH_UNFILTERABLE),
         depth: false,
         label: "inspect-reconciled-depth",
         set: { sceneDepth: oldDepth },
       });
-      const writeDepth = draw(gpu, { shader: FULLSCREEN_AT_DEPTH(0.25, [1, 0, 0]), label: "write-reconciled-depth" });
+      const writeDepth = draw(gpu, { shader: prepareShader(FULLSCREEN_AT_DEPTH(0.25, [1, 0, 0])), label: "write-reconciled-depth" });
       const publicResizes: Array<readonly [number, number]> = [];
       screen.onResize(({ width, height }) => publicResizes.push([width, height]));
       publicResizes.length = 0;
@@ -194,16 +195,16 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Surface depth/MSAA native
       collection.add();
       const bridge = instanceGeometry(gpu, collection, { mesh });
       expect(bridge.publish()).toBe(1);
-      const scene = draw(gpu, { geometry: bridge.geometry, shader: INSTANCED, label: "surface-scene" });
+      const scene = draw(gpu, { geometry: bridge.geometry, shader: prepareShader(INSTANCED), label: "surface-scene" });
       frame(gpu, (current) => current.pass(sceneScreen, (pass) => pass.draw(scene, { instances: 1 })));
       const scenePixel = pixelAt(await sceneScreen.color.read({ mipLevel: 0, region: "all" }), 24, 12, 8);
       expect(scenePixel[1]).toBeGreaterThan(160);
       expect(scenePixel[2]).toBeGreaterThan(240);
 
       const depthScreen = surface(gpu, gpuCanvasLike(24, 16), { autoResize: false, depth: true, format: "rgba8unorm" });
-      const writeDepth = draw(gpu, { shader: FULLSCREEN_AT_DEPTH(0.25, [1, 0, 0]), label: "write-depth" });
+      const writeDepth = draw(gpu, { shader: prepareShader(FULLSCREEN_AT_DEPTH(0.25, [1, 0, 0])), label: "write-depth" });
       const inspectDepth = draw(gpu, {
-        shader: READ_DEPTH_UNFILTERABLE,
+        shader: prepareShader(READ_DEPTH_UNFILTERABLE),
         depth: false,
         label: "inspect-depth",
         set: { sceneDepth: depthScreen.depth! },
@@ -231,7 +232,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Surface depth/MSAA native
         format: "rgba8unorm",
       });
       const marked = draw(gpu, {
-        shader: FULLSCREEN_AT_DEPTH(0.5, [1, 1, 0]),
+        shader: prepareShader(FULLSCREEN_AT_DEPTH(0.5, [1, 1, 0])),
         stencil: { front: { compare: "always", pass: "replace" }, ref: 3 },
       });
       frame(gpu, (current) => current.pass({ target: combined, clearStencil: 0 }, marked));
@@ -254,7 +255,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Surface depth/MSAA native
         format: "rgba8unorm",
       });
       expect(enabled.depth?.format).toBe("depth32float-stencil8");
-      frame(featureGpu, (current) => current.pass(enabled, effect(featureGpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`)));
+      frame(featureGpu, (current) => current.pass(enabled, effect(featureGpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`))));
     } finally {
       featureGpu.dispose();
     }

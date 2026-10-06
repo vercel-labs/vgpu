@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { expect, test, vi } from "vitest";
 import { bindGroupLayoutMetadata, createMockGPUDevice, Device } from "@vgpu/core";
 import { reflectSource } from "@vgpu/wgsl/reflect-source";
@@ -17,9 +18,9 @@ const fragmentShader = `
 
 test("equal visibility layouts reuse identity while distinct masks do not poison the cache", async () => {
   const gpu = await init();
-  const a = draw(gpu, { shader: vertexShader("a"), label: "cache-a" });
-  const b = draw(gpu, { shader: vertexShader("b"), label: "cache-b" });
-  const fragment = draw(gpu, { shader: fragmentShader, label: "cache-fragment" });
+  const a = draw(gpu, { shader: prepareShader(vertexShader("a")), label: "cache-a" });
+  const b = draw(gpu, { shader: prepareShader(vertexShader("b")), label: "cache-b" });
+  const fragment = draw(gpu, { shader: prepareShader(fragmentShader), label: "cache-fragment" });
   expect(a.layout(0)).toBe(b.layout(0));
   expect(fragment.layout(0)).not.toBe(a.layout(0));
   gpu.dispose();
@@ -32,7 +33,7 @@ test("unused bindings may be set and are ignored by the omitted layout", async (
     @vertex fn vs() -> @builtin(position) vec4f { return vec4f(0); }
     @fragment fn fs() -> @location(0) vec4f { return vec4f(1); }
   `;
-  const drawable = draw(gpu, { shader, label: "unused-set" });
+  const drawable = draw(gpu, { shader: prepareShader(shader), label: "unused-set" });
   expect(() => drawable.set({ unused: storage(gpu, 16, "read") })).not.toThrow();
   const colorTarget = target(gpu, { size: [1, 1] });
   expect(() => frame(gpu, (currentFrame) => currentFrame.pass(colorTarget, (pass) => pass.draw(drawable)))).not.toThrow();
@@ -47,7 +48,7 @@ test("changing an omitted binding does not stale a recorded bundle", async () =>
     @vertex fn vs() -> @builtin(position) vec4f { return used; }
     @fragment fn fs() -> @location(0) vec4f { return vec4f(1); }
   `;
-  const drawable = draw(gpu, { shader, label: "inactive-bundle", set: { used: [0, 0, 0, 1], unused: storage(gpu, 16, "read") } });
+  const drawable = draw(gpu, { shader: prepareShader(shader), label: "inactive-bundle", set: { used: [0, 0, 0, 1], unused: storage(gpu, 16, "read") } });
   const colorTarget = target(gpu, { size: [1, 1] });
   const recorded = bundle(gpu, { target: colorTarget, label: "inactive-bundle-recording" }, (recorder) => recorder.draw(drawable));
   drawable.set({ unused: storage(gpu, 16, "read") });
@@ -62,7 +63,7 @@ test("unused-only high groups require no pipeline layouts", async () => {
     @vertex fn vs() -> @builtin(position) vec4f { return vec4f(0); }
     @fragment fn fs() -> @location(0) vec4f { return vec4f(1); }
   `;
-  const drawable = draw(gpu, { shader, label: "unused-group-one" });
+  const drawable = draw(gpu, { shader: prepareShader(shader), label: "unused-group-one" });
   const colorTarget = target(gpu, { size: [1, 1] });
   expect(() => frame(gpu, (currentFrame) => currentFrame.pass(colorTarget, (pass) => pass.draw(drawable)))).not.toThrow();
   gpu.dispose();
@@ -70,8 +71,8 @@ test("unused-only high groups require no pipeline layouts", async () => {
 
 test("equal dynamic descriptors reuse layout identity", async () => {
   const gpu = await init();
-  const a = draw(gpu, { shader: vertexShader("a"), label: "dynamic-a" });
-  const b = draw(gpu, { shader: vertexShader("b"), label: "dynamic-b" });
+  const a = draw(gpu, { shader: prepareShader(vertexShader("a")), label: "dynamic-a" });
+  const b = draw(gpu, { shader: prepareShader(vertexShader("b")), label: "dynamic-b" });
   expect(a.layout(0, { dynamicOffsets: true })).toBe(b.layout(0, { dynamicOffsets: true }));
   gpu.dispose();
 });
@@ -79,8 +80,8 @@ test("equal dynamic descriptors reuse layout identity", async () => {
 test("bundle recording and geometry slices share narrowed pipeline layouts", async () => {
   const gpu = await init();
   const geo = geometry(gpu, { buffers: [{ data: new Float32Array([0, 0, 1, 0, 0, 1]), attributes: { position: { format: "float32x2", location: 0 } } }] });
-  const first = draw(gpu, { shader: vertexShader("first"), label: "geometry-first", geometry: geo });
-  const second = draw(gpu, { shader: vertexShader("second"), label: "geometry-second", geometry: geo.slice({ firstVertex: 0, vertexCount: 3 }) });
+  const first = draw(gpu, { shader: prepareShader(vertexShader("first")), label: "geometry-first", geometry: geo });
+  const second = draw(gpu, { shader: prepareShader(vertexShader("second")), label: "geometry-second", geometry: geo.slice({ firstVertex: 0, vertexCount: 3 }) });
   first.set({ first: [0, 0, 0, 1] });
   second.set({ second: [0, 0, 0, 1] });
   expect(first.layout(0)).toBe(second.layout(0));
@@ -98,9 +99,9 @@ const sampledTextureShader = (sample: boolean) => `
 
 test("ordinary sampling promotes f32 texture layouts while loads remain unfilterable", async () => {
   const gpu = await init();
-  const loaded = draw(gpu, { shader: sampledTextureShader(false), label: "loaded-f32" });
-  const sampled = draw(gpu, { shader: sampledTextureShader(true), label: "sampled-f32" });
-  const again = draw(gpu, { shader: sampledTextureShader(true), label: "sampled-again" });
+  const loaded = draw(gpu, { shader: prepareShader(sampledTextureShader(false)), label: "loaded-f32" });
+  const sampled = draw(gpu, { shader: prepareShader(sampledTextureShader(true)), label: "sampled-f32" });
+  const again = draw(gpu, { shader: prepareShader(sampledTextureShader(true)), label: "sampled-again" });
   const loadedEntry = bindGroupLayoutMetadata(loaded.layout(0))?.entries;
   const sampledEntry = bindGroupLayoutMetadata(sampled.layout(0))?.entries;
   expect(loadedEntry?.find((entry) => entry.binding === 0)?.texture?.sampleType).toBe("unfilterable-float");
@@ -112,7 +113,7 @@ test("ordinary sampling promotes f32 texture layouts while loads remain unfilter
 
 test("known unfilterable float textures fail with an actionable structured error", async () => {
   const gpu = await init();
-  const drawable = draw(gpu, { shader: sampledTextureShader(true), label: "filterability" });
+  const drawable = draw(gpu, { shader: prepareShader(sampledTextureShader(true)), label: "filterability" });
   const hdr = gpu.device.createTexture({ kind: "2d", size: [1, 1], format: "rgba32float", usage: ["texture_binding"], label: "hdr-color" });
   expect(() => drawable.set({ image: hdr })).toThrow(expect.objectContaining({
     code: "VGPU-SET-TEXTURE-FILTERABILITY",
@@ -132,7 +133,7 @@ test("requested float32-filterable permits promoted rgba32float facade textures"
   Object.defineProperty(device, "features", { value: new Set<GPUFeatureName>(["float32-filterable"]) });
   const requestDevice = vi.fn(async () => new Device(device));
   const gpu = await init({ adapter: { requestDevice }, requiredFeatures: ["float32-filterable"] });
-  const drawable = draw(gpu, { shader: sampledTextureShader(true), label: "feature-enabled" });
+  const drawable = draw(gpu, { shader: prepareShader(sampledTextureShader(true)), label: "feature-enabled" });
   const hdr = gpu.device.createTexture({ kind: "2d", size: [1, 1], format: "rgba32float", usage: ["texture_binding"], label: "filterable-hdr" });
   expect(bindGroupLayoutMetadata(drawable.layout(0))?.entries.find((entry) => entry.binding === 0)?.texture?.sampleType).toBe("float");
   expect(() => drawable.set({ image: hdr, imageSampler: sampler(gpu, { minFilter: "linear" }) })).not.toThrow();
@@ -142,21 +143,21 @@ test("requested float32-filterable permits promoted rgba32float facade textures"
 
 test("unresolved direct and helper sampling promote the positional texture bindings", async () => {
   const gpu = await init();
-  const direct = draw(gpu, { label: "fallback-direct", shader: `
+  const direct = draw(gpu, { label: "fallback-direct", shader: prepareShader(`
     @group(0) @binding(0) var image: texture_2d<f32>;
     @group(0) @binding(1) var samp: sampler;
     @group(0) @binding(2) var other: texture_2d<f32>;
     @vertex fn vs() -> @builtin(position) vec4f { return vec4f(0); }
     @fragment fn fs() -> @location(0) vec4f { let image = image; return textureSample(image, samp, vec2f(textureDimensions(other))); }
-  ` });
-  const helper = draw(gpu, { label: "fallback-helper", shader: `
+  `) });
+  const helper = draw(gpu, { label: "fallback-helper", shader: prepareShader(`
     @group(0) @binding(0) var image: texture_2d<f32>;
     @group(0) @binding(1) var samp: sampler;
     @group(0) @binding(2) var other: texture_2d<f32>;
     fn sampleIt(t: texture_2d<f32>, s: sampler, q: texture_2d<f32>) -> vec4f { let t = t; return textureSample(t, s, vec2f(textureDimensions(q))); }
     @vertex fn vs() -> @builtin(position) vec4f { return vec4f(0); }
     @fragment fn fs() -> @location(0) vec4f { return sampleIt(image, samp, other); }
-  ` });
+  `) });
   for (const drawable of [direct, helper]) {
     const entries = bindGroupLayoutMetadata(drawable.layout(0))!.entries;
     expect(entries.find((entry) => entry.binding === 0)?.texture?.sampleType).toBe("float");
@@ -167,13 +168,13 @@ test("unresolved direct and helper sampling promote the positional texture bindi
 
 test("selected vertex load and fragment sample union only promotes the sampled texture", async () => {
   const gpu = await init();
-  const drawable = draw(gpu, { label: "mixed-entry-policy", shader: `
+  const drawable = draw(gpu, { label: "mixed-entry-policy", shader: prepareShader(`
     @group(0) @binding(0) var sampled: texture_2d<f32>;
     @group(0) @binding(1) var samp: sampler;
     @group(0) @binding(2) var loaded: texture_2d<f32>;
     @vertex fn vs() -> @builtin(position) vec4f { return textureLoad(loaded, vec2i(0), 0); }
     @fragment fn fs() -> @location(0) vec4f { return textureSampleLevel(sampled, samp, vec2f(0), 0); }
-  ` });
+  `) });
   const entries = bindGroupLayoutMetadata(drawable.layout(0))!.entries;
   expect(entries.find((entry) => entry.binding === 0)?.texture?.sampleType).toBe("float");
   expect(entries.find((entry) => entry.binding === 2)?.texture?.sampleType).toBe("unfilterable-float");
@@ -184,7 +185,7 @@ test("selected vertex load and fragment sample union only promotes the sampled t
 
 test("depth integer external storage and multisampled layouts are never promoted", async () => {
   const gpu = await init();
-  const drawable = draw(gpu, { label: "special-textures", shader: `
+  const drawable = draw(gpu, { label: "special-textures", shader: prepareShader(`
     @group(0) @binding(0) var depthTex: texture_depth_2d;
     @group(0) @binding(1) var comparison: sampler_comparison;
     @group(0) @binding(2) var sintTex: texture_2d<i32>;
@@ -202,7 +203,7 @@ test("depth integer external storage and multisampled layouts are never promoted
         + textureLoad(msTex, vec2i(0), 0)
         + textureSampleBaseClampToEdge(externalTex, ordinary, vec2f(0));
     }
-  ` });
+  `) });
   const entries = bindGroupLayoutMetadata(drawable.layout(0))!.entries;
   expect(entries.find((entry) => entry.binding === 0)?.texture?.sampleType).toBe("depth");
   expect(entries.find((entry) => entry.binding === 2)?.texture?.sampleType).toBe("sint");
@@ -215,8 +216,8 @@ test("depth integer external storage and multisampled layouts are never promoted
 
 test("equal effective descriptors are isolated across devices", async () => {
   const firstGpu = await init(), secondGpu = await init();
-  const first = draw(firstGpu, { shader: sampledTextureShader(true), label: "same-label" });
-  const second = draw(secondGpu, { shader: sampledTextureShader(true), label: "same-label" });
+  const first = draw(firstGpu, { shader: prepareShader(sampledTextureShader(true)), label: "same-label" });
+  const second = draw(secondGpu, { shader: prepareShader(sampledTextureShader(true)), label: "same-label" });
   expect(first.layout(0)).not.toBe(second.layout(0));
   firstGpu.dispose(); secondGpu.dispose();
 });
@@ -232,7 +233,7 @@ test("effective promotion does not mutate reflected binding layouts", () => {
 
 test("opaque raw texture views skip facade format prechecks", async () => {
   const gpu = await init();
-  const drawable = draw(gpu, { shader: sampledTextureShader(true), label: "raw-view-fallback" });
+  const drawable = draw(gpu, { shader: prepareShader(sampledTextureShader(true)), label: "raw-view-fallback" });
   const raw = gpu.device.gpu.createTexture({ size: [1, 1], format: "rgba32float", usage: 4 }).createView();
   expect(() => drawable.set({ image: raw, imageSampler: sampler(gpu) })).not.toThrow();
   gpu.dispose();

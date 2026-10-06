@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { afterEach, expect, test, vi } from "vitest";
 import { compute, createMockAdapter, effect, frame, frameLoop, getMockGPUDeviceInstrumentation, init, target, timer, visibility, type Frame, type FrameLoopCallback, type FrameLoopHandle } from "../src/mock.ts";
 
@@ -210,7 +211,7 @@ test("invalid results release telemetry retains and managed-uniform pages", asyn
   const vis = visibility(gpu);
   const scene = target(gpu, { size: [4, 4], depth: true });
   const query = vis.query("statue");
-  const sim = compute(gpu, "@group(0) @binding(0) var<uniform> value: f32; @compute @workgroup_size(1) fn main() { let x = value; }", { set: { value: 1 } });
+  const sim = compute(gpu, prepareShader("@group(0) @binding(0) var<uniform> value: f32; @compute @workgroup_size(1) fn main() { let x = value; }"), { set: { value: 1 } });
   const mock = getMockGPUDeviceInstrumentation(gpu.gpu);
   const erasedCallback: FrameLoopCallback = (currentFrame) => {
     currentFrame.computePass((pass) => pass.dispatch(sim, 1));
@@ -242,7 +243,7 @@ test("independent submission and async CPU continuation remain while the cancele
   const onUnhandled = (error: unknown) => { unhandled.push(error); };
   process.on("unhandledRejection", onUnhandled);
   const colorTarget = target(gpu, { size: [4, 4] });
-  const independent = effect(gpu, "@fragment fn main() -> @location(0) vec4f { return vec4f(1); }");
+  const independent = effect(gpu, prepareShader("@fragment fn main() -> @location(0) vec4f { return vec4f(1); }"));
   let cpuContinued = false;
   let continuationError: unknown;
   const erasedCallback: FrameLoopCallback = async (currentFrame) => {

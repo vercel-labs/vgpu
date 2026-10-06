@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { describe, expect, test, vi } from "vitest";
 import { type Texture, pingPong as texturePair } from "@vgpu/core";
 import { init, texture, target, effect, frame, compute, bundle, pingPong } from "../src/mock.ts";
@@ -14,7 +15,7 @@ describe("tracked texture lifetimes", () => {
       const a = target(gpu, { size: [4, 4] });
       const b = target(gpu, { size: [4, 4] });
       const output = target(gpu, { size: [4, 4] });
-      const post = effect(gpu, SAMPLE, { set: { src: a.color } });
+      const post = effect(gpu, prepareShader(SAMPLE), { set: { src: a.color } });
       const recorded = bundle(gpu, { target: output }, recorder => {
         recorder.draw(post);
         post.set({ src: b.color });
@@ -31,7 +32,7 @@ describe("tracked texture lifetimes", () => {
     try {
       const source = target(gpu, { size: [4, 4] });
       const output = target(gpu, { size: [4, 4] });
-      const post = effect(gpu, SAMPLE, { set: { src: source.color } });
+      const post = effect(gpu, prepareShader(SAMPLE), { set: { src: source.color } });
       const recorded = bundle(gpu, { target: output }, recorder => {
         recorder.draw(post);
         source.color.destroy();
@@ -45,7 +46,7 @@ describe("tracked texture lifetimes", () => {
     try {
       const source = target(gpu, { size: [4, 4] });
       const output = target(gpu, { size: [4, 4] });
-      const post = effect(gpu, SAMPLE, { set: { src: source.color } });
+      const post = effect(gpu, prepareShader(SAMPLE), { set: { src: source.color } });
       const onDestroy = source.color.onDestroy.bind(source.color);
       const offs: ReturnType<typeof vi.fn>[] = [];
       vi.spyOn(source.color, "onDestroy").mockImplementation(cb => {
@@ -70,7 +71,7 @@ describe("tracked texture lifetimes", () => {
       vi.spyOn(source, "onTexturesRecreated").mockImplementation(cb => {
         const off = vi.fn(subscribe(cb)); offs.push(off); return off;
       });
-      const post = effect(gpu, SAMPLE, { set: { src: source } });
+      const post = effect(gpu, prepareShader(SAMPLE), { set: { src: source } });
       for (let size = 5; size <= 14; size++) source.resize([size, size]);
       expect(offs).toHaveLength(0);
       expect(() => frame(gpu, f => f.pass(output, p => p.draw(post)))).not.toThrow();
@@ -85,7 +86,7 @@ describe("tracked texture lifetimes", () => {
     try {
       const src = texture(gpu, { kind: "2d", size: [4, 4], format: "rgba8unorm", usage: ["texture_binding"], label: "old-image" });
       const output = target(gpu, { size: [4, 4] });
-      const post = effect(gpu, SAMPLE, { label: "post", set: { src } });
+      const post = effect(gpu, prepareShader(SAMPLE), { label: "post", set: { src } });
       const render = () => frame(gpu, f => f.pass({ target: output }, p => p.draw(post)));
       render();
       const spy = vi.spyOn(gpu.gpu, "createBindGroup");
@@ -103,7 +104,7 @@ describe("tracked texture lifetimes", () => {
     const gpu = await init();
     try {
       const pair = texturePair(gpu.device, { kind: "2d", size: [4, 4], format: "rgba8unorm", usage: ["storage_binding"], label: "simulation" });
-      const fill = compute(gpu, STORE, { label: "fill", set: { dst: pair.write } });
+      const fill = compute(gpu, prepareShader(STORE), { label: "fill", set: { dst: pair.write } });
       fill.dispatch(1);
       pair.resize([8, 8]);
       const spy = vi.spyOn(gpu.gpu, "createCommandEncoder");
@@ -120,8 +121,8 @@ describe("tracked texture lifetimes", () => {
     try {
       const source = target(gpu, { size: [4, 4] });
       const output = target(gpu, { size: [4, 4] });
-      const followed = effect(gpu, SAMPLE, { set: { src: source } });
-      const fixed = effect(gpu, SAMPLE, { set: { src: source.color } });
+      const followed = effect(gpu, prepareShader(SAMPLE), { set: { src: source } });
+      const fixed = effect(gpu, prepareShader(SAMPLE), { set: { src: source.color } });
       const record = () => bundle(gpu, { target: output }, b => b.draw(fixed));
       const oldBundle = record();
       const old = source.color;
@@ -148,7 +149,7 @@ describe("tracked texture lifetimes", () => {
       const b = target(gpu, { size: [4, 4] });
       const dead = target(gpu, { size: [4, 4] });
       const output = target(gpu, { size: [4, 4] });
-      const post = effect(gpu, SAMPLE, { set: { src: a } });
+      const post = effect(gpu, prepareShader(SAMPLE), { set: { src: a } });
       const render = () => frame(gpu, f => f.pass({ target: output }, p => p.draw(post)));
       dead.destroy();
       expect(() => post.set({ src: dead })).toThrow(/destroyed/);
@@ -263,7 +264,7 @@ describe("Target synchronous preparation", () => {
       const old = source.color;
       const output = target(gpu, { size: [4, 4] });
       source.onTexturesRecreated!(() => { throw new Error("subscriber failed"); });
-      const post = effect(gpu, SAMPLE, { set: { src: source } });
+      const post = effect(gpu, prepareShader(SAMPLE), { set: { src: source } });
       expect(() => source.resize([8, 8])).toThrow("subscriber failed");
       expect(source.size).toEqual([8, 8]);
       expect(source.color.size).toEqual([8, 8]);

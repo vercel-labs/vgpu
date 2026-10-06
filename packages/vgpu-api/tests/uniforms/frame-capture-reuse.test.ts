@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { afterEach, expect, test, vi } from "vitest";
 import { draw, effect, frame, getMockGPUDeviceInstrumentation, init, target, uniforms, type Frame } from "../../src/mock.ts";
 import { CAPTURE_PAGE_KIND, bindGroupCacheTestState, createBindGroupCache, type BindGroupCache, type BindGroupIdentityPart, type BufferRangeIdentity } from "../../src/bind-cache.ts";
@@ -92,7 +93,7 @@ function instrument(gpu: Gpu) {
 
 function scene(gpu: Gpu, count: number) {
   const camera = uniforms(gpu, { value: 0 });
-  const draws = Array.from({ length: count }, () => effect(gpu, SHADER, { set: { camera, params: { value: 0 } } }));
+  const draws = Array.from({ length: count }, () => effect(gpu, prepareShader(SHADER), { set: { camera, params: { value: 0 } } }));
   const color = target(gpu, { size: [1, 1] });
   /** Encodes every draw (in `order`) with camera `base` and params `base + index`. */
   const encode = (f: Frame, base: number, order = draws.map((_, index) => index)) => {
@@ -336,7 +337,7 @@ test("replacing a group's layout recreates its bind groups once, then reuses the
   try {
     const probe = instrument(gpu);
     const shader = SHADER.replace("@fragment", "@vertex fn vs_main() -> @builtin(position) vec4f { return vec4f(0, 0, 0, 1); }\n@fragment");
-    const d = draw(gpu, { shader, vertices: 3, set: { camera: uniforms(gpu, { value: 0 }), params: { value: 1 } } });
+    const d = draw(gpu, { shader: prepareShader(shader), vertices: 3, set: { camera: uniforms(gpu, { value: 0 }), params: { value: 1 } } });
     const color = target(gpu, { size: [1, 1] });
     const descriptors = getMockGPUDeviceInstrumentation(gpu.gpu).createBindGroupDescriptors;
     for (let i = 0; i < 2; i++) await frame(gpu, f => f.pass(color, p => p.draw(d))).done;
@@ -365,7 +366,7 @@ test("changing draw order and discarded draws keep the cache bounded", async () 
       const f = frame(gpu, f => {
         encode(f, i * 1000, order);
         // A draw created for one frame only: its bind groups must not outlive the pages' next use.
-        const once = effect(gpu, SHADER, { set: { camera: uniforms(gpu, { value: i }), params: { value: 0 } } });
+        const once = effect(gpu, prepareShader(SHADER), { set: { camera: uniforms(gpu, { value: i }), params: { value: 0 } } });
         f.pass(target(gpu, { size: [1, 1] }), once);
       });
       const ranges = probe.take();

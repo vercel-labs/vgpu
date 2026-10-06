@@ -5,19 +5,23 @@ description: "init() creates the Gpu context; every surface, target, effect, and
 
 Everything in vgpu starts from one call. `init()` requests the WebGPU adapter and device and returns a [`Gpu`](/reference/vgpu/gpu#gpu) context. Every other object — surfaces, targets, effects, draws, frames — is created from that context, so all of them share one device.
 
+```wgsl
+// gradient.wgsl
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return vec4f(uv, 0.4, 1.0);
+}
+```
+
 ```ts
 import { init, effect, surface, target } from "vgpu";
+import gradientShader from "./gradient.wgsl"; // prepared at build time by the @vgpu/wgsl loader
 
 const gpu = await init();
 
 const canvas = document.querySelector("canvas")!;
 const canvasSurface = surface(gpu, canvas); // the canvas you render into
 const colorTarget = target(gpu, { size: [256, 256] }); // an offscreen texture
-const gradient = effect(gpu, `
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(uv, 0.4, 1.0);
-  }
-`);
+const gradient = effect(gpu, gradientShader);
 
 // Render the gradient onto the canvas once
 gradient.draw(canvasSurface);

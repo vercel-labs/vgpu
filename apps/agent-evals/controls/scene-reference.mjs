@@ -1,10 +1,11 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { draw, frame, geometry, init, target } from "vgpu/node";
 import { box, instances } from "vgpu/scene";
 import { instanceGeometry } from "vgpu/scene/gpu";
 import { PNG } from "pngjs";
 
-const REFERENCE_SHADER = await readFile(new URL("./scene-reference.wgsl", import.meta.url), "utf8");
+const REFERENCE_SHADER = prepareShader(await readFile(new URL("./scene-reference.wgsl", import.meta.url), "utf8"));
 const ATTRIBUTES = { tint: "float32x4", pickingId: "uint32" };
 const BOUNDS = [-4, 4, -3, 3, 0.1, 20];
 
@@ -76,7 +77,7 @@ async function renderShader(gpu, batch, directory, selectedFault) {
   values.forEach(([origin], index) => collection.setWorld(handles[index], worldMatrix(origin, [0.6, 0.6, 0.6])));
   const bridge = instanceGeometry(gpu, collection, { mesh: geometry(gpu, box({ size: 1 })) });
   const colorTarget = target(gpu, { size: [512, 384], format: "rgba8unorm", depth: true });
-  const shader = await readFile(new URL("./integration.wgsl", import.meta.url), "utf8");
+  const shader = prepareShader(await readFile(new URL("./integration.wgsl", import.meta.url), "utf8"));
   const renderer = draw(gpu, {
     shader,
     geometry: bridge.geometry,

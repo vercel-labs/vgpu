@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { describe, expect, test } from "vitest";
 import { UniformPool } from "../../src/core.ts";
 import { init, bundle, draw, effect, frame, target } from "../../src/node.ts";
@@ -46,8 +47,8 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
     const gpu = await init();
     try {
       const scene = target(gpu, { size: [8, 8], format: "rgba8unorm" });
-      const floor = effect(gpu, SOLID_GREEN, { label: "floor" });
-      const player = effect(gpu, RIGHT_RED, { label: "player" });
+      const floor = effect(gpu, prepareShader(SOLID_GREEN), { label: "floor" });
+      const player = effect(gpu, prepareShader(RIGHT_RED), { label: "player" });
       const staticScene = bundle(gpu, { target: scene, label: "staticScene" }, (b) => b.draw(floor));
 
       frame(gpu, (f) => f.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => {
@@ -70,7 +71,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
   test("R4 wraps native async validation for raw claimed bind groups without metadata", async () => {
     const gpu = await init();
     try {
-      const cube = draw(gpu, { shader: OFFSET_COLOR, label: "cube", set: { globals: { tint: 1 } } });
+      const cube = draw(gpu, { shader: prepareShader(OFFSET_COLOR), label: "cube", set: { globals: { tint: 1 } } });
       const colorTarget = target(gpu, { size: [4, 4], format: "rgba8unorm" });
       const rawBuffer = gpu.device.gpu.createBuffer({ size: 4, usage: GPUBufferUsage.UNIFORM });
       const rawLayout = gpu.device.gpu.createBindGroupLayout({
@@ -106,7 +107,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
   test("§10 UniformPool dynamic offsets can draw 1000 pushed objects and sample selected offsets", async () => {
     const gpu = await init();
     try {
-      const cube = draw(gpu, { shader: OFFSET_COLOR, label: "cube", set: { globals: { tint: 1 } } });
+      const cube = draw(gpu, { shader: prepareShader(OFFSET_COLOR), label: "cube", set: { globals: { tint: 1 } } });
       const pool = new UniformPool(gpu.device, { capacityBytes: 1 << 20 });
       const slot = pool.alloc({
         size: 4,
@@ -136,13 +137,13 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
     try {
       let read = target(gpu, { size: [4, 4], format: "rgba8unorm" });
       let write = target(gpu, { size: [4, 4], format: "rgba8unorm" });
-      const seed = effect(gpu, SOLID_GREEN, { label: "seed" });
+      const seed = effect(gpu, prepareShader(SOLID_GREEN), { label: "seed" });
       frame(gpu, (f) => f.pass({ target: read, clear: [0, 0, 0, 1] }, (p) => p.draw(seed)));
 
-      const evenEffect = effect(gpu, COPY, { label: "sim-even", set: { src: read } });
+      const evenEffect = effect(gpu, prepareShader(COPY), { label: "sim-even", set: { src: read } });
       const even = bundle(gpu, { target: write, label: "even" }, (b) => b.draw(evenEffect));
       [read, write] = [write, read];
-      const oddEffect = effect(gpu, COPY, { label: "sim-odd", set: { src: read } });
+      const oddEffect = effect(gpu, prepareShader(COPY), { label: "sim-odd", set: { src: read } });
       const odd = bundle(gpu, { target: write, label: "odd" }, (b) => b.draw(oddEffect));
       [read, write] = [write, read];
 
@@ -164,7 +165,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
       const output = target(gpu, { size: [4, 4], format: "rgba8unorm" });
       const first = target(gpu, { size: [4, 4], format: "rgba8unorm" });
       const second = target(gpu, { size: [4, 4], format: "rgba8unorm" });
-      const shared = effect(gpu, COPY, { label: "shared-sim", set: { src: first } });
+      const shared = effect(gpu, prepareShader(COPY), { label: "shared-sim", set: { src: first } });
       const older = bundle(gpu, { target: output, label: "older" }, (b) => b.draw(shared));
       bundle(gpu, { target: output, label: "newer" }, (b) => {
         shared.set({ src: second });

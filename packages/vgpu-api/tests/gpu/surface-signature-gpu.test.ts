@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { describe, expect, test } from "vitest";
 import { bundle, effect, frame, init, surface } from "../../src/node.ts";
 
@@ -13,7 +14,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Surface signature Docker 
     try {
       const canvas = gpuCanvasLike(8, 8);
       const screen = surface(gpu, canvas.canvas, { autoResize: false, label: "signatureSurface" });
-      const red = effect(gpu, RED, { label: "signatureRed" });
+      const red = effect(gpu, prepareShader(RED), { label: "signatureRed" });
 
       await expect(red.compile(screen)).resolves.toBe(red);
       const recorded = bundle(gpu, { target: screen, label: "signatureBundle" }, (recorder) => recorder.draw(red));

@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { Worker } from "node:worker_threads";
 import { describe, expect, test } from "vitest";
 import { init, effect, frame, surface, target } from "../../src/node.ts";
@@ -35,12 +36,12 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Surface Docker GPU accept
     try {
       const canvas = gpuCanvasLike(8, 8, true);
       const canvasSurface = surface(gpu, canvas, { dpr: 1, autoResize: false, label: "gpuSurface" });
-      const red = effect(gpu, RED, { label: "surfaceRed" });
+      const red = effect(gpu, prepareShader(RED), { label: "surfaceRed" });
       frame(gpu, (currentFrame) => currentFrame.pass({ target: canvasSurface }, (pass) => pass.draw(red)));
       expect(rgbaAt(await canvasSurface.color.read({ mipLevel: 0, region: "all" }), 8, 4, 4)).toEqual([255, 0, 0, 255]);
 
       canvasSurface.resize([12, 4]);
-      const green = effect(gpu, GREEN_BY_RESOLUTION, { label: "surfaceGreen", set: { resolution: canvasSurface.size } });
+      const green = effect(gpu, prepareShader(GREEN_BY_RESOLUTION), { label: "surfaceGreen", set: { resolution: canvasSurface.size } });
       frame(gpu, (currentFrame) => currentFrame.pass({ target: canvasSurface }, (pass) => pass.draw(green)));
       const pixels = await canvasSurface.color.read({ mipLevel: 0, region: "all" });
       expect(canvasSurface.size).toEqual([12, 4]);
@@ -66,8 +67,8 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Surface Docker GPU accept
     try {
       const a = surface(gpu, gpuCanvasLike(6, 6, true), { dpr: 1, label: "surfaceA" });
       const b = surface(gpu, gpuCanvasLike(5, 5, true), { dpr: 1, label: "surfaceB" });
-      const blue = effect(gpu, BLUE, { label: "blue" });
-      const yellow = effect(gpu, YELLOW, { label: "yellow" });
+      const blue = effect(gpu, prepareShader(BLUE), { label: "blue" });
+      const yellow = effect(gpu, prepareShader(YELLOW), { label: "yellow" });
 
       frame(gpu, (currentFrame) => {
         currentFrame.pass({ target: a }, (pass) => pass.draw(blue));
@@ -129,7 +130,7 @@ function rgbaAt(pixels: Uint8Array, width: number, x: number, y: number): readon
 
 async function runWorkerSurfaceScenario(): Promise<{ initial: number[]; resized: number[]; half: number[]; pixel: number[] }> {
   const code = `
-    const { parentPort } = require("node:worker_threads");
+    const { parentPort, workerData } = require("node:worker_threads");
     (async () => {
       const { init, surface: createSurface, target, effect: createEffect, frame } = await import(${JSON.stringify(new URL("../../dist/node.js", import.meta.url).href)});
       const gpu = await init();
@@ -137,7 +138,7 @@ async function runWorkerSurfaceScenario(): Promise<{ initial: number[]; resized:
         const canvas = (${workerCanvasSource()})(16, 8);
         const surface = createSurface(gpu, canvas);
         const half = target(gpu, { size: [Math.max(1, surface.size[0] / 2), Math.max(1, surface.size[1] / 2)] });
-        const effect = createEffect(gpu, ${JSON.stringify(BLUE)});
+        const effect = createEffect(gpu, workerData);
         surface.onResize(({ width, height }) => half.resize([width / 2, height / 2]));
         const initial = [...surface.size];
         surface.resize([20, 10]);
@@ -150,7 +151,10 @@ async function runWorkerSurfaceScenario(): Promise<{ initial: number[]; resized:
       }
     })().catch((error) => parentPort.postMessage({ error: String(error?.stack || error) }));
   `;
-  const worker = new Worker(code, { eval: true });
+  const worker = new Worker(code, {
+    eval: true,
+    workerData: prepareShader(BLUE, "worker-surface-blue.wgsl"),
+  });
   return await new Promise((resolve, reject) => {
     worker.once("message", (message) => {
       if (message?.error) reject(new Error(message.error));

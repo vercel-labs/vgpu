@@ -46,12 +46,13 @@ interface Timer {
 
 ```ts
 import { init, createMockAdapter, effect, frameLoop, target, timer } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init({ adapter: createMockAdapter({ features: ["timestamp-query"] }), requiredFeatures: ["timestamp-query"] });
 const shadowMap = target(gpu, { size: [512, 512], depth: true });
 const scene = target(gpu, { size: [256, 256], depth: true });
-const casters = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0); }`);
-const world = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const casters = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0); }`));
+const world = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`));
 
 const gpuTimer = timer(gpu);
 gpuTimer.onResults((spans) => {

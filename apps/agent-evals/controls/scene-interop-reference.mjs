@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { mat4 } from "math";
 import { draw, frame, geometry, init, target } from "vgpu/node";
@@ -6,7 +7,7 @@ import { instanceGeometry } from "vgpu/scene/gpu";
 import { PNG } from "pngjs";
 import { createWorld } from "./ecs/world.mjs";
 
-const SHADER = await readFile(new URL("./scene-reference.wgsl", import.meta.url), "utf8");
+const SHADER = prepareShader(await readFile(new URL("./scene-reference.wgsl", import.meta.url), "utf8"));
 const fault = process.env.VGPU_SCENE_CONTROL_FAULT || "positive";
 const allowed = [
   "positive", "reverse-order", "double-parent", "shear-loss", "ortho-no", "stale-camera",

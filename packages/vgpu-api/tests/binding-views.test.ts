@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
 import { expect, test, vi } from "vitest";
 import { bindingViewCacheTestState } from "../src/binding-views.ts";
@@ -20,8 +21,8 @@ test("binding normalization reuses the compatible default view while public crea
   try {
     const source = texture(gpu, { kind: "2d", size: [4, 4], format: "rgba8unorm", usage: ["texture_binding"] });
     const createView = vi.spyOn(source.gpu, "createView");
-    const first = effect(gpu, SAMPLE);
-    const second = effect(gpu, SAMPLE);
+    const first = effect(gpu, prepareShader(SAMPLE));
+    const second = effect(gpu, prepareShader(SAMPLE));
 
     first.set({ source });
     first.set({ source });
@@ -40,14 +41,14 @@ test("one-mip storage shares a proven-equivalent default view while a mip chain 
   try {
     const single = texture(gpu, { kind: "2d", size: [4, 4], format: "rgba8unorm", usage: ["texture_binding", "storage_binding"] });
     const singleViews = vi.spyOn(single.gpu, "createView");
-    compute(gpu, STORAGE, { set: { destination: single } });
-    effect(gpu, SAMPLE, { set: { source: single } });
+    compute(gpu, prepareShader(STORAGE), { set: { destination: single } });
+    effect(gpu, prepareShader(SAMPLE), { set: { source: single } });
     expect(singleViews).toHaveBeenCalledTimes(1);
 
     const mipped = texture(gpu, { kind: "2d", size: [4, 4], mipLevelCount: 3, format: "rgba8unorm", usage: ["texture_binding", "storage_binding"] });
     const mippedViews = vi.spyOn(mipped.gpu, "createView");
-    compute(gpu, STORAGE, { set: { destination: mipped } });
-    effect(gpu, SAMPLE, { set: { source: mipped } });
+    compute(gpu, prepareShader(STORAGE), { set: { destination: mipped } });
+    effect(gpu, prepareShader(SAMPLE), { set: { source: mipped } });
     expect(mippedViews.mock.calls.map(([descriptor]) => descriptor)).toEqual(expect.arrayContaining([
       expect.objectContaining({ dimension: "2d", baseMipLevel: 0, mipLevelCount: 1 }),
       undefined,
@@ -63,14 +64,14 @@ test.each([1, 3])("array storage and sampling preserve the 2d-array shape for %i
   try {
     const atlas = texture(gpu, { kind: "2d-array", size: [4, 4], layers, format: "rgba8unorm", usage: ["texture_binding", "storage_binding"] });
     const views = vi.spyOn(atlas.gpu, "createView");
-    compute(gpu, `
+    compute(gpu, prepareShader(`
       @group(0) @binding(0) var atlas: texture_storage_2d_array<rgba8unorm, write>;
       @compute @workgroup_size(1) fn main() { textureStore(atlas, vec2u(0), 0, vec4f(1)); }
-    `, { set: { atlas } });
-    effect(gpu, `
+    `), { set: { atlas } });
+    effect(gpu, prepareShader(`
       @group(0) @binding(0) var atlas: texture_2d_array<f32>;
       @fragment fn main() -> @location(0) vec4f { return textureLoad(atlas, vec2i(0), 0, 0); }
-    `, { set: { atlas } });
+    `), { set: { atlas } });
     expect(views).toHaveBeenCalledTimes(1);
     expect(views.mock.calls[0]![0]).toEqual(expect.objectContaining({ dimension: "2d-array" }));
   } finally {
@@ -84,10 +85,10 @@ test("depth-only views remain distinct from all-aspect defaults", async () => {
     const depth = texture(gpu, { kind: "2d", size: [4, 4], format: "depth24plus-stencil8", usage: ["texture_binding"] });
     const views = vi.spyOn(depth.gpu, "createView");
     const all = depth.view;
-    const sampled = effect(gpu, `
+    const sampled = effect(gpu, prepareShader(`
       @group(0) @binding(0) var depth: texture_depth_2d;
       @fragment fn main() -> @location(0) vec4f { return vec4f(textureLoad(depth, vec2i(0), 0)); }
-    `, { set: { depth } });
+    `), { set: { depth } });
     const resource = getBindingResource(sampled, gpu);
     expect(resource).not.toBe(all);
     expect(views.mock.calls).toEqual([[undefined], [{ aspect: "depth-only" }]]);
@@ -103,14 +104,14 @@ test("generated 1d and 3d descriptors retain their dimensions", async () => {
     const volume = texture(gpu, { kind: "3d", size: [4, 4, 4], format: "rgba16float", usage: ["storage_binding"] });
     const lineViews = vi.spyOn(line.gpu, "createView");
     const volumeViews = vi.spyOn(volume.gpu, "createView");
-    compute(gpu, `
+    compute(gpu, prepareShader(`
       @group(0) @binding(0) var line: texture_storage_1d<rgba8unorm, write>;
       @compute @workgroup_size(1) fn main() { textureStore(line, 0, vec4f(1)); }
-    `, { set: { line } });
-    compute(gpu, `
+    `), { set: { line } });
+    compute(gpu, prepareShader(`
       @group(0) @binding(0) var volume: texture_storage_3d<rgba16float, write>;
       @compute @workgroup_size(1) fn main() { textureStore(volume, vec3u(0), vec4f(1)); }
-    `, { set: { volume } });
+    `), { set: { volume } });
     expect(lineViews).toHaveBeenCalledTimes(1);
     expect(volumeViews).toHaveBeenCalledTimes(1);
     expect(lineViews.mock.calls[0]![0]).toBeUndefined();
@@ -125,7 +126,7 @@ test("variant views share one destruction listener and clear synchronously", asy
   try {
     const mipped = texture(gpu, { kind: "2d", size: [4, 4], mipLevelCount: 3, format: "rgba8unorm", usage: ["texture_binding", "storage_binding"] });
     const listeners = vi.spyOn(mipped, "onDestroy");
-    const storage = compute(gpu, STORAGE);
+    const storage = compute(gpu, prepareShader(STORAGE));
     storage.set({ destination: mipped });
     storage.set({ destination: mipped });
     expect(bindingViewCacheTestState(mipped)).toEqual({ variants: 1, destroyed: false });
@@ -212,7 +213,7 @@ test("a followed Target selects a new texture-keyed view after replacement", asy
     const output = target(gpu, { size: [4, 4] });
     const oldTexture = source.color;
     const oldViews = vi.spyOn(oldTexture.gpu, "createView");
-    const sampled = effect(gpu, SAMPLE, { set: { source } });
+    const sampled = effect(gpu, prepareShader(SAMPLE), { set: { source } });
     expect(oldViews).toHaveBeenCalledTimes(1);
     source.resize([8, 8]);
     const replacement = source.color;

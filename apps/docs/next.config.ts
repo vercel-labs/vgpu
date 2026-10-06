@@ -1,4 +1,4 @@
-import { createRequire } from "node:module";
+import { wgslTurbopackRule } from "@vgpu/wgsl/next";
 import { createMDX } from "fumadocs-mdx/next";
 import type { NextConfig } from "next";
 // Plain .mjs helper, shared with scripts/check-url-anchor-parity.mjs (which must
@@ -8,10 +8,6 @@ import { loadDocsRedirects } from "./lib/docs-redirects.mjs";
 import { homepageLinkHeader } from "./lib/site";
 
 const withMDX = createMDX();
-const require = createRequire(import.meta.url);
-// TGEIST-07: examples/** import `vgpu` and `@vgpu/*` workspace packages
-// straight from source (no build step) and `.wgsl` shader files directly.
-const wgslLoader = require.resolve("@vgpu/wgsl/loader-webpack");
 
 const config: NextConfig = {
   // TGEIST-07 begin: examples cluster support (transpile + wgsl loader).
@@ -28,10 +24,7 @@ const config: NextConfig = {
 
   turbopack: {
     rules: {
-      "*.wgsl": {
-        loaders: [wgslLoader],
-        as: "*.js",
-      },
+      "*.wgsl": wgslTurbopackRule(),
       "**/typegpu-liquid-glass/renderer.ts": {
         loaders: [
           {

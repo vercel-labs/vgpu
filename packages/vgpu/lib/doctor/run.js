@@ -6,6 +6,8 @@ import { spawnSync } from "node:child_process";
 
 const require = createRequire(import.meta.url);
 const statuses = new Set(["ok", "warn", "fail", "skip"]);
+const RENDER_PROBE_WGSL = "@fragment fn main() -> @location(0) vec4f { return vec4f(0.25, 0.5, 0.75, 1.0); }";
+let renderProbeShader;
 
 export const probeRegistry = [
   { id: "binary-resolution", platforms: ["all"], run: probeBinaryResolution },
@@ -184,11 +186,14 @@ async function softwareRendererState() {
 }
 
 async function realRender() {
-  const { init, effect, frame, target } = await import("vgpu/node");
+  const [{ init, effect, frame, target }, probeShader] = await Promise.all([
+    import("vgpu/node"),
+    preparedRenderProbe(),
+  ]);
   const gpu = await init();
   try {
     const colorTarget = target(gpu, { size: [16, 16], format: "rgba8unorm", label: "vgpu-doctor" });
-    const probe = effect(gpu, "@fragment fn main() -> @location(0) vec4f { return vec4f(0.25, 0.5, 0.75, 1.0); }");
+    const probe = effect(gpu, probeShader);
     frame(gpu, (current) => current.pass({ target: colorTarget }, (encoder) => encoder.draw(probe)));
     const pixels = await colorTarget.color.read({ mipLevel: 0, region: "all" });
     if (!pixels || pixels.byteLength < 16 * 16 * 4) throw new Error("render readback returned too few bytes");
@@ -200,6 +205,14 @@ async function realRender() {
     gpu.dispose();
     throw error;
   }
+}
+
+async function preparedRenderProbe() {
+  if (!renderProbeShader) {
+    const { prepareShader } = await import("@vgpu/wgsl/prepare");
+    renderProbeShader = prepareShader(RENDER_PROBE_WGSL, "vgpu-doctor-probe.wgsl");
+  }
+  return renderProbeShader;
 }
 
 export function parseOsRelease(contents) {

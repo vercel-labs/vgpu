@@ -9,25 +9,33 @@ A render loop re-encodes every pipeline, bind group, and draw on every tick — 
 
 [`bundle(gpu)`](/reference/vgpu/bundle#bundle) records draws against a target and returns a [`Bundle`](/reference/vgpu/bundle#bundle). Replay it inside a pass with `pass.bundles()`:
 
+```wgsl
+// animated-ocean.wgsl
+struct Params { time: f32 }
+@group(0) @binding(0) var<uniform> params: Params;
+
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return vec4f(0.1, 0.3, sin(params.time + uv.y) * 0.2 + 0.6, 1.0);
+}
+```
+
+```wgsl
+// silhouette-boat.wgsl
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return vec4f(0.6, 0.4, 0.2, step(distance(uv, vec2f(0.5, 0.6)), 0.1));
+}
+```
+
 ```ts
 import { init, bundle, clock, effect, frameLoop, surface } from "vgpu";
+import oceanShader from "./animated-ocean.wgsl";
+import boatShader from "./silhouette-boat.wgsl";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
 const canvasTarget = surface(gpu, canvas);
-const ocean = effect(gpu, `
-  struct Params { time: f32 }
-  @group(0) @binding(0) var<uniform> params: Params;
-
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(0.1, 0.3, sin(params.time + uv.y) * 0.2 + 0.6, 1.0);
-  }
-`, { set: { params: { time: 0 } } });
-const boat = effect(gpu, `
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(0.6, 0.4, 0.2, step(distance(uv, vec2f(0.5, 0.6)), 0.1));
-  }
-`);
+const ocean = effect(gpu, oceanShader, { set: { params: { time: 0 } } });
+const boat = effect(gpu, boatShader);
 
 // ---cut---
 const scene = bundle(gpu, { target: canvasTarget }, (b) => {
@@ -54,20 +62,28 @@ Recording against a live surface works outside a frame, during loading. vgpu rea
 
 The `target` option also takes a plain signature, so you can pre-warm and record during load, before the real target exists:
 
+```wgsl
+// ocean.wgsl
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return vec4f(0.1, 0.3, 0.6, 1.0);
+}
+```
+
+```wgsl
+// boat.wgsl
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return vec4f(0.6, 0.4, 0.2, 1.0);
+}
+```
+
 ```ts
 import { init, bundle, effect, frameLoop, surface } from "vgpu";
+import oceanShader from "./ocean.wgsl";
+import boatShader from "./boat.wgsl";
 
 const gpu = await init();
-const ocean = effect(gpu, `
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(0.1, 0.3, 0.6, 1.0);
-  }
-`);
-const boat = effect(gpu, `
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(0.6, 0.4, 0.2, 1.0);
-  }
-`);
+const ocean = effect(gpu, oceanShader);
+const boat = effect(gpu, boatShader);
 
 // ---cut---
 const signature = { colors: [navigator.gpu.getPreferredCanvasFormat()] };
@@ -95,25 +111,26 @@ Bindings must be `set()` before recording — the signature relaxes the target r
 
 A pass can replay bundles and encode fresh draws side by side:
 
+```wgsl
+// cursor.wgsl
+struct Params { pos: vec2f }
+@group(0) @binding(0) var<uniform> params: Params;
+
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return vec4f(1.0, 1.0, 1.0, step(distance(uv, params.pos), 0.02));
+}
+```
+
 ```ts
 import { init, bundle, clock, effect, frameLoop, surface } from "vgpu";
+import oceanShader from "./ocean.wgsl";
+import cursorShader from "./cursor.wgsl";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
 const canvasTarget = surface(gpu, canvas);
-const ocean = effect(gpu, `
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(0.1, 0.3, 0.6, 1.0);
-  }
-`);
-const cursor = effect(gpu, `
-  struct Params { pos: vec2f }
-  @group(0) @binding(0) var<uniform> params: Params;
-
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(1.0, 1.0, 1.0, step(distance(uv, params.pos), 0.02));
-  }
-`, { set: { params: { pos: [0.5, 0.5] } } });
+const ocean = effect(gpu, oceanShader);
+const cursor = effect(gpu, cursorShader, { set: { params: { pos: [0.5, 0.5] } } });
 const scene = bundle(gpu, { target: canvasTarget }, (b) => b.draw(ocean));
 
 // ---cut---
@@ -133,15 +150,12 @@ A bundle matches replay targets by render signature, not size, so drawing onto a
 
 ```ts
 import { init, bundle, effect, frameLoop, surface } from "vgpu";
+import oceanShader from "./ocean.wgsl";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
 const canvasTarget = surface(gpu, canvas);
-const ocean = effect(gpu, `
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(0.1, 0.3, 0.6, 1.0);
-  }
-`);
+const ocean = effect(gpu, oceanShader);
 
 // ---cut---
 const scene = bundle(gpu, { target: canvasTarget }, (b) => b.draw(ocean));
@@ -153,21 +167,25 @@ frameLoop(gpu, (frame) => {
 
 Sampling is different. A bundle freezes its bind groups, so when a texture it samples is replaced — here, an offscreen target resized to follow the canvas — the bundle goes stale and replay throws `VGPU-R3-BUNDLE-STALE`. Record a replacement, swap it in, then dispose the old bundle:
 
+```wgsl
+// post.wgsl
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return vec4f(1.0 - textureSampleLevel(src, samp, uv, 0.0).rgb, 1.0);
+}
+```
+
 ```ts
 import { init, bundle, effect, frameLoop, sampler, surface, target, type Bundle } from "vgpu";
+import postShader from "./post.wgsl";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
 const canvasTarget = surface(gpu, canvas);
 const sceneTarget = target(gpu, { size: [canvasTarget.size[0], canvasTarget.size[1]] });
-const postEffect = effect(gpu, `
-  @group(0) @binding(0) var src: texture_2d<f32>;
-  @group(0) @binding(1) var samp: sampler;
-
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(1.0 - textureSampleLevel(src, samp, uv, 0.0).rgb, 1.0);
-  }
-`);
+const postEffect = effect(gpu, postShader);
 postEffect.set({ src: sceneTarget, samp: sampler(gpu, { minFilter: "linear", magFilter: "linear" }) });
 
 // ---cut---
@@ -194,19 +212,20 @@ A bundle captures the resources bound at each `b.draw()` call. Rebinding a draw 
 
 ```ts
 import { init, bundle, effect, frameLoop, surface, target } from "vgpu";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
 const canvasTarget = surface(gpu, canvas);
 const leftTarget = target(gpu, { size: [256, 256] });
 const rightTarget = target(gpu, { size: [256, 256] });
-const preview = effect(gpu, `
+const preview = effect(gpu, prepareShader(`
   @group(0) @binding(0) var src: texture_2d<f32>;
 
   @fragment fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
     return textureLoad(src, vec2i(position.xy) % vec2i(256), 0);
   }
-`, { set: { src: leftTarget } });
+`), { set: { src: leftTarget } });
 
 // ---cut---
 const leftOnly = bundle(gpu, { target: canvasTarget }, (b) => b.draw(preview));
@@ -230,6 +249,7 @@ A bundle does not hold the draws and effects it recorded. It keeps independent s
 
 ```ts
 import { init, bundle, effect, frameLoop, surface, type Bundle, type Gpu, type Surface } from "vgpu";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
@@ -237,11 +257,11 @@ const canvasTarget = surface(gpu, canvas);
 
 // ---cut---
 function recordBackdrop(gpu: Gpu, canvasTarget: Surface): Bundle {
-  const backdrop = effect(gpu, `
+  const backdrop = effect(gpu, prepareShader(`
     @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
       return vec4f(0.1, 0.3, 0.6 + uv.y * 0.2, 1.0);
     }
-  `);
+  `));
   return bundle(gpu, { target: canvasTarget, label: "backdrop" }, (b) => b.draw(backdrop));
 } // backdrop is unreachable after this returns — the bundle does not need it
 
@@ -259,21 +279,22 @@ Letting a draw go and disposing it are different. Collection is silent: the bund
 
 ```ts
 import { init, bundle, effect, frameLoop, surface } from "vgpu";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
 const canvasTarget = surface(gpu, canvas);
 
 // ---cut---
-let backdrop = effect(gpu, `
+let backdrop = effect(gpu, prepareShader(`
   @fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.1, 0.3, 0.6, 1.0); }
-`, { label: "dayBackdrop" });
+`), { label: "dayBackdrop" });
 let backdropBundle = bundle(gpu, { target: canvasTarget, label: "day" }, (b) => b.draw(backdrop));
 
 function useNightBackdrop(): void {
-  const nextBackdrop = effect(gpu, `
+  const nextBackdrop = effect(gpu, prepareShader(`
     @fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.02, 0.03, 0.1, 1.0); }
-  `, { label: "nightBackdrop" });
+  `), { label: "nightBackdrop" });
   const nextBundle = bundle(gpu, { target: canvasTarget, label: "night" }, (b) => b.draw(nextBackdrop));
   const previousBackdrop = backdrop;
   const previousBundle = backdropBundle;
@@ -298,14 +319,11 @@ Call `dispose()` when you want vgpu's references and registrations released at a
 
 ```ts
 import { init, bundle, effect, frame, target } from "vgpu";
+import oceanShader from "./ocean.wgsl";
 
 const gpu = await init();
 const sceneTarget = target(gpu, { size: [256, 256] });
-const ocean = effect(gpu, `
-  @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(0.1, 0.3, 0.6, 1.0);
-  }
-`);
+const ocean = effect(gpu, oceanShader);
 
 // ---cut---
 const scene = bundle(gpu, { target: sceneTarget, label: "ocean" }, (b) => b.draw(ocean));

@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { reflectSource } from "@vgpu/wgsl/reflect-source";
 import { expect, test } from "vitest";
 import { drawBindingState } from "../src/draw.ts";
@@ -80,7 +81,7 @@ test("a rejected set leaves both GPU bytes and the previous partial-update base 
     @group(0) @binding(0) var<uniform> params: Params;
     @fragment fn main() -> @location(0) vec4f { return vec4f(f32(params.head)); }
   `;
-  const fx = effect(gpu, shader, { set: { params: { head: 1, values: [2, 3] } } });
+  const fx = effect(gpu, prepareShader(shader), { set: { params: { head: 1, values: [2, 3] } } });
   const color = target(gpu, { size: [1, 1] });
   fx.draw(color);
   const buffer = (drawBindingState(effectDraw(fx), "params")?.resource as GPUBufferBinding).buffer;
@@ -99,10 +100,10 @@ test("a rejected set leaves both GPU bytes and the previous partial-update base 
 
 test("a rejected first JS value does not latch binding ownership", async () => {
   const gpu = await init();
-  const fx = effect(gpu, `
+  const fx = effect(gpu, prepareShader(`
     @group(0) @binding(0) var<uniform> params: vec2u;
     @fragment fn main() -> @location(0) vec4f { return vec4f(f32(params.x)); }
-  `);
+  `));
   const userBuffer = gpu.device.createBuffer({ size: 8, usage: ["uniform", "copy_dst"] });
 
   expectPackingError(() => fx.set({ params: [1] }), "shape", "$");
@@ -112,11 +113,11 @@ test("a rejected first JS value does not latch binding ownership", async () => {
 
 test("the first direct struct value is complete while member shorthand starts from reflected zero", async () => {
   const gpu = await init();
-  const fx = effect(gpu, `
+  const fx = effect(gpu, prepareShader(`
     struct Params { head: u32, values: vec2u }
     @group(0) @binding(0) var<uniform> params: Params;
     @fragment fn main() -> @location(0) vec4f { return vec4f(f32(params.head)); }
-  `);
+  `));
 
   expectPackingError(() => fx.set({ params: { head: 7 } }), "missing-field", "$.values");
   fx.set({ head: 7 });

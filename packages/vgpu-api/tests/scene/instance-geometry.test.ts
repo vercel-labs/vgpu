@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
 import { expect, test, vi } from "vitest";
 import { bundle, draw, frame, init, storage, target, VGPUError } from "../../src/mock.ts";
@@ -170,14 +171,14 @@ test("instance inputs stay name-matched while omitted explicit base locations re
       },
     }] });
     const bridge = instanceGeometry(gpu, collection, { mesh: explicit });
-    expect(() => draw(gpu, { shader: SHADER, geometry: bridge.geometry })).not.toThrow();
+    expect(() => draw(gpu, { shader: prepareShader(SHADER), geometry: bridge.geometry })).not.toThrow();
 
     const missingKind = SHADER.replace("  @location(6) kind: u32,\n", "").replace("kind", "0u");
-    expect(() => draw(gpu, { shader: missingKind, geometry: bridge.geometry })).toThrowError(/VGPU-MESH-ATTRIBUTE-UNMATCHED/);
+    expect(() => draw(gpu, { shader: prepareShader(missingKind), geometry: bridge.geometry })).toThrowError(/VGPU-MESH-ATTRIBUTE-UNMATCHED/);
 
     const named = geometry(gpu, { buffers: [{ data: new Float32Array(6), attributes: { unusedBase: "float32x2" } }] });
     const namedBridge = instanceGeometry(gpu, collection, { mesh: named });
-    expect(() => draw(gpu, { shader: SHADER, geometry: namedBridge.geometry })).toThrowError(/VGPU-MESH-ATTRIBUTE-UNMATCHED/);
+    expect(() => draw(gpu, { shader: prepareShader(SHADER), geometry: namedBridge.geometry })).toThrowError(/VGPU-MESH-ATTRIBUTE-UNMATCHED/);
   } finally {
     gpu.dispose();
   }
@@ -191,7 +192,7 @@ test("compiled draws reject destroyed composed and ordinary geometry before bind
     collection.add({ tint: [1, 1, 1], kind: 1 });
     const bridge = instanceGeometry(gpu, collection, { mesh });
     const output = target(gpu, { size: [1, 1] });
-    const drawable = draw(gpu, { shader: SHADER, geometry: bridge.geometry });
+    const drawable = draw(gpu, { shader: prepareShader(SHADER), geometry: bridge.geometry });
     drawable.compileSync(output);
 
     bridge.destroy();
@@ -200,13 +201,13 @@ test("compiled draws reject destroyed composed and ordinary geometry before bind
     const slicedCollection = instances({ capacity: 1, attributes: { tint: "float32x3", kind: "uint32" } });
     slicedCollection.add({ tint: [1, 1, 1], kind: 1 });
     const slicedBridge = instanceGeometry(gpu, slicedCollection, { mesh });
-    const slicedDraw = draw(gpu, { shader: SHADER, geometry: slicedBridge.geometry.slice({ vertexCount: 3 }) });
+    const slicedDraw = draw(gpu, { shader: prepareShader(SHADER), geometry: slicedBridge.geometry.slice({ vertexCount: 3 }) });
     slicedDraw.compileSync(output);
     slicedBridge.destroy();
     expect(errorOf(() => slicedDraw.draw(output))).toMatchObject({ code: "VGPU-INSTANCE-DESTROYED" });
 
     const ordinary = geometry(gpu, { buffers: [{ data: new Float32Array([-1, -1, 1, -1, 0, 1]), attributes: { position: { format: "float32x2", location: 0 } } }] });
-    const ordinaryDraw = draw(gpu, { shader: `@vertex fn vs_main(@location(0) position: vec2f) -> @builtin(position) vec4f { return vec4f(position, 0.0, 1.0); } @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1.0); }`, geometry: ordinary.slice({ vertexCount: 3 }) });
+    const ordinaryDraw = draw(gpu, { shader: prepareShader(`@vertex fn vs_main(@location(0) position: vec2f) -> @builtin(position) vec4f { return vec4f(position, 0.0, 1.0); } @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1.0); }`), geometry: ordinary.slice({ vertexCount: 3 }) });
     ordinaryDraw.compileSync(output);
     ordinary.destroy();
     expect(errorOf(() => ordinaryDraw.draw(output))).toMatchObject({ code: "VGPU-MESH-LAYOUT-INVALID" });
@@ -406,7 +407,7 @@ test("base, wrapper, gpu, direct, indirect, and bundle paths share actionable li
     collection.add({ tint: [1, 1, 1], kind: 1 });
     const bridge = instanceGeometry(gpu, collection, { mesh });
     const output = target(gpu, { size: [1, 1] });
-    const drawable = draw(gpu, { shader: SHADER, geometry: bridge.geometry });
+    const drawable = draw(gpu, { shader: prepareShader(SHADER), geometry: bridge.geometry });
     drawable.compileSync(output);
     return { gpu, mesh, bridge, output, drawable };
   };

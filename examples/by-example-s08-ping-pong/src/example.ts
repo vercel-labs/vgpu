@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { init, effect, frame, pingPong } from "vgpu/node";
 
 export const FILL = /* wgsl */ `
@@ -11,12 +12,14 @@ struct Params { texel: vec2f }
   return textureLoad(src, vec2u(vec2f(uv) / params.texel), 0);
 }
 `;
+const FILL_SHADER = prepareShader(FILL, "by-example-s08-fill.wgsl");
+const COPY_SHADER = prepareShader(COPY, "by-example-s08-copy.wgsl");
 
 export async function runPingPongExample() {
   const gpu = await init();
   const buf = pingPong(gpu, 8, 8, { format: "rgba8unorm" });
-  const fill = effect(gpu, FILL, { label: "fill" });
-  const copy = effect(gpu, COPY, { label: "copy" });
+  const fill = effect(gpu, FILL_SHADER, { label: "fill" });
+  const copy = effect(gpu, COPY_SHADER, { label: "copy" });
   frame(gpu, (currentFrame) => currentFrame.pass({ target: buf.write }, (p) => p.draw(fill)));
   buf.swap();
   frame(gpu, (currentFrame) => currentFrame.pass({ target: buf.write }, (p) => { copy.set({ src: buf.read, texel: buf.read.texelSize }); p.draw(copy); }));

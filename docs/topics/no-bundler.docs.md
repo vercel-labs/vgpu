@@ -6,11 +6,12 @@ relatedSymbols:
   - resolveShader
   - ResolveOptions
   - ResolvedShader
+  - prepareShader
 ---
 
 # Using vgpu without a bundler
 
-`effect(gpu, source)` and `draw(gpu, { shader })` take WGSL as a plain string, so nothing forces you to use a bundler. This guide is the no-bundler half of [Getting started](getting-started.docs.md): resolve a `.wgsl` entry file — and everything it imports — yourself with `resolveShader()`, then render it headless from Node.
+`effect(gpu, source)` and `draw(gpu, { shader })` take a prepared `ShaderSource` — WGSL plus its reflection — which a bundler loader normally produces at build time. Without a bundler you produce it yourself. This guide is the no-bundler half of [Getting started](getting-started.docs.md): resolve a `.wgsl` entry file — and everything it imports — with `resolveShader()`, prepare the result with `prepareShader()`, then render it headless from Node.
 
 Read [WGSL modules](/concepts/wgsl-modules) first if you need the `import`/`export` syntax, pure-module rule, or an explanation of the flattened output. This guide focuses on resolving that graph without a bundler.
 
@@ -20,7 +21,7 @@ Read [WGSL modules](/concepts/wgsl-modules) first if you need the `import`/`expo
 - Your shader imports WGSL packages (`@vgpu/wgsl-std/noise`, your own workspace package) from a plain script, a Node test, or a CI job.
 - You want to render and read pixels back without a browser, the way [Getting started](getting-started.docs.md) validates a shader with a static render.
 
-If you *are* shipping this inside a bundler-based app, use the loader instead: [Using vgpu with Next.js and other bundlers](nextjs.docs.md). Reaching for `readFileSync` and passing the text straight to `effect()` also works — but only while the shader has no `import` of its own; the moment it does, you need the resolver below.
+If you *are* shipping this inside a bundler-based app, use the loader instead: [Using vgpu with Next.js and other bundlers](nextjs.docs.md). Reading the file with `readFileSync` and passing the text to `prepareShader()` also works — but only while the shader has no `import` of its own; `prepareShader()` throws `VGPU-WGSL-REFLECT-SOURCE-IMPORT` the moment it does, and you need the resolver below.
 
 ## Resolve a `.wgsl` entry file
 
@@ -48,7 +49,7 @@ const resolved = await resolveShader({
   entry: fileURLToPath(new URL("./shader.wgsl", import.meta.url)),
 });
 
-// `resolved.wgsl` is a plain string — pass it straight to effect() or draw({ shader }).
+// `resolved.wgsl` is one finished WGSL string — prepare it before effect() or draw({ shader }).
 console.log(resolved.wgsl.length, resolved.deps.length);
 ```
 
@@ -69,17 +70,18 @@ import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { PNG } from "pngjs";
 import { resolveShader } from "@vgpu/wgsl/runtime";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { effect, init, target } from "vgpu/node";
 
-const resolved = await resolveShader({
-  entry: fileURLToPath(new URL("./shader.wgsl", import.meta.url)),
-});
+const entry = fileURLToPath(new URL("./shader.wgsl", import.meta.url));
+const resolved = await resolveShader({ entry });
+const prepared = prepareShader(resolved, entry); // reflect the final WGSL once, keep functionExports
 
 const width = 160;
 const height = 90;
 const gpu = await init();
 const colorTarget = target(gpu, { size: [width, height] });
-const shader = effect(gpu, resolved.wgsl, { set: { params: { time: 0 } } });
+const shader = effect(gpu, prepared, { set: { params: { time: 0 } } });
 shader.draw(colorTarget);
 
 const pixels = await colorTarget.color.read({ mipLevel: 0, region: "all" });   // RGBA bytes — assert on them
@@ -89,7 +91,7 @@ writeFileSync("frame.png", PNG.sync.write(png));
 gpu.dispose();                              // stops Dawn's polling so the process exits
 ```
 
-Nothing about this changes when the shader grows: `resolveShader()` inlines the whole import graph, so `effect()` still sees one string. Animating? Call `shader.set({ params: { time } })` and draw again in a loop, reading the target after each draw.
+Nothing about this changes when the shader grows: `resolveShader()` inlines the whole import graph, and `prepareShader()` reflects the one finished string it returns. Pass the `resolved` object rather than `resolved.wgsl` so direct `export fn` metadata carries over; `prepareShader()` reflects the final WGSL again and ignores `resolved.reflection`. Prepare once at startup, not per draw — every call reparses. The prepared artifact is deeply frozen, so the renderer validates it once and reuses the result; prepare a new artifact when the WGSL changes. Animating? Call `shader.set({ params: { time } })` and draw again in a loop, reading the target after each draw.
 
 Rendering an actual 3D scene rather than a fullscreen effect? See [Two-pass rendering](two-pass-rendering.docs.md) for the offscreen-depth-target recipe — it composes with this same no-bundler setup.
 
@@ -116,10 +118,13 @@ Pick whichever matches how the rest of the script/project is written; both resol
 | `VGPU-WGSL-RES-NOTFOUND` | The entry path or an imported module does not exist | Fix the path; `entry` is resolved relative to the process, so build it from `import.meta.url` |
 | `VGPU-WGSL-PKG-NOTFOUND` | A WGSL package import is not installed | `npm install <pkg>`, or fix the specifier |
 | `VGPU-RESOLVE-MODULE-BINDING` | An imported `.wgsl` module declares `@group`/`@binding` | Keep resources in the entry shader; modules export only structs and functions |
+| `VGPU-SHADER-SOURCE-UNPREPARED` | `resolved.wgsl` or a `readFileSync` string went straight to `effect()` or `draw()` | Wrap it: `prepareShader(resolved, entry)` |
+| `VGPU-WGSL-REFLECT-SOURCE-IMPORT` | `prepareShader()` received WGSL that still has a top-level `import` | Run `resolveShader()` first and prepare its result |
 
 ## See also
 
 - [`resolveShader` reference](/@vgpu/wgsl/runtime/resolve-shader.docs.md) — full signature, options, and every error code.
+- [`prepareShader` reference](/@vgpu/wgsl/prepare.docs.md) — the prepared artifact, its trust limits, and upgrading v1 assets.
 - [Getting started](getting-started.docs.md) — the browser-first walkthrough and the static-render recipe this guide extends.
 - [Two-pass rendering](two-pass-rendering.docs.md) — offscreen depth target plus composite, for 3D scenes rendered this same headless way.
 - [Using vgpu with Next.js and other bundlers](nextjs.docs.md) — the bundler-loader alternative.

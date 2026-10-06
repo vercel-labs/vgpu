@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { afterEach, expect, test, vi } from "vitest";
 import { createMockGPUDevice } from "@vgpu/core";
 import { compute, draw, frame, init, initFromDevice, target, VGPUError } from "../src/mock.ts";
@@ -20,7 +21,7 @@ test("settled captures a queue fence synchronously and waits for a plain draw", 
   const onSubmittedWorkDone = vi.spyOn(gpu.gpu.queue, "onSubmittedWorkDone").mockReturnValue(fence.promise);
 
   try {
-    draw(gpu, { shader: SHADER }).draw(target(gpu, { size: [4, 4] }));
+    draw(gpu, { shader: prepareShader(SHADER) }).draw(target(gpu, { size: [4, 4] }));
 
     let complete = false;
     const settled = gpu.settled().then(() => { complete = true; });
@@ -41,7 +42,7 @@ test("settled captures a queue fence synchronously and waits for a plain draw", 
 test("settled does not extend its snapshot to later submissions or pipeline work", async () => {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [4, 4] });
-  const drawable = draw(gpu, { shader: SHADER });
+  const drawable = draw(gpu, { shader: prepareShader(SHADER) });
   await gpu.settled();
   const fence = deferred<undefined>();
   const pipeline = deferred<GPURenderPipeline>();
@@ -212,7 +213,7 @@ test("settled fulfills when a mock omits onSubmittedWorkDone", async () => {
 
 test("compute dispatch reports a synchronous queue-completion throw exactly once", async () => {
   const gpu = await init();
-  const simulation = compute(gpu, "@compute @workgroup_size(1) fn main() {}", { label: "syncFenceDispatch" });
+  const simulation = compute(gpu, prepareShader("@compute @workgroup_size(1) fn main() {}"), { label: "syncFenceDispatch" });
   const nativeError = new Error("synchronous compute fence failure");
   const errors: unknown[] = [];
   const unhandled: unknown[] = [];

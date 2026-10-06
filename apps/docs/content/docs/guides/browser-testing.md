@@ -5,11 +5,12 @@ description: "Browser tests should exercise the same public API users copy: `ini
 
 ```text
 import { init } from "vgpu";
+import waveShader from "./wave.wgsl"; // prepared at build time by the @vgpu/wgsl loader
 
 export async function renderOnce(canvas: HTMLCanvasElement) {
   const gpu = await init();
   const surface = surface(gpu, canvas, { dpr: 1, autoResize: false });
-  const effect = effect(gpu, WGSL, { set: { time: 0, texel: surface.texelSize } });
+  const effect = effect(gpu, waveShader, { set: { time: 0, texel: surface.texelSize } });
   frame(gpu, (f) => f.pass({ target: surface, clear: [0, 0, 0, 1] }, (p) => p.draw(effect)));
   return gpu;
 }

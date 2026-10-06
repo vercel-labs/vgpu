@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { describe, expect, test } from "vitest";
 import { bundle, draw, effect, frame, init, target, type Draw, type Effect } from "../../src/node.ts";
 
@@ -44,7 +45,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("bundle lifetime GPU accep
     const gpu = await init();
     try {
       const output = target(gpu, { size: [4, 4], format: "rgba8unorm" });
-      const drawable = effect(gpu, LIVE_COLOR, { label: "retired-color", set: { params: { color: [0, 0, 1, 1] } } });
+      const drawable = effect(gpu, prepareShader(LIVE_COLOR), { label: "retired-color", set: { params: { color: [0, 0, 1, 1] } } });
       const recorded = bundle(gpu, { target: output, label: "retired-color-bundle" }, recorder => recorder.draw(drawable));
       const savedNative = recorded.gpu;
       const pending = frame(gpu);
@@ -73,15 +74,15 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("bundle lifetime GPU accep
 });
 
 function renderConsumer(kind: "draw" | "effect", gpu: Awaited<ReturnType<typeof init>>, params: { color: readonly number[] }): Draw | Effect {
-  if (kind === "effect") return effect(gpu, LIVE_COLOR, { label: "live-effect-color", set: { params } });
+  if (kind === "effect") return effect(gpu, prepareShader(LIVE_COLOR), { label: "live-effect-color", set: { params } });
   return draw(gpu, {
     label: "live-draw-color",
-    shader: `
+    shader: prepareShader(`
 @vertex fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4f {
   var positions = array<vec2f, 3>(vec2f(-1), vec2f(3, -1), vec2f(-1, 3));
   return vec4f(positions[index], 0, 1);
 }
-${LIVE_COLOR}`,
+${LIVE_COLOR}`),
     set: { params },
   });
 }

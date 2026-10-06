@@ -1,5 +1,4 @@
 import type { Device } from "@vgpu/core";
-import { reflectSource } from "@vgpu/wgsl/reflect-source";
 import { InternalDraw, encodeDraw, type BlendOptions, type BlendPreset, type Draw, type DrawCallOptions } from "./draw.ts";
 import type { ClaimedGroupValidationResult, ValidationErrorSink } from "./claim-validation.ts";
 import type { BindGroupCache } from "./bind-cache.ts";
@@ -9,10 +8,11 @@ import type { CompileTarget, Target } from "./target.ts";
 import { FRAME_DRAWABLE, type FrameDrawableProtocol } from "./frame-protocols.ts";
 import { liveKernel } from "./live-kernel.ts";
 import { renderService } from "./render-service.ts";
-import { toWgsl } from "./shader-source.ts";
+import { snapshotShaderSource, type PreparedShaderSnapshot } from "./shader-source.ts";
 import { entryInvalidError, unsupportedError } from "./errors.ts";
 import type { ShaderSource } from "@vgpu/wgsl";
 import type { Gpu } from "./kernel.ts";
+import { FULLSCREEN_VERTEX_ENTRY, FULLSCREEN_VERTEX_SOURCE } from "./fullscreen-stage.ts";
 
 /**
  * Fullscreen shader pass of this gpu: the fragment shader is enough, the fullscreen triangle
@@ -21,7 +21,7 @@ import type { Gpu } from "./kernel.ts";
  * An effect is a draw with a fixed vertex stage, so it shares the gpu's single render service with
  * `draw()`: same pipeline store, same bind group cache, same shader module and layout caches.
  */
-export function effect(gpu: Gpu, source: string | ShaderSource, opts: EffectOptions = {}): Effect {
+export function effect(gpu: Gpu, source: ShaderSource, opts: EffectOptions = {}): Effect {
   // Vertex buffers belong to the generated fullscreen stage, so geometry here would silently do
   // nothing. Reject the option instead of ignoring it.
   if ("geometry" in (opts as Record<string, unknown>)) throw unsupportedError("effect", "effect() never accepts vertex buffers; use draw(gpu, { shader, geometry: geometry(gpu, descriptor) }).");
@@ -29,7 +29,7 @@ export function effect(gpu: Gpu, source: string | ShaderSource, opts: EffectOpti
   const render = renderService(kernel);
   return new InternalEffect(
     kernel.device,
-    toWgsl(source),
+    snapshotShaderSource(source),
     opts,
     render.binds,
     undefined,
@@ -70,14 +70,16 @@ export class InternalEffect implements Effect {
 
   dispose(): void { effectImpl(this).dispose(); }
 
-  constructor(device: Device, source: string, opts: EffectOptions = {}, cache?: BindGroupCache, defaultTarget?: Target, pipelineStore?: PipelineStore, shaderModules?: ShaderModuleCache, pipelineLayouts?: PipelineLayoutCache, errorSink?: ValidationErrorSink, trackSettled?: (promise: Promise<unknown>) => void) {
+  constructor(device: Device, shader: PreparedShaderSnapshot, opts: EffectOptions = {}, cache?: BindGroupCache, defaultTarget?: Target, pipelineStore?: PipelineStore, shaderModules?: ShaderModuleCache, pipelineLayouts?: PipelineLayoutCache, errorSink?: ValidationErrorSink, trackSettled?: (promise: Promise<unknown>) => void) {
     const entry = opts.entry;
     if (entry && typeof entry === "object" && "vertex" in entry) {
       throw entryInvalidError(opts.label ?? "effect", "effect does not support vertex entry overrides.", "effect");
     }
     // InternalDraw validates the entry container and fragment name, and resolves it at construction.
-    const shader = fullscreenSource(source);
-    const impl = new InternalDraw(device, shader, { shader, entry, set: opts.set, label: opts.label ?? "effect", blend: opts.blend, writeMask: opts.writeMask }, cache, defaultTarget, pipelineStore, shaderModules, pipelineLayouts, errorSink, trackSettled);
+    const builtinVertex = shader.reflection.entryPoints.some(item => item.stage === "vertex")
+      ? undefined
+      : { source: FULLSCREEN_VERTEX_SOURCE, entry: FULLSCREEN_VERTEX_ENTRY };
+    const impl = new InternalDraw(device, shader, { entry, set: opts.set, label: opts.label ?? "effect", blend: opts.blend, writeMask: opts.writeMask }, cache, defaultTarget, pipelineStore, shaderModules, pipelineLayouts, errorSink, trackSettled, builtinVertex);
     effectImpls.set(this, impl);
   }
 
@@ -108,26 +110,4 @@ function effectImpl(effect: Effect): InternalDraw {
   const impl = effectImpls.get(effect);
   if (!impl) throw new TypeError("Invalid Effect instance");
   return impl;
-}
-
-export function fullscreenSource(source: string): string {
-  if (hasVertexEntry(source)) return source;
-  return `
-struct VgpuFullscreenVertexOut {
-  @builtin(position) position: vec4f,
-  @location(0) uv: vec2f,
-};
-@vertex fn vgpu_fullscreen_vs(@builtin(vertex_index) vi: u32) -> VgpuFullscreenVertexOut {
-  var pos = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
-  var uv = array<vec2f, 3>(vec2f(0.0, 1.0), vec2f(2.0, 1.0), vec2f(0.0, -1.0));
-  var out: VgpuFullscreenVertexOut;
-  out.position = vec4f(pos[vi], 0.0, 1.0);
-  out.uv = uv[vi];
-  return out;
-}
-${source}`;
-}
-
-function hasVertexEntry(source: string): boolean {
-  return reflectSource(source, "effect.wgsl").entryPoints.some((entry) => entry.stage === "vertex");
 }

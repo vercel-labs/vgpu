@@ -724,18 +724,32 @@ export function setValueInvalidError(detail: {
   });
 }
 
-export function malformedShaderSourceError(input: unknown): VGPUError {
-  if (hasVersion(input) && input.version !== 1) {
-    return new VGPUError({
-      code: "VGPU-SHADER-SOURCE-INVALID",
-      message: `VGPU-SHADER-SOURCE-INVALID: unsupported ShaderSource v${String(input.version)}; expected v1. Fix: update vgpu or regenerate it.`,
-      where: "shader source",
-    });
-  }
+export function unpreparedShaderSourceError(): VGPUError {
+  return new VGPUError({
+    code: "VGPU-SHADER-SOURCE-UNPREPARED",
+    message: "The renderer requires a prepared ShaderSource v2, but received raw WGSL or a v1 artifact.",
+    fix: "Use a compatible @vgpu/wgsl loader, rebuild shader assets, or call prepareShader() from @vgpu/wgsl/prepare.",
+    where: "shader source",
+  });
+}
+
+export function unsupportedShaderSourceVersionError(version: number, producer?: string): VGPUError {
+  return new VGPUError({
+    code: "VGPU-SHADER-SOURCE-VERSION",
+    message: `ShaderSource version ${version} is unsupported; this runtime supports version 2${producer ? ` (producer: ${producer})` : ""}.`,
+    fix: "Align the shader producer and vgpu runtime versions, then regenerate the artifact.",
+    where: "shader source",
+    detail: { actual: version, expected: 2, reason: producer ? `producer: ${producer}` : undefined },
+  });
+}
+
+export function invalidShaderSourceError(field: string, reason: string): VGPUError {
   return new VGPUError({
     code: "VGPU-SHADER-SOURCE-INVALID",
-    message: `VGPU-SHADER-SOURCE-INVALID: expected WGSL or { version, wgsl }, got ${previewShaderSource(input)}. Fix: configure @vgpu/wgsl loader-vite or loader-webpack.`,
+    message: `Invalid ShaderSource field '${field}': ${reason}.`,
+    fix: "Regenerate the shader artifact with a compatible @vgpu/wgsl producer.",
     where: "shader source",
+    detail: { path: field, reason },
   });
 }
 
@@ -764,20 +778,6 @@ export function sharedUniformLayoutMismatchError(opts: {
 function describeCause(cause: unknown): string {
   if (cause instanceof Error) return `${cause.name}: ${cause.message}`;
   return String(cause);
-}
-
-function hasVersion(input: unknown): input is { readonly version: unknown } {
-  return typeof input === "object" && input !== null && "version" in input;
-}
-
-function previewShaderSource(input: unknown): string {
-  if (typeof input !== "object" || input === null) return typeof input;
-  try {
-    const json = JSON.stringify(input);
-    return json.length > 80 ? `${json.slice(0, 77)}...` : json;
-  } catch {
-    return "object";
-  }
 }
 
 function missingBindingFix(drawLabel: string, binding: BindingInfo): string {

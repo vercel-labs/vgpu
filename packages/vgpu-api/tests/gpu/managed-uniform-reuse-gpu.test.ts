@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { describe, expect, test, vi } from "vitest";
 import { bundle, compute, draw, effect, frame, init, storage, target, uniforms, type Frame } from "../../src/node.ts";
 
@@ -25,7 +26,7 @@ const blue = (frameIndex: number) => (frameIndex * 29 + 11) % 256;
 /** One draw per pixel column: draw i writes pixel i with the frame's values. */
 async function pixelScene(gpu: Gpu, count = WIDTH) {
   const camera = uniforms(gpu, { green: 0 });
-  const draws = Array.from({ length: count }, (_, index) => draw(gpu, { shader: SHADER, vertices: 6, set: { camera, params: { red: 0, blue: 0, index } } }));
+  const draws = Array.from({ length: count }, (_, index) => draw(gpu, { shader: prepareShader(SHADER), vertices: 6, set: { camera, params: { red: 0, blue: 0, index } } }));
   const surface = () => target(gpu, { size: [WIDTH, 1], format: "rgba8unorm" });
   const output = surface();
   await draws[0]!.compile(output);
@@ -118,8 +119,8 @@ describe.skipIf(!native)("native managed uniform reuse", () => {
   test("passes and out-of-order manual frames keep their snapshots across equal sets", async () => {
     const gpu = await init();
     try {
-      const fx = effect(gpu, `struct Params { value: f32 } @group(0) @binding(0) var<uniform> params: Params;
-        @fragment fn main() -> @location(0) vec4f { return vec4f(params.value / 255.0, 0, 0, 1); }`, { set: { params: { value: 0 } } });
+      const fx = effect(gpu, prepareShader(`struct Params { value: f32 } @group(0) @binding(0) var<uniform> params: Params;
+        @fragment fn main() -> @location(0) vec4f { return vec4f(params.value / 255.0, 0, 0, 1); }`), { set: { params: { value: 0 } } });
       const set = (value: number) => fx.set({ params: { value } });
       const outputs = [0, 1, 2].map(() => target(gpu, { size: [1, 1], format: "rgba8unorm" }));
       const value = async (into: Target) => (await into.color.read({ mipLevel: 0, region: "all" }))[0];
@@ -157,8 +158,8 @@ describe.skipIf(!native)("native managed uniform reuse", () => {
   test("a recorded bundle stays live across equal and changed sets beside a captured draw", async () => {
     const gpu = await init();
     try {
-      const fx = effect(gpu, `struct Params { value: f32 } @group(0) @binding(0) var<uniform> params: Params;
-        @fragment fn main() -> @location(0) vec4f { return vec4f(params.value / 255.0, 0, 0, 1); }`, { set: { params: { value: 0 } } });
+      const fx = effect(gpu, prepareShader(`struct Params { value: f32 } @group(0) @binding(0) var<uniform> params: Params;
+        @fragment fn main() -> @location(0) vec4f { return vec4f(params.value / 255.0, 0, 0, 1); }`), { set: { params: { value: 0 } } });
       const set = (value: number) => fx.set({ params: { value } });
       const live = target(gpu, { size: [1, 1], format: "rgba8unorm" });
       const captured = target(gpu, { size: [1, 1], format: "rgba8unorm" });
@@ -181,8 +182,8 @@ describe.skipIf(!native)("native managed uniform reuse", () => {
     const gpu = await init();
     const counts = countNative(gpu);
     try {
-      const fx = effect(gpu, `struct Params { color: vec4f } @group(0) @binding(0) var<uniform> params: Params;
-        @fragment fn main() -> @location(0) vec4f { return params.color; }`);
+      const fx = effect(gpu, prepareShader(`struct Params { color: vec4f } @group(0) @binding(0) var<uniform> params: Params;
+        @fragment fn main() -> @location(0) vec4f { return params.color; }`));
       const buffer = gpu.gpu.createBuffer({ size: 512, usage: 0x40 | 0x08 });
       gpu.gpu.queue.writeBuffer(buffer, 0, new Float32Array([10 / 255, 0, 0, 1]));
       gpu.gpu.queue.writeBuffer(buffer, 256, new Float32Array([0, 20 / 255, 0, 1]));
@@ -212,10 +213,10 @@ describe.skipIf(!native)("native managed uniform reuse", () => {
     try {
       const state = uniforms(gpu, { v: 1 });
       const out = storage(gpu, 4);
-      const writer = compute(gpu, "struct S { v: f32 } @group(0) @binding(0) var<storage, read_write> s: S; @compute @workgroup_size(1) fn main() { s.v = 10.0; }", { set: { s: state } });
-      const reader = compute(gpu, `struct S { v: f32 } @group(0) @binding(0) var<storage, read> s: S;
+      const writer = compute(gpu, prepareShader("struct S { v: f32 } @group(0) @binding(0) var<storage, read_write> s: S; @compute @workgroup_size(1) fn main() { s.v = 10.0; }"), { set: { s: state } });
+      const reader = compute(gpu, prepareShader(`struct S { v: f32 } @group(0) @binding(0) var<storage, read> s: S;
         @group(0) @binding(1) var<storage, read_write> out: array<f32>;
-        @compute @workgroup_size(1) fn main() { out[0] = s.v; }`, { set: { s: state, out } });
+        @compute @workgroup_size(1) fn main() { out[0] = s.v; }`), { set: { s: state, out } });
       writer.dispatch(1);
       reader.dispatch(1);
       expect(new Float32Array(await out.read())[0]).toBe(10);
