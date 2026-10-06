@@ -17,15 +17,17 @@ Prepared artifacts from the loaders and from `prepareShader()` are deeply immuta
 validates an immutable artifact (checksum and reflection) the first time a draw, effect, or compute
 uses it and then reuses that validated, device-independent snapshot for later draws, effects, and
 computes built from the same artifact, on any gpu, so large scenes no longer pay validation cost per
-draw. Labels, `set` values, bindings, uniform buffers, and pipelines remain per instance. Mutable
-artifacts built elsewhere — a `structuredClone` or JSON copy, an object spread, a hand-built object,
-or one frozen only at its root — are still accepted and revalidated on every creation, as before;
-vgpu never freezes or retains them and only skips rehashing `wgsl` text that is unchanged since the
-previous creation, while still comparing the supplied `sourceChecksum`. Reuse is per artifact, so
-use one artifact per source revision: a new or rebuilt artifact (including after HMR) is validated
-on its own first use. The reuse cache is weakly keyed by the artifact and keeps no global registry;
-it does not change GPU resource disposal. `prepareShader()` still copies supplied `functionExports`
-and never freezes the caller's arrays.
+draw. Each draw, effect, and compute keeps its own label, `set` values, and binding assignments;
+existing pipeline, shader-module, and layout caches and explicitly shared resources behave as before.
+Artifacts whose consumed data is not entirely frozen — such as a `structuredClone` or JSON copy, an
+object spread, a root-only `Object.freeze`, or a typical hand-built object — are still accepted and
+revalidated on every creation, as before; vgpu never freezes or retains them and only skips
+rehashing `wgsl` text that is unchanged since the previous creation, while still comparing the
+supplied `sourceChecksum`. Reuse is per artifact, so use one artifact per source revision: a new or
+rebuilt artifact (including after HMR) is validated on its own first use. The reuse cache is weakly
+keyed by the artifact and keeps no global registry; draws, effects, and computes still hold the
+metadata they use, collection is not deterministic, and GPU resource disposal is unchanged.
+`prepareShader()` still copies supplied `functionExports` and never freezes the caller's arrays.
 
 The `@vgpu/wgsl` Vite and webpack/Turbopack loaders emit prepared ESM modules for every `.wgsl`
 import — ordinary leaf files included, with `functionExports: []`. Generated modules never import
