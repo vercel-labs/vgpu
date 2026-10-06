@@ -13,7 +13,7 @@ Read .context/work/<topic>/decisions.md (authoritative), design/api-options.md f
 
 plan/index.md
 - Goal and the decisions it implements (link decisions.md sections).
-- Task table: id (T01, T02, ...), title, lane, depends on, files owned, size (S/M/L).
+- Task table: id (T01, T02, ...), title, lane, agent, depends on, files owned, size (S/M/L). Assign repo:implementer-simple to fully specified scaffolding and mechanical changes following established patterns; use repo:implementer for complex behavior, architecture, resource lifetime, or concurrency. Choose by complexity and risk, not file count alone.
 - Dependency graph (mermaid) and parallel lanes. A lane is a sequence of tasks that one implementer runs in one git worktree; tasks in different lanes must own disjoint files so their branches merge without conflicts. Put shared foundations (types, error codes, core plumbing) in an early task that later lanes depend on. Say explicitly which lanes can start immediately and which wait for a merge.
 - Integration order: how the lead merges lanes and what to verify after each merge.
 - Global checks for the final branch.
@@ -21,6 +21,7 @@ plan/index.md
 
 plan/tasks/<id>-<slug>.md — one per task, exhaustive enough that an implementer never has to guess:
 - Context: why, and the decisions.md sections it implements.
+- Agent: repo:implementer or repo:implementer-simple, with the reason for that choice.
 - Files: exact paths to create/modify and the files it must NOT touch (owned by other lanes).
 - Public API: exact TypeScript signatures, defaults, and VGPU-* error codes with conditions and fix text.
 - Implementation steps in order, with the relevant existing functions to reuse (file:line).
@@ -35,18 +36,18 @@ plan/progress.md — a table of every task (id, lane, status: todo, branch, comm
 
 Do not delegate and do not touch product code. Reply with the plan path, lane summary, and any decision gaps.`,
   harness: [
+    claudeCode({
+      model: "claude-sonnet-5.5",
+      effort: "high",
+      permissionMode: "dontAsk",
+      allowedTools: ["Read", "Glob", "Grep", "Bash", "Write", "Edit"],
+    }),
     codex({
       model: "gpt-6-astra",
       effort: "high",
       approvalPolicy: "never",
       sandboxMode: "workspace-write",
       networkAccessEnabled: true,
-    }),
-    claudeCode({
-      model: "claude-opus-5.5",
-      effort: "high",
-      permissionMode: "dontAsk",
-      allowedTools: ["Read", "Glob", "Grep", "Bash", "Write", "Edit"],
     }),
   ],
 });

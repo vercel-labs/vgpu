@@ -17,7 +17,7 @@ Write only the documentation files named in the task (co-located *.docs.md, docs
 Before finishing, run \`pnpm docs:verify-snippets\` and fix failing snippets in your files. Read at most one neighbouring guide for frontmatter shape; the style guide above replaces reading the concept docs. Do not delegate. Reply with the files changed, anything that still needs verification against code, and the verify-snippets result.`,
   harness: [
     claudeCode({
-      model: "claude-opus-5.5",
+      model: "claude-sonnet-5.5",
       effort: "high",
       permissionMode: "dontAsk",
       allowedTools: ["Read", "Glob", "Grep", "Bash", "Write", "Edit"],

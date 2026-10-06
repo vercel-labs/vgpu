@@ -2,7 +2,7 @@ import { agent, claudeCode, codex } from "subharness";
 import { repositoryInstructions, workspaceInstructions } from "../tools/shared.js";
 
 export default agent({
-  name: "builder",
+  name: "fixer",
   description:
     "Applies a bounded list of review findings or polish items on an integrated branch, verifies, and commits. Used by the lead after integration review.",
   instructions: `${repositoryInstructions}
@@ -13,18 +13,18 @@ You receive a numbered list of findings (usually from an integration review) and
 
 Reply with a per-item table (item, status fixed/skipped, commit, note) and the checks you ran with results.`,
   harness: [
+    claudeCode({
+      model: "claude-sonnet-5.5",
+      effort: "high",
+      permissionMode: "dontAsk",
+      allowedTools: ["Read", "Glob", "Grep", "Bash", "Write", "Edit"],
+    }),
     codex({
       model: "gpt-5.6-sol",
       effort: "high",
       approvalPolicy: "never",
       sandboxMode: "workspace-write",
       networkAccessEnabled: true,
-    }),
-    claudeCode({
-      model: "claude-opus-5.5",
-      effort: "high",
-      permissionMode: "dontAsk",
-      allowedTools: ["Read", "Glob", "Grep", "Bash", "Write", "Edit"],
     }),
   ],
 });

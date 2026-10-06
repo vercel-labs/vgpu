@@ -22,17 +22,17 @@ Run the task's verification commands when feasible and report their results.
 
 Report: verdict (APPROVE or CHANGES REQUESTED), then numbered findings, each with file:line, severity (blocker/major/minor), the concrete failure scenario, and the fix direction. Separate reproducible defects from preferences, and list preferences under "Optional". If there are no actionable findings, say so plainly. Do not delegate.`,
   harness: [
-    claudeCode({
-      model: "claude-opus-5.5",
-      effort: "high",
-      permissionMode: "dontAsk",
-      allowedTools: ["Read", "Glob", "Grep", "Bash"],
-    }),
     codex({
       model: "gpt-6-astra",
       effort: "high",
       approvalPolicy: "never",
       sandboxMode: "read-only",
+    }),
+    claudeCode({
+      model: "claude-opus-5.5",
+      effort: "high",
+      permissionMode: "dontAsk",
+      allowedTools: ["Read", "Glob", "Grep", "Bash"],
     }),
   ],
 });

@@ -23,11 +23,12 @@ The normal API phases below still apply if the asset work changes a public API.
 | `repo:graphics-researcher` | fx `google/gemini-3.8-flash` → Codex `gpt-5.6-luna` | Papers, talks, shipped game techniques. Raw findings only |
 | `repo:eval-designer` | Claude `claude-opus-5.5` high → Codex `gpt-6-astra` high | Eval methodology, independent gates, negative controls, and evidence-based analysis |
 | `repo:api-designer` | Codex `gpt-6-astra` xhigh → Claude `claude-opus-5.5` xhigh | API alternatives + illustrative snippets, agent-ergonomics evaluation |
-| `repo:planner` | Codex `gpt-6-astra` high → Claude `claude-opus-5.5` high | Plan folder: index, task specs, lanes, progress log |
-| `repo:implementer` | Codex `gpt-5.6-sol` high → Claude `claude-opus-5.5` high | One task, test-first; runs `writer` and `reviewer` as children; commits |
-| `repo:writer` | Claude `claude-opus-5.5` high → Codex `gpt-5.6-sol` high | Docs in house style (called by implementer, or by you for docs-only work) |
-| `repo:reviewer` | Claude `claude-opus-5.5` high → Codex `gpt-6-astra` high | Read-only review (called by implementer per task, and by you after integration) |
-| `repo:builder` | Codex `gpt-5.6-sol` high → Claude `claude-opus-5.5` high | Applies a bounded list of integration-review findings |
+| `repo:planner` | Claude `claude-sonnet-5.5` high → Codex `gpt-6-astra` high | Plan folder: index, task specs, agent assignment, lanes, progress log |
+| `repo:implementer` | Claude `claude-opus-5.5` high → Codex `gpt-5.6-sol` high | Complex implementation, test-first; runs `writer` and `reviewer` as children; commits |
+| `repo:implementer-simple` | Claude `claude-sonnet-5.5` high → Codex `gpt-5.6-sol` high | Scaffolding and straightforward tasks; same writer, reviewer, verification, and commit workflow |
+| `repo:writer` | Claude `claude-sonnet-5.5` high → Codex `gpt-5.6-sol` high | Docs in house style (called by either implementer, or by you for docs-only work) |
+| `repo:reviewer` | Codex `gpt-6-astra` high → Claude `claude-opus-5.5` high | Read-only review (called by either implementer per task, and by you after integration) |
+| `repo:fixer` | Claude `claude-sonnet-5.5` high → Codex `gpt-5.6-sol` high | Applies a bounded list of integration-review findings |
 | `repo:asset-author` | Codex `gpt-6-astra` high (no fallback) | Blender modeling, renders, environment lighting and AO/lightmap bakes; declares runtime and critic children |
 | `repo:asset-runtime` | Claude `claude-opus-5.5` high (no fallback) | Shaders, browser rendering and parity with Blender; called by asset-author |
 | `repo:asset-critic` | Claude `claude-opus-5.5` high (no fallback) | Actual capture and cost review, called by asset-author |
@@ -119,6 +120,10 @@ Review `plan/index.md` for lane isolation (disjoint files between lanes) and mis
 (docs, changeset, examples, bundle budgets, native GPU tests), and check that its PR record is
 self-contained. Show the human the lane summary before starting implementation.
 
+Each task names its implementation agent. Use `repo:implementer-simple` for fully specified
+scaffolding or mechanical changes with established patterns. Use `repo:implementer` for complex
+behavior, architecture, resource lifetime, or concurrency; task size alone does not decide routing.
+
 ## Phase 5 — Implement
 
 For each lane that can start:
@@ -132,13 +137,17 @@ For each lane that can start:
    (cd .context/worktrees/<topic>-<lane> && pnpm install --frozen-lockfile && pnpm build)
    ```
    A single-lane plan can run in the current workspace instead.
-2. Run the lane's tasks in order, one implementer session per task, each lane as its own
-   background command:
+2. Run the lane's tasks in order, using the task's assigned implementation agent, one session per
+   task, each lane as its own background command:
    ```sh
    npx subharness run repo:implementer --cwd .context/worktrees/<topic>-<lane> --prompt "Topic: <topic>. Implement task .context/work/<topic>/plan/tasks/T03-<slug>.md. Base ref: <base>. Governing: .context/work/<topic>/decisions.md."
    ```
-   The implementer writes tests first, runs `writer` for docs in parallel, runs `reviewer`
-   (max 2 rounds), commits on the lane branch, and writes `plan/progress/<id>.md`.
+   Substitute `repo:implementer-simple` when assigned by the plan. Both implementers run `writer`
+   for docs in parallel and `reviewer` (max 2 rounds), commit on the lane branch, and write
+   `plan/progress/<id>.md`.
+   Behavior changes use tests first; mechanical tasks use appropriate existing checks instead of
+   tests that only mirror scaffolding. If a simple task needs complex design, return it to the lead
+   for reassignment to `repo:implementer`.
 3. After each task, copy the lane's `plan/progress/<id>.md` back and update `plan/progress.md`.
    Report blocked tasks and disputed findings to the human instead of forcing them through.
 
@@ -151,11 +160,11 @@ For each lane that can start:
    npx subharness run repo:reviewer --prompt "Integration review for <topic>. Base: <base>. Governing: .context/work/<topic>/decisions.md and plan/index.md. Review the full branch diff, focusing on cross-task consistency, public API contract, docs vs code, and release hygiene."
    ```
    Save the output to `reviews/integration-<n>.md`.
-3. Hand blocker/major findings (and cheap polish) to the builder as a numbered list:
+3. Hand blocker/major findings (and cheap polish) to the fixer as a numbered list:
    ```sh
-   npx subharness run repo:builder --prompt "Topic: <topic>. Fix these findings on the current branch: 1. ... 2. ... Verify with: <commands>."
+   npx subharness run repo:fixer --prompt "Topic: <topic>. Fix these findings on the current branch: 1. ... 2. ... Verify with: <commands>."
    ```
-   Re-review if the builder changed behavior. Then summarize to the human: what shipped, checks
+   Re-review if the fixer changed behavior. Then summarize to the human: what shipped, checks
    run, and remaining findings. When the human asks for a PR, follow
    `.github/guides/pull-requests.md` and `.github/pull_request_template.md` against `canary`. Build
    the description from `plan/index.md`'s PR record, the key `decisions.md` entries, and the
