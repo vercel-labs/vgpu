@@ -176,8 +176,9 @@ For each lane that can start:
    `repo:pr-writer` with the exact base/head revisions, workflow/origin, `plan/index.md`'s PR record,
    key `decisions.md` entries, implementation/review receipts and any current PR body. It follows
    the [PR writing guide](../../../.subharness/tools/pr-writing.ts): explicitly label the old
-   problem before the first user-code example, then explain the solution, using normal Markdown
-   text/code and small SVG chunks. Educational PDFs never become PR attachments. The final
+   problem before the first user-code example, then explain the solution. The shared
+   [visual-explainer skill](../visual-explainer/SKILL.md) defines the narrative, Markdown/SVG style
+   and separate personal PDF mode. Educational PDFs never become PR attachments. The final
    technical record must stand alone; reviewers cannot see `.context/`.
    Review `pr/body.md`, `pr/title.txt`, `pr/assets.json` and `pr/checks.md`. The PR writer drafts
    only; you own publication. Reuse verified existing asset URLs or upload new SVGs as GitHub
