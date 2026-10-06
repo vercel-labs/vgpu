@@ -62,7 +62,8 @@ export function createBindGroupCache(): BindGroupCache {
 
   return {
     getOrCreate(drawId, group, identityTuple, factory) {
-      const key = `${drawId}:${group}:${identityTuple.map(identityKey).join("|")}`;
+      let key = `${drawId}:${group}:`;
+      for (let index = 0; index < identityTuple.length; index++) key += (index ? "|" : "") + identityKey(identityTuple[index]!);
       const existing = entries.get(key);
       if (existing) {
         existing.used = ++clock;
@@ -127,11 +128,18 @@ function isCapturedRange(identity: BindGroupIdentityPart): boolean {
   return typeof identity === "object" && identity.kind === CAPTURE_PAGE_KIND;
 }
 
-/** Full identity: `kind:id`, plus `@offset+size` for a buffer range. */
+const keys = new WeakMap<object, string>();
+
+/** Full identity: `kind:id`, plus `@offset+size` for a buffer range. Identity objects are immutable, so keys are memoized. */
 export function identityKey(identity: BindGroupIdentityPart): string {
   if (typeof identity === "string" || typeof identity === "number") return String(identity);
-  const base = `${identity.kind}:${identity.id}`;
-  return "offset" in identity ? `${base}@${identity.offset}+${identity.size}` : base;
+  let key = keys.get(identity);
+  if (key === undefined) {
+    key = `${identity.kind}:${identity.id}`;
+    if ("offset" in identity) key += `@${identity.offset}+${identity.size}`;
+    keys.set(identity, key);
+  }
+  return key;
 }
 
 /** The resource behind an identity, ignoring its range. */

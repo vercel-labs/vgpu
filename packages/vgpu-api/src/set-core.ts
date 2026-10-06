@@ -78,6 +78,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
   const bindings = initializeBindings(options.reflection);
   const groups = [...options.bindGroupLayouts.keys()].sort((a, b) => a - b);
   const claimedGroups = new Map<number, GPUBindGroup>();
+  const activeBindingsByGroup = new Map<number, { readonly layout: GPUBindGroupLayout; readonly bindings: readonly BindingInfo[] }>();
 
   function set(values: SetBag): readonly BindingIdentityChange[] {
     const changes: BindingIdentityChange[] = [];
@@ -240,23 +241,34 @@ export function createSetCore(options: SetCoreOptions): SetCore {
   function bindGroupFor(group: number, capture?: UniformCapture): { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimValidation?: { readonly label: string; readonly group: number } } {
     const claimed = claimedGroups.get(group);
     if (claimed) return { group, bindGroup: claimed, offsets: [], claimValidation: rawClaimValidation(claimed, group) };
-    const active = new Set(bindGroupLayoutMetadata(layout(group))?.entries.map((entry) => entry.binding));
-    const groupBindings = options.reflection.bindings.filter((binding) => binding.group === group && active.has(binding.binding));
-    const resolved = groupBindings.map(binding => {
+    const groupBindings = activeBindings(group);
+    const resources: GPUBindingResource[] = [];
+    const identities: BindGroupIdentityPart[] = [];
+    for (const binding of groupBindings) {
       const state = requiredState(binding);
       const value = state.uniformValue?.() ?? (state.bytes && binding.addressSpace === "uniform" ? ownedUniformValue(state) : undefined);
       const captured = capture && value ? capture.capture(value, options.cache) : undefined;
       if (!captured) prepareUniform(state, false);
-      return { binding: binding.binding, resource: captured?.resource ?? state.resource!, identity: captured?.identity ?? state.identity! };
-    });
-    const entries = resolved.map(({ binding, resource }) => ({ binding, resource }));
-    const identities = resolved.map(({ identity }) => identity);
+      resources.push(captured?.resource ?? state.resource!);
+      identities.push(captured?.identity ?? state.identity!);
+    }
     const bindGroup = options.cache.getOrCreate(options.drawId, group, identities, () => options.device.gpu.createBindGroup({
       label: `${options.label}.group${group}`,
       layout: layout(group),
-      entries,
+      entries: groupBindings.map((binding, index) => ({ binding: binding.binding, resource: resources[index]! })),
     }));
     return { group, bindGroup, offsets: [] };
+  }
+
+  /** Reflected bindings present in the group's current layout; recomputed when the layout object changes. */
+  function activeBindings(group: number): readonly BindingInfo[] {
+    const bgl = layout(group);
+    const cached = activeBindingsByGroup.get(group);
+    if (cached?.layout === bgl) return cached.bindings;
+    const active = new Set(bindGroupLayoutMetadata(bgl)?.entries.map((entry) => entry.binding));
+    const bindings = options.reflection.bindings.filter((binding) => binding.group === group && active.has(binding.binding));
+    activeBindingsByGroup.set(group, { layout: bgl, bindings });
+    return bindings;
   }
 
   function rawClaimValidation(bindGroup: GPUBindGroup, group: number): { readonly label: string; readonly group: number } | undefined {

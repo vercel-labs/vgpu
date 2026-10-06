@@ -14,9 +14,12 @@ interface Page {
   taken: number;
   /** Caches holding bind groups of this page's ranges. */
   readonly caches: Set<BindGroupCache>;
+  /** Range descriptors by offset, reused across frames so identities (and their cache keys) stay stable. */
+  readonly ranges: Map<number, Range>;
 }
+interface Range { readonly resource: GPUBufferBinding; readonly identity: BufferRangeIdentity }
 interface Pool { readonly pages: Page[]; bytes: number }
-interface Captured { readonly revision: number; readonly page: Page; readonly resource: GPUBufferBinding; readonly identity: BufferRangeIdentity }
+interface Captured extends Range { readonly revision: number; readonly page: Page }
 
 /**
  * Idle pages kept per device, in both pages and GPU bytes (each page also has a same-sized CPU
@@ -84,7 +87,12 @@ export class FrameUniforms implements UniformCapture {
     }
     page.bytes.set(value.bytes, offset);
     page.used = offset + size;
-    return { revision: value.revision, page, resource: { buffer: page.buffer, offset, size }, identity: { kind: CAPTURE_PAGE_KIND, id: page.id, offset, size } };
+    let range = page.ranges.get(offset);
+    if (range?.identity.size !== size) {
+      range = { resource: { buffer: page.buffer, offset, size }, identity: { kind: CAPTURE_PAGE_KIND, id: page.id, offset, size } };
+      page.ranges.set(offset, range);
+    }
+    return { revision: value.revision, page, resource: range.resource, identity: range.identity };
   }
 
   #take(minimum: number): Page {
@@ -101,7 +109,7 @@ export class FrameUniforms implements UniformCapture {
   #createPage(minimum: number): Page {
     const size = Math.min(this.device.limits.maxBufferSize, Math.max(65536, Math.ceil(minimum / 4) * 4));
     const buffer = this.device.gpu.createBuffer({ label: "vgpu.frame.uniforms", size, usage: 0x40 | 0x08 });
-    return { id: nextPage++, buffer, bytes: new Uint8Array(size), used: 0, taken: 0, caches: new Set() };
+    return { id: nextPage++, buffer, bytes: new Uint8Array(size), used: 0, taken: 0, caches: new Set(), ranges: new Map() };
   }
 }
 
