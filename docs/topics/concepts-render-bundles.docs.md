@@ -199,6 +199,71 @@ frameLoop(gpu, (frame) => {
 
 The order matters. If recording throws, `post` still holds the previous bundle and nothing was disposed early. Re-record only for changes like this one, never solely because the destination resized.
 
+## Rebinding during and after recording
+
+A bundle captures the resources bound at each `b.draw()` call. Rebinding a draw between calls inside one recording is deliberate — the bundle records both draws, each with its own resources, and checks all of them at replay. Rebinding after a bundle finished recording stales that bundle, even when the `set()` happens inside another bundle's recording:
+
+```ts
+import { init, bundle, effect, frameLoop, surface, target } from "vgpu";
+
+const gpu = await init();
+const canvas = document.querySelector("canvas")!;
+const canvasTarget = surface(gpu, canvas);
+const leftTarget = target(gpu, { size: [256, 256] });
+const rightTarget = target(gpu, { size: [256, 256] });
+const preview = effect(gpu, `
+  @group(0) @binding(0) var src: texture_2d<f32>;
+
+  @fragment fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
+    return textureLoad(src, vec2i(position.xy) % vec2i(256), 0);
+  }
+`, { set: { src: leftTarget } });
+
+// ---cut---
+const leftOnly = bundle(gpu, { target: canvasTarget }, (b) => b.draw(preview));
+
+const both = bundle(gpu, { target: canvasTarget }, (b) => {
+  b.draw(preview); // records leftTarget
+  preview.set({ src: rightTarget }); // stales leftOnly; this recording keeps going
+  b.draw(preview); // records rightTarget
+}); // both watches leftTarget and rightTarget
+
+frameLoop(gpu, (frame) => {
+  frame.pass(canvasTarget, (pass) => pass.bundles(both)); // pass.bundles(leftOnly) would throw VGPU-R3-BUNDLE-STALE
+});
+```
+
+`both` stays valid until `preview` is rebound again, or either captured target is destroyed or replaces its attachment. `leftOnly` went stale at the `set()`, because it recorded `leftTarget` and the draw no longer binds it.
+
+## Let recorded draws go
+
+A bundle does not hold the draws and effects it recorded. It keeps independent snapshots instead — each captured texture, buffer, and target, the attachment of each sampled `Target`, and the geometry it draws — so a draw or effect created only to record a bundle can stay local to the function that records it:
+
+```ts
+import { init, bundle, effect, frameLoop, surface, type Bundle, type Gpu, type Surface } from "vgpu";
+
+const gpu = await init();
+const canvas = document.querySelector("canvas")!;
+const canvasTarget = surface(gpu, canvas);
+
+// ---cut---
+function recordBackdrop(gpu: Gpu, canvasTarget: Surface): Bundle {
+  const backdrop = effect(gpu, `
+    @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+      return vec4f(0.1, 0.3, 0.6 + uv.y * 0.2, 1.0);
+    }
+  `);
+  return bundle(gpu, { target: canvasTarget, label: "backdrop" }, (b) => b.draw(backdrop));
+} // backdrop is unreachable after this returns — the bundle does not need it
+
+const backdropBundle = recordBackdrop(gpu, canvasTarget);
+frameLoop(gpu, (frame) => {
+  frame.pass(canvasTarget, (pass) => pass.bundles(backdropBundle));
+});
+```
+
+Collecting the effect does not make the bundle stale. The snapshots still catch later changes on their own: destroying a captured texture, buffer, or target, or replacing a sampled `Target`'s attachment, makes replay throw `VGPU-R3-BUNDLE-STALE`, and destroying recorded geometry makes replay throw that geometry's liveness error. Keep the draw only when you still `set()` its uniforms, rebind it, or draw it outside the bundle — while you hold it, its uniform updates keep reaching every bundle that recorded it.
+
 ## Release bundles you no longer need
 
 You do not have to release a bundle. The draws and resources a bundle recorded do not keep it alive, so once your code drops its last reference, the bundle is collected eventually like any other object. vgpu makes no promise about when that happens or when the driver frees the native bundle's memory.
@@ -229,13 +294,13 @@ console.log(scene.id); // "ocean" — the id stays readable
 ocean.draw(sceneTarget); // the effect was borrowed, not destroyed
 ```
 
-`dispose()` is synchronous. It unregisters the bundle from the draws and resources it watched and drops its captured draws and native handle reference. It never destroys what the bundle borrowed — draws, effects, geometry, textures, buffers, and targets stay yours.
+`dispose()` is synchronous. It unregisters the bundle from the draws and resources it watched and drops its snapshots and native handle reference. It never destroys what the bundle borrowed — draws, effects, geometry, textures, buffers, and targets stay yours.
 
 > Warning: After `dispose()`, reading `scene.gpu` or replaying the bundle throws `VGPU-BUNDLE-DISPOSED`. Record a new bundle before replaying. In `pass.bundles(a, b)`, one disposed entry means none of the list replays.
 
-Disposal cannot reach what already left the bundle. Work encoded before `dispose()` still runs, and a `GPURenderBundle` you read from `scene.gpu` earlier stays usable for as long as native WebGPU keeps it valid — vgpu cannot revoke it, and it no longer checks that handle for staleness.
+Disposal cannot reach what already left the bundle, and neither can collecting the draws it recorded. Work encoded before `dispose()` still runs, and a `GPURenderBundle` you read from `scene.gpu` earlier stays usable for as long as native WebGPU keeps it valid — vgpu cannot revoke it, and only `pass.bundles()` checks staleness, not native replay of that handle. While you hold the recorded draw, its `set()` uniform updates keep reaching that handle.
 
-A bundle that goes permanently stale — a captured resource was rebound or destroyed — detaches from its draws and resources on its own, and replay keeps reporting the first cause. A replay on a target with a different signature is not permanent: it throws `VGPU-R3-BUNDLE-STALE` for that call only, and replaying on a matching target afterwards works.
+A bundle that goes permanently stale — a captured resource was rebound or destroyed, or a sampled `Target` replaced its attachment — detaches from its draws and resources on its own, and replay keeps reporting the first cause. A replay on a target with a different signature is not permanent: it throws `VGPU-R3-BUNDLE-STALE` for that call only, and replaying on a matching target afterwards works.
 
 ## When not to bother
 

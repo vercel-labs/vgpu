@@ -1,5 +1,5 @@
 import { createRenderBundle } from "./core/render-bundle.ts";
-import { assertDrawGeometryUsable, InternalDraw, drawUsesBlendConstant, drawUsesStencilReference, encodeDraw, registerDrawBundle, unregisterDrawBundle, watchDrawResources, type BundleBackReference, type BundleStaleEvent, type Draw, type DrawCallOptions } from "./draw.ts";
+import { InternalDraw, drawGeometrySnapshot, drawLifecycleToken, drawResourceSnapshots, drawUsesBlendConstant, drawUsesStencilReference, encodeDraw, type BundleBackReference, type BundleStaleEvent, type Draw, type DrawCallOptions, type DrawLifecycleToken } from "./draw.ts";
 import { InternalEffect, effectDraw, type Effect } from "./effect.ts";
 import type { CompileTarget, Target, TargetSignature } from "./target.ts";
 import { normalizeSignature, signatureKeyOf, validateTargetSignature } from "./pipeline-store.ts";
@@ -7,6 +7,10 @@ import { bundleBlendConstantError, bundleDisposedError, bundleStencilReferenceEr
 import { FRAME_BUNDLE, type FrameBundleProtocol } from "./frame-protocols.ts";
 import { liveKernel } from "./live-kernel.ts";
 import type { Gpu } from "./kernel.ts";
+import { identityKey } from "./bind-cache.ts";
+import { geometryLiveness, type GeometryLive } from "./draw-protocols.ts";
+import type { BindingResourceSnapshot } from "./set-core.ts";
+import type { LifetimeDependent } from "./binding-lifetime.ts";
 
 /**
  * Records an explicit WebGPU render bundle: the draws in `record` are encoded once and replayed
@@ -37,13 +41,6 @@ export interface Bundle {
 }
 
 let nextBundleId = 1;
-let recordingDepth = 0;
-
-// Stale/disposed/failed bundles detach synchronously. This only removes observer metadata after an
-// otherwise-valid facade is abandoned; rendering correctness never depends on finalizer timing.
-const bundleResourceFinalizer = new FinalizationRegistry<Set<() => void>>((subscriptions) => {
-  releaseResourceSubscriptions(subscriptions);
-});
 
 /** Records explicit WebGPU render bundles and keeps the R3 stale signature checked at replay time. */
 export function createBundle(device: { readonly gpu: GPUDevice }, opts: BundleOptions, record: (recorder: BundleRecorder) => void): Bundle {
@@ -57,15 +54,16 @@ export function createBundle(device: { readonly gpu: GPUDevice }, opts: BundleOp
 class RecordedBundle implements Bundle, BundleBackReference {
   #gpu?: GPURenderBundle;
   #disposed = false;
+  #recording = false;
   #staleEvent?: BundleStaleEvent;
   readonly #signatureKey: string;
-  readonly #draws = new Set<InternalDraw>();
-  readonly #resourceSubscriptions = new Set<() => void>();
-  readonly #resourceFinalizerToken = {};
+  readonly #drawTokens = new Set<DrawLifecycleToken>();
+  readonly #geometries = new Set<GeometryLive>();
+  readonly #snapshots = new Set<CapturedBindingSnapshot>();
+  readonly #snapshotKeys = new Map<DrawLifecycleToken, Map<object, Set<string>>>();
 
   constructor(private readonly device: { readonly gpu: GPUDevice }, readonly id: string, readonly signature: TargetSignature) {
     this.#signatureKey = signatureKeyOf(signature);
-    bundleResourceFinalizer.register(this, this.#resourceSubscriptions, this.#resourceFinalizerToken);
   }
 
   get gpu(): GPURenderBundle {
@@ -86,7 +84,6 @@ class RecordedBundle implements Bundle, BundleBackReference {
       this.#detach();
       throw error;
     }
-    if (!this.#staleEvent) for (const draw of this.#draws) registerDrawBundle(draw, this);
   }
 
   /**
@@ -105,7 +102,7 @@ class RecordedBundle implements Bundle, BundleBackReference {
   markStale(event: BundleStaleEvent): void {
     // Set() while recording may deliberately encode different resources. Destruction of any
     // captured resource is never safe, including during recording or after the Draw was rebound.
-    if (recordingDepth > 0 && !(event.kind === "binding-identity" && event.newIdentity.startsWith("destroyed:"))) return;
+    if (this.#recording && !(event.kind === "binding-identity" && event.newIdentity.startsWith("destroyed:"))) return;
     if (this.#staleEvent) return;
     this.#staleEvent = event;
     this.#detach();
@@ -117,37 +114,104 @@ class RecordedBundle implements Bundle, BundleBackReference {
     const actualKey = signatureKeyOf(actual);
     if (this.#signatureKey !== actualKey) throw bundleStaleError(this.id, targetSignatureStaleMessage(this.id, this.#signatureKey, actualKey));
     if (this.#staleEvent) throw bundleStaleError(this.id, staleEventMessage(this.id, this.#staleEvent));
-    for (const draw of this.#draws) assertDrawGeometryUsable(draw, `bundle '${this.id}' replay geometry`);
+    for (const snapshot of this.#snapshots) snapshot.assertCurrent();
+    if (this.#staleEvent) throw bundleStaleError(this.id, staleEventMessage(this.id, this.#staleEvent));
+    for (const geometry of this.#geometries) geometry[geometryLiveness](`bundle '${this.id}' replay geometry`);
   }
 
   remember(draw: InternalDraw): void {
     if (this.#staleEvent || this.#disposed) return;
-    this.#draws.add(draw);
-    const bundle = new WeakRef(this);
-    this.#resourceSubscriptions.add(watchDrawResources(draw, event => bundle.deref()?.markStale(event)));
-  }
-
-  #releaseResourceSubscriptions(): void {
-    bundleResourceFinalizer.unregister(this.#resourceFinalizerToken);
-    releaseResourceSubscriptions(this.#resourceSubscriptions);
+    const token = drawLifecycleToken(draw);
+    if (!this.#drawTokens.has(token)) {
+      this.#drawTokens.add(token);
+      token.recordedIn.add(this);
+    }
+    const geometry = drawGeometrySnapshot(draw);
+    if (geometry) this.#geometries.add(geometry);
+    let keysByLifetime = this.#snapshotKeys.get(token);
+    if (!keysByLifetime) this.#snapshotKeys.set(token, keysByLifetime = new Map());
+    for (const captured of drawResourceSnapshots(draw)) {
+      let keys = keysByLifetime.get(captured.lifetime);
+      if (!keys) keysByLifetime.set(captured.lifetime, keys = new Set());
+      const key = `${captured.group}:${captured.binding}:${captured.capturedIdentity}`;
+      if (keys.has(key)) continue;
+      keys.add(key);
+      this.#snapshots.add(new CapturedBindingSnapshot(this, token.label, captured));
+    }
   }
 
   #detach(): void {
-    for (const draw of this.#draws) unregisterDrawBundle(draw, this);
-    this.#releaseResourceSubscriptions();
-    this.#draws.clear();
+    for (const token of this.#drawTokens) token.recordedIn.delete(this);
+    this.#drawTokens.clear();
+    this.#geometries.clear();
+    releaseSnapshots(this.#snapshots);
+    this.#snapshotKeys.clear();
   }
 
   #recordCommands(record: (recorder: BundleRecorder) => void, encoder: GPURenderPassEncoder): void {
-    recordingDepth += 1;
+    this.#recording = true;
     try { record(new ExplicitBundleRecorder(this, encoder)); }
-    finally { recordingDepth -= 1; }
+    finally { this.#recording = false; }
   }
 }
 
-function releaseResourceSubscriptions(subscriptions: Set<() => void>): void {
-  for (const off of subscriptions) off();
-  subscriptions.clear();
+function releaseSnapshots(snapshots: Set<CapturedBindingSnapshot>): void {
+  for (const snapshot of snapshots) snapshot.dispose();
+  snapshots.clear();
+}
+
+class CapturedBindingSnapshot implements LifetimeDependent {
+  readonly #bundle: WeakRef<RecordedBundle>;
+  #record?: number;
+  #disposed = false;
+
+  constructor(bundle: RecordedBundle, private readonly drawLabel: string, private readonly captured: BindingResourceSnapshot) {
+    this.#bundle = new WeakRef(bundle);
+    this.#record = captured.lifetime.register(this, captured.markers.map((marker) => marker.dependency));
+  }
+
+  invalidateLifetime(): void {
+    if (this.#disposed) return;
+    this.#bundle.deref()?.markStale(this.#event(`destroyed:${this.captured.capturedIdentity}`));
+    this.dispose();
+  }
+
+  assertCurrent(): void {
+    if (this.#disposed) return;
+    if (this.captured.markers.some((marker) => marker.destroyed)) {
+      this.#bundle.deref()?.markStale(this.#event(`destroyed:${this.captured.capturedIdentity}`));
+      return;
+    }
+    const followed = this.captured.followedTarget;
+    if (!followed) return;
+    const selected = followed.depth ? followed.target.depth : followed.target.color;
+    if (!selected) {
+      this.#bundle.deref()?.markStale(this.#event(`destroyed:${this.captured.capturedIdentity}`));
+      return;
+    }
+    const currentIdentity = identityKey(selected.resourceIdentity);
+    if (currentIdentity !== this.captured.capturedIdentity) this.#bundle.deref()?.markStale(this.#event(currentIdentity));
+  }
+
+  dispose(): void {
+    if (this.#disposed) return;
+    this.#disposed = true;
+    this.captured.lifetime.unregister(this.#record);
+    this.#record = undefined;
+  }
+
+  #event(newIdentity: string): BundleStaleEvent {
+    return {
+      kind: "binding-identity",
+      drawLabel: this.drawLabel,
+      group: this.captured.group,
+      binding: this.captured.binding,
+      bindingName: this.captured.bindingName,
+      bindingKind: this.captured.bindingKind,
+      previousIdentity: this.captured.capturedIdentity,
+      newIdentity,
+    };
+  }
 }
 
 class ExplicitBundleRecorder implements BundleRecorder {

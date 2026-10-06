@@ -6,7 +6,7 @@ import { createBindGroupCache, type BindGroupCache } from "./bind-cache.ts";
 import { entryMetadata } from "./entry-metadata.ts";
 import { claimedGroupValidationDone, discardClaimedGroupValidationResults, discardClaimedGroupValidationScopes, discardLastClaimedGroupValidationScope, popLastClaimedGroupValidationScope, preferClaimedGroupValidationResult, pushClaimedGroupValidationScope, submittedWorkDone, type ClaimedGroupValidationContext, type ClaimedGroupValidationResult, type ValidationErrorSink } from "./claim-validation.ts";
 import { endRenderPassWithClaimValidation } from "./claim-validation-encode.ts";
-import { createSetCore, type BindingIdentityChange, type BindingState, type SetBag, type SetCore } from "./set-core.ts";
+import { createSetCore, setCoreTestState, type BindingIdentityChange, type BindingResourceSnapshot, type BindingState, type SetBag, type SetCore, type SetCoreTestState } from "./set-core.ts";
 import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, cachedBindGroupLayout, visibilityForEntries, type BindingVisibilityFn } from "./set-layouts.ts";
 import type { CompileTarget, Target, TargetSignature } from "./target.ts";
 import { normalizeConstantsOptions, normalizeSignature, pipelineKeyOf, selectEntryPoint, signatureKeyOf, validateTargetSignature, createPipelineLayoutCache, createPipelineStore, createShaderModuleCache, type PipelineLayoutCache, type PipelineStore, type ShaderModuleCache } from "./pipeline-store.ts";
@@ -14,7 +14,7 @@ import { hasStencilAspect, isTarget } from "./target-utils.ts";
 import { blendConstantInvalidError, blendInvalidError, claimedGroupNativeValidationError, colorsInvalidError, cullInvalidError, depthInvalidError, entryInvalidError, frontFaceInvalidError, indirectInvalidError, meshRangeInvalidError, multisampleInvalidError, stencilInvalidError, storageStageLimitError, surfaceNotInFrameError, targetRequiredError, unclippedDepthInvalidError, VGPUError, writeMaskInvalidError } from "./errors.ts";
 import { isFrameActive, isSurface } from "./surface.ts";
 import { assertDeviceUsable } from "./lifecycle.ts";
-import { geometryLayoutResolver, geometryLiveness, geometryLivenessOf, type GeometryLayoutResolvable } from "./draw-protocols.ts";
+import { geometryLayoutResolver, geometryLiveness, geometryLivenessOf, type GeometryLayoutResolvable, type GeometryLive } from "./draw-protocols.ts";
 import { resolveIndirect } from "./indirect.ts";
 import type { StorageBuffer } from "./api-types.ts";
 import { FRAME_DRAWABLE, type FrameDrawableProtocol } from "./frame-protocols.ts";
@@ -207,6 +207,11 @@ export interface BundleBackReferenceRegistry {
   markStale(event: BundleStaleEvent): void;
 }
 
+export interface DrawLifecycleToken {
+  readonly label: string;
+  readonly recordedIn: BundleBackReferenceRegistry;
+}
+
 let nextDrawId = 1;
 
 type DrawState = {
@@ -229,7 +234,7 @@ type DrawState = {
   readonly errorSink?: ValidationErrorSink;
   readonly trackSettled?: (promise: Promise<unknown>) => void;
   readonly resolvedPipelineKeys: Set<string>;
-  readonly recordedIn: BundleBackReferenceRegistry;
+  readonly lifecycle: DrawLifecycleToken;
   readonly blendState?: GPUBlendState;
   readonly blendConstant?: GPUColorDict;
   readonly writeMask?: number;
@@ -302,6 +307,7 @@ export class InternalDraw implements Draw {
     const pipelineLayout = pipelineLayouts.get(bindGroupLayouts);
     const shaderModule = shaderModules.get(source, `${this.label}.shader`);
     const recordedIn = createBundleRegistry();
+    const lifecycle: DrawLifecycleToken = { label: this.label, recordedIn };
     const fragmentState = normalizeFragmentState(this.label, opts);
     const blendConstantOptions = normalizeBlendConstantOptions(this.label, opts, fragmentState);
     const primitiveOptions = normalizePrimitiveOptions(device, this.label, opts);
@@ -312,14 +318,13 @@ export class InternalDraw implements Draw {
     const setCore = createSetCore({
       device,
       label: this.label,
-      drawId: id,
       reflection,
       bindGroupLayouts,
       cache,
-      onIdentityChange: (change) => recordedIn.markStale({ kind: "binding-identity", drawLabel: this.label, ...change }),
     });
-    drawStates.set(this, { id, device, opts, vertexBufferLayouts, cache, defaultTarget, reflection, visibility, vertexEntry: vertexEntry?.name ?? "vs_main", fragmentEntry: fragmentEntry?.name ?? "fs_main", entryKey, setCore, bindGroupLayouts, pipelineLayout, shaderModule, pipelineStore, pipelineLayouts, errorSink, trackSettled, resolvedPipelineKeys: new Set(), recordedIn, ...fragmentState, ...blendConstantOptions, ...primitiveOptions, ...depthOptions, ...stencilOptions, ...multisampleOptions, ...constantsOptions });
-    if (opts.set) this.set(opts.set);
+    const { set: initialSet, ...retainedOpts } = opts;
+    drawStates.set(this, { id, device, opts: retainedOpts, vertexBufferLayouts, cache, defaultTarget, reflection, visibility, vertexEntry: vertexEntry?.name ?? "vs_main", fragmentEntry: fragmentEntry?.name ?? "fs_main", entryKey, setCore, bindGroupLayouts, pipelineLayout, shaderModule, pipelineStore, pipelineLayouts, errorSink, trackSettled, resolvedPipelineKeys: new Set(), lifecycle, ...fragmentState, ...blendConstantOptions, ...primitiveOptions, ...depthOptions, ...stencilOptions, ...multisampleOptions, ...constantsOptions });
+    if (initialSet) this.set(initialSet);
     for (const target of opts.targets ?? []) this.compileSync(target);
   }
 
@@ -347,7 +352,7 @@ export class InternalDraw implements Draw {
   set(values: SetBag): this {
     const state = drawState(this);
     assertDeviceUsable(state.device, `${this.label}.set`);
-    for (const change of state.setCore.set(values)) state.recordedIn.markStale({ kind: "binding-identity", drawLabel: this.label, ...change });
+    for (const change of state.setCore.set(values)) state.lifecycle.recordedIn.markStale({ kind: "binding-identity", drawLabel: state.lifecycle.label, ...change });
     return this;
   }
 
@@ -356,7 +361,7 @@ export class InternalDraw implements Draw {
     assertDeviceUsable(state.device, `${this.label}.group`);
     const expectedLayout = this.#dynamicBindGroupLayouts.get(n) ?? this.layout(n);
     const previousIdentity = state.setCore.claimGroup(n, bindGroup, expectedLayout);
-    state.recordedIn.markStale({ kind: "group-claim", drawLabel: this.label, group: n, previousIdentity, newIdentity: `claimed-group:${n}` });
+    state.lifecycle.recordedIn.markStale({ kind: "group-claim", drawLabel: state.lifecycle.label, group: n, previousIdentity, newIdentity: `claimed-group:${n}` });
     return this;
   }
 
@@ -375,6 +380,7 @@ export class InternalDraw implements Draw {
     const layout = cachedBindGroupLayout(state.device, `${this.label}.group${group}.dynamic.bgl`, entries);
     this.#dynamicBindGroupLayouts.set(group, layout);
     state.bindGroupLayouts.set(group, layout);
+    state.setCore.refreshLayouts();
     state.pipelineLayout = state.pipelineLayouts.get(state.bindGroupLayouts);
     return layout;
   }
@@ -392,6 +398,7 @@ export class InternalDraw implements Draw {
     const target = opts.target ?? state.defaultTarget;
     if (!target) throw targetRequiredError(`${this.label}.draw`);
     assertSurfaceTargetInFrame(target, `${this.label}.draw`);
+    state.setCore.preflight();
     const encoder = state.device.gpu.createCommandEncoder();
     const pass = encoder.beginRenderPass(target.renderPassDescriptor());
     const validations: ClaimedGroupValidationResult[] = [];
@@ -448,7 +455,7 @@ export class InternalDraw implements Draw {
 
   encode(pass: GPURenderPassEncoder, target: Target | TargetSignature, opts: DrawCallOptions = {}, claimValidation?: (result: ClaimedGroupValidationResult) => void, capture?: UniformCapture): void {
     assertDeviceUsable(drawState(this).device, `${this.label}.encode`);
-    drawState(this).setCore.assertUsable();
+    drawState(this).setCore.preflight();
     const pipeline = this.pipelineFor(target);
     if (!pipeline) return;
     pass.setPipeline(pipeline);
@@ -1063,14 +1070,17 @@ export function drawReflection(draw: Draw): Reflection { return drawState(draw).
 
 export function drawBindingState(draw: Draw, name: string): BindingState | undefined { return drawState(draw).setCore.bindingState(name); }
 
-/** Internal bundle hook: keeps captured uniforms live and observes resources of this encoded draw. */
-export function watchDrawResources(draw: InternalDraw, onDestroyed: (event: BundleStaleEvent) => void): () => void {
-  return drawState(draw).setCore.watchResources(change => onDestroyed({ kind: "binding-identity", drawLabel: draw.label, ...change }));
-}
+export function drawResourceSnapshots(draw: InternalDraw): readonly BindingResourceSnapshot[] { return drawState(draw).setCore.captureResources(); }
 
-export function registerDrawBundle(draw: Draw, bundle: BundleBackReference): void { drawState(draw).recordedIn.add(bundle); }
+export function drawLifecycleToken(draw: InternalDraw): DrawLifecycleToken { return drawState(draw).lifecycle; }
 
-export function unregisterDrawBundle(draw: Draw, bundle: BundleBackReference): void { drawState(draw).recordedIn.delete(bundle); }
+export function drawGeometrySnapshot(draw: InternalDraw): GeometryLive | undefined { return geometryLivenessOf(drawState(draw).opts.geometry); }
+
+export function drawCacheOwnerTestState(draw: InternalDraw): SetCoreTestState { return setCoreTestState(drawState(draw).setCore); }
+
+export function registerDrawBundle(draw: Draw, bundle: BundleBackReference): void { drawState(draw).lifecycle.recordedIn.add(bundle); }
+
+export function unregisterDrawBundle(draw: Draw, bundle: BundleBackReference): void { drawState(draw).lifecycle.recordedIn.delete(bundle); }
 
 /** Render bundle encoders cannot set the pass blend constant; bundle uses this to reject such draws at recording. */
 export function drawUsesBlendConstant(draw: Draw): boolean { return drawState(draw).blendConstant !== undefined; }
@@ -1115,11 +1125,6 @@ export function drawStencilWritingOps(draw: Draw): readonly string[] {
 
 export function encodeDraw(draw: InternalDraw, pass: GPURenderPassEncoder, target: Target | TargetSignature, opts: DrawCallOptions = {}, claimValidation?: (result: ClaimedGroupValidationResult) => void, capture?: UniformCapture): void {
   draw.encode(pass, target, opts, claimValidation, capture);
-}
-
-/** @internal Revalidates geometry captured by a draw before render-bundle replay. */
-export function assertDrawGeometryUsable(draw: InternalDraw, where: string): void {
-  geometryLivenessOf(drawState(draw).opts.geometry)?.[geometryLiveness](where);
 }
 
 function drawState(draw: Draw): DrawState {

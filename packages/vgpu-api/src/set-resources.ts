@@ -14,8 +14,19 @@ export interface NormalizedBindingResource {
   readonly resourceLabel?: string;
   readonly resource: GPUBindingResource;
   readonly identity: BindGroupIdentityPart;
-  readonly unsubscribe?: (cb: () => void) => UnsubscribeResourceDestroy;
-  readonly onRecreate?: (cb: () => void) => () => void;
+  readonly tracked?: readonly TrackedBindingResource[];
+  readonly followedTarget?: FollowedTargetBinding;
+}
+
+export interface TrackedBindingResource {
+  readonly resource: object;
+  readonly identity: BindGroupIdentityPart;
+  readonly subscribe: (cb: () => void) => UnsubscribeResourceDestroy;
+}
+
+export interface FollowedTargetBinding {
+  readonly target: Target;
+  readonly depth: boolean;
 }
 
 export interface ResourceNormalizationContext {
@@ -49,8 +60,9 @@ export function normalizeResource(binding: BindingInfo, value: unknown, context:
   assertResourceBindable(binding, value, context.sourceHint);
   try { return normalizeLiveResource(binding, value, context); }
   catch (error) {
-    if ((error as { code?: string })?.code === "VGPU-CORE-TEXTURE-DESTROYED") {
-      const label = value instanceof Texture ? value.label : asTarget(value)?.color.label;
+    const code = (error as { code?: string })?.code;
+    if (code === "VGPU-CORE-TEXTURE-DESTROYED" || code === "VGPU-BUFFER-DISPOSED") {
+      const label = code === "VGPU-BUFFER-DISPOSED" ? trackedBufferLabel(value) : value instanceof Texture ? value.label : asTarget(value)?.color.label;
       throw destroyedBindingError(context.sourceHint, binding, label);
     }
     throw error;
@@ -80,11 +92,11 @@ function normalizeBufferResource(binding: BindingInfo, value: unknown, context: 
   if (value instanceof Buffer) {
     assertBufferUsable(value, `${context.sourceHint}.set`);
     validateBufferUsage(binding, value.options.usage);
-    return { resource: { buffer: value.gpu }, identity: value.resourceIdentity, unsubscribe: (cb) => value.onDestroy(cb) };
+    return { resourceLabel: value.options.label ?? value.gpu.label, resource: { buffer: value.gpu }, identity: value.resourceIdentity, tracked: [trackedResource(value, value.resourceIdentity)] };
   }
   if (isUniformLike(value)) {
     assertBufferUsable(value.buffer, `${context.sourceHint}.set`);
-    return { resource: { buffer: value.gpu, offset: 0, size: value.size }, identity: value.buffer.resourceIdentity, unsubscribe: (cb) => value.buffer.onDestroy(cb) };
+    return { resourceLabel: value.buffer.options.label ?? value.buffer.gpu.label, resource: { buffer: value.gpu, offset: 0, size: value.size }, identity: value.buffer.resourceIdentity, tracked: [trackedResource(value.buffer, value.buffer.resourceIdentity)] };
   }
   if (isGPUBufferBinding(value)) {
     // Snapshot the caller's descriptor so later mutation cannot desynchronize resource and identity.
@@ -103,17 +115,18 @@ function normalizeTextureResource(binding: BindingInfo, value: unknown, context:
     if (depthBinding && !target.depth) throw incompatibleResourceError(binding, "a target with a depth attachment", `Create it with target(gpu, { size, depth: true }) or bind a Texture: set({ ${binding.name}: scene.depth }).`);
     const texture = depthBinding ? target.depth! : target.color;
     validateTextureFilterability(binding, texture, context);
-    const onTexturesRecreated = target.onTexturesRecreated?.bind(target);
-    return { resourceLabel: texture.label, resource: texture.createView(textureViewDescriptor(texture)), identity: texture.resourceIdentity, unsubscribe: (cb) => {
-      const unsubscribeTarget = target.onDestroy(cb);
-      const unsubscribeTexture = texture.onDestroy(cb);
-      return () => { unsubscribeTarget(); unsubscribeTexture(); };
-    }, onRecreate: onTexturesRecreated ? (cb) => onTexturesRecreated(cb) : undefined };
+    return {
+      resourceLabel: texture.label,
+      resource: texture.createView(textureViewDescriptor(texture)),
+      identity: texture.resourceIdentity,
+      tracked: [trackedResource(target, target.resourceIdentity), trackedResource(texture, texture.resourceIdentity)],
+      followedTarget: { target, depth: depthBinding },
+    };
   }
   if (value instanceof Texture) {
     validateTextureUsage(binding, value.usage);
     validateTextureFilterability(binding, value, context);
-    return { resourceLabel: value.label, resource: value.createView(textureViewDescriptor(value)), identity: value.resourceIdentity, unsubscribe: (cb) => value.onDestroy(cb) };
+    return { resourceLabel: value.label, resource: value.createView(textureViewDescriptor(value)), identity: value.resourceIdentity, tracked: [trackedResource(value, value.resourceIdentity)] };
   }
   if (isTextureLike(value)) return { resource: value.createView(), identity: value.resourceIdentity ?? syntheticIdentity(value) };
   if (typeof value === "object" && value !== null) return { resource: value as GPUTextureView, identity: syntheticIdentity(value) };
@@ -127,7 +140,7 @@ function normalizeStorageTextureResource(binding: BindingInfo, value: unknown): 
   if (asTarget(value)) throw incompatibleResourceError(binding, "a storage texture, not a Target", `Render targets are not storage textures. Create one with ${create} and set({ ${binding.name}: texture }).`);
   if (value instanceof Texture) {
     validateStorageTexture(binding, value, expected, create);
-    return { resourceLabel: value.label, resource: value.createView(storageViewDescriptor(expected.viewDimension)), identity: value.resourceIdentity, unsubscribe: (cb) => value.onDestroy(cb) };
+    return { resourceLabel: value.label, resource: value.createView(storageViewDescriptor(expected.viewDimension)), identity: value.resourceIdentity, tracked: [trackedResource(value, value.resourceIdentity)] };
   }
   if (isTextureLike(value)) return { resource: value.createView(storageViewDescriptor(expected.viewDimension)), identity: value.resourceIdentity ?? syntheticIdentity(value) };
   if (typeof value === "object" && value !== null) return { resource: value as GPUTextureView, identity: syntheticIdentity(value) };
@@ -196,6 +209,24 @@ function textureViewDescriptor(texture: Texture): GPUTextureViewDescriptor | und
 }
 
 type RecreatingTarget = Target & { readonly onTexturesRecreated?: (cb: () => void) => () => void };
+
+function trackedResource(
+  resource: { onDestroy(cb: () => void): UnsubscribeResourceDestroy },
+  identity: BindGroupIdentityPart,
+): TrackedBindingResource {
+  return { resource, identity, subscribe: (callback) => resource.onDestroy(callback) };
+}
+
+function trackedBufferLabel(value: unknown): string | undefined {
+  try {
+    const buffer = value instanceof Buffer
+      ? value
+      : typeof value === "object" && value !== null && "buffer" in value
+        ? (value as { readonly buffer?: unknown }).buffer
+        : undefined;
+    return buffer instanceof Buffer ? buffer.options.label ?? buffer.gpu.label : undefined;
+  } catch { return undefined; }
+}
 
 function asTarget(value: unknown): RecreatingTarget | undefined {
   if (typeof value !== "object" || value === null) return undefined;

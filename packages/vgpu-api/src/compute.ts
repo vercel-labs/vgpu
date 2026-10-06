@@ -80,7 +80,7 @@ export class ComputePipeline implements Compute {
       compute: { module: this.shaderModule, entryPoint: this.entryPoint, ...(constants ? { constants: { ...constants } } : {}) },
     };
     this.#key = computePipelineKeyOf(this.shaderModule, this.pipelineLayout, this.entryPoint, constantsKey);
-    this.setCore = createSetCore({ device, label: this.label, drawId: `compute:${this.id}`, reflection: this.reflection, bindGroupLayouts: this.bindGroupLayouts, cache: this.cache });
+    this.setCore = createSetCore({ device, label: this.label, reflection: this.reflection, bindGroupLayouts: this.bindGroupLayouts, cache: this.cache });
     const active = new Set(entryMetadata(entry, "bindings", this.label).map((binding) => `${binding.group}:${binding.binding}`));
     this.#storageBindings = this.reflection.bindings.filter((binding) => binding.kind === "buffer" && binding.addressSpace === "storage" && active.has(`${binding.group}:${binding.binding}`));
     if (opts.set) this.set(opts.set);
@@ -117,7 +117,7 @@ export class ComputePipeline implements Compute {
   dispatch(opts: DispatchOptions): void;
   dispatch(x: number | DispatchOptions, y?: number, z?: number): void {
     assertDeviceUsable(this.device, `${this.label}.dispatch`);
-    this.setCore.assertUsable();
+    this.setCore.preflight();
     this.#preflightAliasing();
     const validations: OperationValidation[] = [];
     const encoder = this.device.gpu.createCommandEncoder({ label: `${this.label}.encoder` });
@@ -137,6 +137,7 @@ export class ComputePipeline implements Compute {
 
   encode(pass: GPUComputePassEncoder, x: number | DispatchOptions, y: number | undefined, z: number | undefined, validations: OperationValidation[], capture?: UniformCapture): void {
     assertDeviceUsable(this.device, `${this.label}.dispatch`);
+    this.setCore.preflight();
     const indirect = typeof x === "object" && x !== null ? this.#resolveIndirectDispatch(x, y, z) : undefined;
     if (!indirect) {
       for (const [axis, count] of [["x", x], ["y", y ?? 1], ["z", z ?? 1]] as const) {

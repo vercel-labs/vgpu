@@ -121,6 +121,30 @@ test("R2 cache hits when alternating between two user-owned resource identities"
   gpu.dispose();
 });
 
+test("already-destroyed tracked buffer candidates use binding errors and preserve the live value", async () => {
+  const gpu = await init();
+  const drawable = effect(gpu, CAMERA_SHADER, { label: "dead-buffer-candidate" });
+  const output = target(gpu, { size: [4, 4] });
+  const live = gpu.device.createBuffer({ size: 4, usage: ["uniform", "copy_dst"], label: "live-camera" });
+  const dead = gpu.device.createBuffer({ size: 4, usage: ["uniform", "copy_dst"], label: "dead-camera" });
+  const deadUniform = gpu.device.createBuffer({ size: 4, usage: ["uniform", "copy_dst"], label: "dead-uniform" });
+  drawable.set({ camera: live });
+  dead.destroy();
+  deadUniform.destroy();
+
+  expect(() => drawable.set({ camera: dead })).toThrowError(expect.objectContaining({
+    code: "VGPU-R1-BINDING-DESTROYED",
+    where: "dead-buffer-candidate.camera",
+    message: expect.stringContaining("'camera' (@group(0) @binding(0))"),
+    detail: expect.objectContaining({ binding: 0, bindingName: "camera", resourceName: "dead-camera" }),
+  }));
+  expect(() => drawable.set({ camera: { gpu: deadUniform.gpu, size: 4, buffer: deadUniform } })).toThrowError(
+    expect.objectContaining({ code: "VGPU-R1-BINDING-DESTROYED", detail: expect.objectContaining({ resourceName: "dead-uniform" }) }),
+  );
+  expect(() => frame(gpu, current => current.pass(output, pass => pass.draw(drawable)))).not.toThrow();
+  gpu.dispose();
+});
+
 test("bundle back-refs stale only on identity changes, never lib-owned in-place writes", async () => {
   const gpu = await init();
   const wave = effect(gpu, WAVE, { label: "wave", set: { speed: 2 } });
@@ -193,12 +217,13 @@ test("plain draws sampling a resized target rebind with fresh bind groups across
   gpu.dispose();
 });
 
-test("target recreation subscriptions refresh across repeated resizes and are removed on re-set", async () => {
+test("lazy Target refresh emits no late draw-wide stale events while explicit set still does", async () => {
   const gpu = await init();
   const post = draw(gpu, { shader: TEXTURE_SHADER, label: "post" });
   const sourceA = target(gpu, { size: [4, 4] });
   const sourceB = target(gpu, { size: [4, 4] });
   const sourceC = target(gpu, { size: [4, 4] });
+  const output = target(gpu, { size: [4, 4] });
   const events: unknown[] = [];
 
   post.set({ src: sourceA });
@@ -211,23 +236,26 @@ test("target recreation subscriptions refresh across repeated resizes and are re
 
   sourceB.resize([8, 8]);
   sourceB.resize([16, 16]);
-  expect(events).toEqual([
-    expect.objectContaining({ kind: "binding-identity", group: 0, binding: 0, bindingName: "src" }),
-    expect.objectContaining({ kind: "binding-identity", group: 0, binding: 0, bindingName: "src" }),
-  ]);
+  frame(gpu, current => current.pass(output, pass => pass.draw(post)));
+  expect(events).toEqual([]);
 
   post.set({ src: sourceC });
+  expect(events).toEqual([expect.objectContaining({ kind: "binding-identity", group: 0, binding: 0, bindingName: "src" })]);
   events.length = 0;
   sourceB.resize([32, 32]);
   expect(events).toEqual([]);
 
   sourceC.resize([8, 8]);
-  expect(events).toEqual([expect.objectContaining({ kind: "binding-identity", group: 0, binding: 0, bindingName: "src" })]);
+  frame(gpu, current => current.pass(output, pass => pass.draw(post)));
+  expect(events).toEqual([]);
 
   events.length = 0;
   sourceC.destroy();
   expect(() => sourceC.resize([16, 16])).toThrow(/destroyed/);
-  expect(events).toEqual([expect.objectContaining({ kind: "binding-identity", newIdentity: expect.stringContaining("destroyed:") })]);
+  expect(() => frame(gpu, current => current.pass(output, pass => pass.draw(post)))).toThrowError(
+    expect.objectContaining({ code: "VGPU-R1-BINDING-DESTROYED" }),
+  );
+  expect(events).toEqual([]);
   gpu.dispose();
 });
 
