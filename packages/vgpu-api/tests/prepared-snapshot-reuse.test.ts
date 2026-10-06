@@ -405,6 +405,17 @@ describe("invalid and hostile inputs are never cached", () => {
     mutableExports.push({ name: "", resolvedName: "g_1", parameterNames: [] });
     expectInvalidAt(() => draw(gpu, { shader: late }), "functionExports[1].name");
 
+    // So must a mutable container visited before it: the reentrant call restores, not resets, the outer state.
+    const earlySource = structuredClone(prepareShader(DRAW)) as any;
+    const mutableBindings = earlySource.reflection.bindings;
+    const early = withProxiedReflection(deepFreeze(earlySource, new Set([mutableBindings])), true, (key) => {
+      if (key === "hostShareableLayouts") draw(gpu, { shader: mutable });
+    });
+    draw(gpu, { shader: early });
+    draw(gpu, { shader: early });
+    mutableBindings.push(structuredClone(mutableBindings[0]));
+    expectInvalidAt(() => draw(gpu, { shader: early }), "reflection.bindings[1]");
+
     clones.mockClear();
     const mutableOuter = withProxiedReflection(deepFreeze(structuredClone(prepareShader(DRAW))), false, (key) => {
       if (key === "bindings") effect(gpu, frozenInner);

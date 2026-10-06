@@ -10,11 +10,10 @@ export interface PreparedShaderSnapshot {
   readonly functionExports?: ShaderSource["functionExports"];
 }
 
-// Validated snapshots of artifacts whose whole consumed graph was frozen before it was read. Weak keys:
-// an entry lives only as long as its artifact, and nothing here is tied to a device.
-const immutableSnapshots = new WeakMap<object, PreparedShaderSnapshot>();
-// The checksum of the exact wgsl text last seen on each artifact; the supplied checksum is still compared every time.
-const checksums = new WeakMap<object, { readonly wgsl: string; readonly checksum: string }>();
+// Per artifact, weakly keyed and never tied to a device: the checksum of the exact wgsl text last seen (the
+// supplied checksum is still compared on every call) and, once the whole consumed graph was proven frozen
+// before it was read, the validated snapshot.
+const artifacts = new WeakMap<object, { readonly wgsl: string; readonly checksum: string; snapshot?: PreparedShaderSnapshot }>();
 
 /**
  * Copies and validates the complete prepared artifact before renderer state retains any metadata.
@@ -25,8 +24,8 @@ export function snapshotShaderSource(input: ShaderSource): PreparedShaderSnapsho
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     throw invalidShaderSourceError("shader", "expected a prepared ShaderSource object");
   }
-  const cached = immutableSnapshots.get(input);
-  if (cached) return cached;
+  let known = artifacts.get(input);
+  if (known?.snapshot) return known.snapshot;
 
   // The version is consumed data too: the root must be frozen before it is read.
   const rootFrozen = isProvenFrozen(input);
@@ -37,12 +36,11 @@ export function snapshotShaderSource(input: ShaderSource): PreparedShaderSnapsho
   }
   if (version !== 2) throw invalidShaderSourceError("version", "expected integer artifact version 2");
 
-  const { data, immutable } = clonePreparedShaderData(input);
+  const [data, graphFrozen] = clonePreparedShaderData(input);
   if (!/^fnv1a64-utf16le-v1:[0-9a-f]{16}$/.test(data.sourceChecksum)) {
     throw invalidShaderSourceError("sourceChecksum", "expected fnv1a64-utf16le-v1 followed by 16 lowercase hexadecimal digits");
   }
-  let known = checksums.get(input);
-  if (known?.wgsl !== data.wgsl) checksums.set(input, known = { wgsl: data.wgsl, checksum: shaderSourceChecksum(data.wgsl) });
+  if (known?.wgsl !== data.wgsl) artifacts.set(input, known = { wgsl: data.wgsl, checksum: shaderSourceChecksum(data.wgsl) });
   if (data.sourceChecksum !== known.checksum) {
     throw invalidShaderSourceError("sourceChecksum", "checksum does not match wgsl");
   }
@@ -52,7 +50,7 @@ export function snapshotShaderSource(input: ShaderSource): PreparedShaderSnapsho
     reflection: data.reflection,
     ...(data.functionExports !== undefined ? { functionExports: data.functionExports } : {}),
   });
-  if (rootFrozen && immutable) immutableSnapshots.set(input, snapshot);
+  if (rootFrozen && graphFrozen) known.snapshot = snapshot;
   return snapshot;
 }
 

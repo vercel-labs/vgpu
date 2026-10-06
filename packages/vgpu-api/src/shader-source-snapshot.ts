@@ -15,16 +15,17 @@ type PreparedData = {
 };
 
 const active = new WeakSet<object>();
-// Set while a clone runs; restored afterwards so a reentrant clone (e.g. from a Proxy trap) keeps its own answer.
-let visit: { immutable: boolean } | undefined;
+// Whether every container the running clone visited was frozen before it was read. Saved and restored
+// per clone, so a reentrant clone (e.g. from a Proxy trap) cannot change the outer clone's answer.
+let provenFrozen = true;
 
 /**
- * Copies and validates the consumed artifact graph. `immutable` is true only when every visited
- * object and array was already frozen before any of its fields were read, so nothing consumed can change later.
+ * Copies and validates the consumed artifact graph. The flag is true only when every visited object and
+ * array was already frozen before any of its fields were read, so nothing consumed can change later.
  */
-export function clonePreparedShaderData(input: ShaderSource): { readonly data: PreparedData; readonly immutable: boolean } {
-  const outer = visit;
-  const current = visit = { immutable: true };
+export function clonePreparedShaderData(input: ShaderSource): readonly [data: PreparedData, provenFrozen: boolean] {
+  const outer = provenFrozen;
+  provenFrozen = true;
   try {
     const data = withRecord(input, "shader", object => {
       const functionExports = optional(object, "functionExports", "functionExports");
@@ -38,9 +39,9 @@ export function clonePreparedShaderData(input: ShaderSource): { readonly data: P
         ...(functionExports.present ? { functionExports: cloneArray(functionExports.value, "functionExports", cloneFunctionExport) } : {}),
       };
     });
-    return { data, immutable: current.immutable };
+    return [data, provenFrozen];
   } finally {
-    visit = outer;
+    provenFrozen = outer;
   }
 }
 
@@ -51,7 +52,7 @@ export function isProvenFrozen(value: object): boolean {
 
 // Must run before reading anything from the container: a frozen container can never change afterwards.
 function noteFrozen(value: object): void {
-  if (visit?.immutable && !isProvenFrozen(value)) visit.immutable = false;
+  if (!isProvenFrozen(value)) provenFrozen = false;
 }
 
 function cloneReflection(value: unknown, path: string): Reflection {
