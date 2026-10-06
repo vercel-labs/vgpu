@@ -6,6 +6,7 @@ import { entryMetadata } from "./entry-metadata.ts";
 import { claimedGroupIncompatibleError, claimedGroupSetError, destroyedBindingError, neverSetError, ownershipFlipError, unsupportedError } from "./errors.ts";
 import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, pipelineLayoutFor } from "./set-layouts.ts";
 import { assertResourceBindable, isPlainObject, isPlainValue, normalizeResource } from "./set-resources.ts";
+import { bytesEqual } from "./bytes-equal.ts";
 import { writeLayoutValue } from "./set-packing.ts";
 
 export type SetBag = Record<string, unknown>;
@@ -60,6 +61,7 @@ type MutableBindingState = {
   dirtyUniform?: boolean;
   liveUniform?: boolean;
   uniformValue?: () => UniformValue;
+  ownedValue?: UniformValue;
   prepareUniform?: (retain: boolean) => void;
   libValue?: unknown;
   resource?: GPUBindingResource;
@@ -76,6 +78,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
   const bindings = initializeBindings(options.reflection);
   const groups = [...options.bindGroupLayouts.keys()].sort((a, b) => a - b);
   const claimedGroups = new Map<number, GPUBindGroup>();
+  const activeBindingsByGroup = new Map<number, { readonly layout: GPUBindGroupLayout; readonly bindings: readonly BindingInfo[] }>();
 
   function set(values: SetBag): readonly BindingIdentityChange[] {
     const changes: BindingIdentityChange[] = [];
@@ -127,10 +130,17 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     const bytes = writeLayoutValue(layout, value);
     state.libValue = value;
     if (!state.buffer) createLibBuffer(state, layout.size);
-    state.bytes = bytes;
-    state.revision = (state.revision ?? 0) + 1;
-    state.dirtyUniform = true;
-    if (state.liveUniform || state.info.addressSpace !== "uniform") prepareUniform(state, false);
+    // Equal packed bytes keep the revision (and frame snapshot) and any pending upload as they are.
+    if (!state.bytes || !bytesEqual(state.bytes, bytes)) {
+      state.bytes = bytes;
+      state.revision = (state.revision ?? 0) + 1;
+      state.dirtyUniform = true;
+    }
+    // Storage and live uniform buffers can change behind our back: always write them.
+    if (state.liveUniform || state.info.addressSpace !== "uniform") {
+      state.dirtyUniform = true;
+      prepareUniform(state, false);
+    }
   }
 
   function prepareUniform(state: MutableBindingState, retain: boolean): void {
@@ -231,23 +241,36 @@ export function createSetCore(options: SetCoreOptions): SetCore {
   function bindGroupFor(group: number, capture?: UniformCapture): { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimValidation?: { readonly label: string; readonly group: number } } {
     const claimed = claimedGroups.get(group);
     if (claimed) return { group, bindGroup: claimed, offsets: [], claimValidation: rawClaimValidation(claimed, group) };
-    const active = new Set(bindGroupLayoutMetadata(layout(group))?.entries.map((entry) => entry.binding));
-    const groupBindings = options.reflection.bindings.filter((binding) => binding.group === group && active.has(binding.binding));
-    const resolved = groupBindings.map(binding => {
+    const groupBindings = activeBindings(group);
+    const resources: GPUBindingResource[] = [];
+    const identities: BindGroupIdentityPart[] = [];
+    for (const binding of groupBindings) {
       const state = requiredState(binding);
-      const value = state.uniformValue?.() ?? (state.bytes && binding.addressSpace === "uniform" ? { owner: state, revision: state.revision!, bytes: new Uint8Array(state.bytes) } : undefined);
+      const value = state.uniformValue?.() ?? (state.bytes && binding.addressSpace === "uniform" ? ownedUniformValue(state) : undefined);
       const captured = capture && value ? capture.capture(value, options.cache) : undefined;
       if (!captured) prepareUniform(state, false);
-      return { binding: binding.binding, resource: captured?.resource ?? state.resource!, identity: captured?.identity ?? state.identity! };
-    });
-    const entries = resolved.map(({ binding, resource }) => ({ binding, resource }));
-    const identities = resolved.map(({ identity }) => identity);
+      resources.push(captured?.resource ?? state.resource!);
+      identities.push(captured?.identity ?? state.identity!);
+    }
     const bindGroup = options.cache.getOrCreate(options.drawId, group, identities, () => options.device.gpu.createBindGroup({
       label: `${options.label}.group${group}`,
       layout: layout(group),
-      entries,
+      entries: groupBindings.map((binding, index) => ({ binding: binding.binding, resource: resources[index]! })),
     }));
     return { group, bindGroup, offsets: [] };
+  }
+
+  /** Reflected bindings present in the group's current layout; recomputed when the layout object changes. */
+  function activeBindings(group: number): readonly BindingInfo[] {
+    const bgl = layout(group);
+    const cached = activeBindingsByGroup.get(group);
+    if (cached?.layout === bgl) return cached.bindings;
+    // A replaced layout (draw.layout(n, { dynamicOffsets: true })) invalidates the bind groups built for the old one.
+    if (cached) options.cache.clearDraw(options.drawId, group);
+    const active = new Set(bindGroupLayoutMetadata(bgl)?.entries.map((entry) => entry.binding));
+    const bindings = options.reflection.bindings.filter((binding) => binding.group === group && active.has(binding.binding));
+    activeBindingsByGroup.set(group, { layout: bgl, bindings });
+    return bindings;
   }
 
   function rawClaimValidation(bindGroup: GPUBindGroup, group: number): { readonly label: string; readonly group: number } | undefined {
@@ -290,6 +313,12 @@ export function createSetCore(options: SetCoreOptions): SetCore {
       return { info: state.info, ownership: state.ownership, resource: state.resource, identity: state.identity };
     },
   };
+}
+
+function ownedUniformValue(state: MutableBindingState): UniformValue {
+  const value = state.ownedValue;
+  if (value && value.revision === state.revision) return value;
+  return state.ownedValue = { owner: state, revision: state.revision!, bytes: new Uint8Array(state.bytes!) };
 }
 
 function initializeBindings(reflection: Reflection): Map<string, MutableBindingState> {

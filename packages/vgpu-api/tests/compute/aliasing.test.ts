@@ -48,6 +48,17 @@ describe("compute storage aliasing", () => {
     expect(() => sim.dispatch(1)).not.toThrow();
   });
 
+  test("ranges of one raw buffer alias by buffer, not by range", async () => {
+    gpu = await init();
+    const buffer = gpu.gpu.createBuffer({ size: 1024, usage: 0x80 | 0x08 });
+    const sim = compute(gpu, ALIASING_SHADER, { label: "sim" });
+    sim.set({ src: { buffer, offset: 0, size: 256 }, dst: { buffer, offset: 512, size: 256 } });
+    expect(() => sim.dispatch(1)).toThrowError("`src` and writable `dst` alias. Fix: alternate them with pingPongStorage(gpu).");
+    const reader = compute(gpu, READ_ONLY_SHADER, { label: "reader" });
+    reader.set({ a: { buffer, offset: 0, size: 256 }, b: { buffer, offset: 256, size: 256 }, dst: storage(gpu, 32) });
+    expect(() => reader.dispatch(1)).not.toThrow();
+  });
+
   test("unused writable storage bindings do not participate in aliasing", async () => {
     gpu = await init();
     const shader = `

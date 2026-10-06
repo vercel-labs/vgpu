@@ -6,7 +6,7 @@ import type { Device } from "@vgpu/core";
 import type { ShaderSource } from "@vgpu/wgsl";
 import { reflectSource, type BindingInfo, type EntryPointInfo, type Reflection } from "@vgpu/wgsl/reflect-source";
 import { entryMetadata } from "./entry-metadata.ts";
-import { createBindGroupCache, identityKey, type BindGroupCache, type BindGroupIdentityPart } from "./bind-cache.ts";
+import { baseIdentityKey, createBindGroupCache, type BindGroupCache, type BindGroupIdentityPart } from "./bind-cache.ts";
 import { createSetCore, bindGroupLayoutsForReflection, type SetBag, type SetCore } from "./set-core.ts";
 import { visibilityForEntries } from "./set-layouts.ts";
 import type { Compute, ComputeOptions, DispatchOptions } from "./api-types.ts";
@@ -189,7 +189,8 @@ export class ComputePipeline implements Compute {
     for (const binding of this.#storageBindings) {
       const state = this.setCore.bindingState(binding.name);
       if (!state) continue;
-      const key = identityKey(state.identity);
+      // Aliasing is buffer-granular: native validation remains the authority on overlapping ranges.
+      const key = baseIdentityKey(state.identity);
       if (!buckets.has(key)) buckets.set(key, []);
       buckets.get(key)!.push({ identity: state.identity, writable: binding.access !== "read" });
     }

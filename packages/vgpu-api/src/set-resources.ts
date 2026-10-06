@@ -1,7 +1,7 @@
 import type { UniformValue } from "./frame-uniforms.ts";
 import { Buffer, Texture, type ResourceIdentity, type UnsubscribeResourceDestroy } from "@vgpu/core";
 import type { BindingInfo } from "@vgpu/wgsl/reflect-source";
-import type { BindGroupIdentityPart } from "./bind-cache.ts";
+import type { BindGroupIdentityPart, BufferRangeIdentity } from "./bind-cache.ts";
 import { destroyedBindingError, incompatibleResourceError, surfaceNotBindableError, textureFilterabilityError } from "./errors.ts";
 import type { Target } from "./target.ts";
 import { assertBufferUsable } from "./lifecycle.ts";
@@ -35,13 +35,13 @@ export function isPlainValue(value: unknown): boolean {
   if (typeof value !== "object") return true;
   if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer || Array.isArray(value)) return true;
   if (value instanceof Buffer || value instanceof Texture) return false;
-  return !hasAnyResourceShape(value);
+  return !hasAnyResourceShape(value) && !isRawBufferResource(value);
 }
 
 export function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value) || ArrayBuffer.isView(value) || value instanceof ArrayBuffer) return false;
   if (value instanceof Buffer || value instanceof Texture) return false;
-  return !hasAnyResourceShape(value);
+  return !hasAnyResourceShape(value) && !isRawBufferResource(value);
 }
 
 /** Normalizes resources for the reflected binding kind and rejects incompatible values with vgpu fix-its. */
@@ -86,8 +86,12 @@ function normalizeBufferResource(binding: BindingInfo, value: unknown, context: 
     assertBufferUsable(value.buffer, `${context.sourceHint}.set`);
     return { resource: { buffer: value.gpu, offset: 0, size: value.size }, identity: value.buffer.resourceIdentity, unsubscribe: (cb) => value.buffer.onDestroy(cb) };
   }
-  if (isGPUBufferBinding(value)) return { resource: value, identity: syntheticIdentity(value.buffer) };
-  if (isRawGPUBuffer(value)) return { resource: { buffer: value }, identity: syntheticIdentity(value) };
+  if (isGPUBufferBinding(value)) {
+    // Snapshot the caller's descriptor so later mutation cannot desynchronize resource and identity.
+    const { buffer, offset, size } = value;
+    return { resource: { buffer, ...(offset !== undefined && { offset }), ...(size !== undefined && { size }) }, identity: rangeIdentity(buffer, offset, size) };
+  }
+  if (isRawGPUBuffer(value)) return { resource: { buffer: value }, identity: rangeIdentity(value) };
   throw incompatibleResourceError(binding, "buffer", `Pass a compatible Buffer/Uniform: ${binding.name}.set({ ${binding.name}: gpu.device.createBuffer(...) }).`);
 }
 
@@ -213,6 +217,17 @@ function syntheticIdentity(value: unknown): BindGroupIdentityPart {
     syntheticIds.set(value, id);
   }
   return id;
+}
+
+/** Raw buffers are keyed by the effective range: equivalent descriptors share it, other ranges do not. */
+function rangeIdentity(buffer: GPUBuffer, offset = 0, size = buffer.size - offset): BufferRangeIdentity {
+  const { kind, id } = syntheticIdentity(buffer) as { readonly kind: string; readonly id: number };
+  return { kind, id, offset, size };
+}
+
+/** Checked after the resource-shape test: reading `buffer` on a shared uniforms block would make it live. */
+function isRawBufferResource(value: unknown): boolean {
+  return isRawGPUBuffer(value) || isGPUBufferBinding(value);
 }
 
 function isUniformLike(value: unknown): value is { readonly gpu: GPUBuffer; readonly size: number; readonly buffer: Buffer } {

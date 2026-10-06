@@ -9,6 +9,8 @@ import { sharedUniformLayoutMismatchError, unsupportedError } from "./errors.ts"
 import { writeLayoutValue } from "./set-packing.ts";
 import { formatSharedUniformLayout, sharedUniformLayoutSignature } from "./uniforms-layout.ts";
 import { assertBufferUsable } from "./lifecycle.ts";
+import { bytesEqual } from "./bytes-equal.ts";
+import type { UniformValue } from "./frame-uniforms.ts";
 
 interface SharedUniformLayoutState {
   readonly layout: HostShareableLayout & { readonly size: number };
@@ -31,6 +33,7 @@ export class SharedUniformsImpl<T extends Record<string, unknown>> implements Sh
   #bufferRef?: Buffer;
   #dirty = false;
   #liveUniform = false;
+  #uniformValue?: UniformValue;
 
   constructor(private readonly device: Device, initialValues: T) {
     this.#values = cloneRecord(initialValues);
@@ -46,13 +49,16 @@ export class SharedUniformsImpl<T extends Record<string, unknown>> implements Sh
     if (this.#state && this.#bufferRef) {
       assertBufferUsable(this.#bufferRef, "uniforms.set");
       const bytes = writeLayoutValue(this.#state.layout, next);
+      // Storage and exposed buffers can change behind our back: always write them.
       const live = this.#liveUniform || this.#state.addressSpace === "storage";
       if (live) this.#bufferRef.write(bytes, 0);
-      this.#bytes = new Uint8Array(bytes);
-      this.#dirty = !live;
-    }
+      if (!this.#bytes || !bytesEqual(this.#bytes, bytes)) {
+        this.#bytes = new Uint8Array(bytes);
+        this.#revision += 1;
+        this.#dirty = !live;
+      } else if (live) this.#dirty = false;
+    } else this.#revision += 1;
     this.#values = next;
-    this.#revision += 1;
   }
 
   /**
@@ -69,12 +75,18 @@ export class SharedUniformsImpl<T extends Record<string, unknown>> implements Sh
     return {
       resource: { buffer: buffer.gpu, offset: 0, size: adopted.layout.size },
       ...(adopted.addressSpace === "uniform" ? {
-        uniformValue: () => ({ owner: this, revision: this.#revision, bytes: this.#bytes! }),
+        uniformValue: () => this.#currentUniformValue(),
         prepareUniform: (retain: boolean) => this.#prepareUniform(retain),
       } : {}),
       identity: buffer.resourceIdentity,
       unsubscribe: (cb) => buffer.onDestroy(cb),
     };
+  }
+
+  #currentUniformValue(): UniformValue {
+    const value = this.#uniformValue;
+    if (value?.revision === this.#revision && value.bytes === this.#bytes) return value;
+    return this.#uniformValue = { owner: this, revision: this.#revision, bytes: this.#bytes! };
   }
 
   #ensureLayout(binding: BindingInfo, sourceHint: string): SharedUniformLayoutState {
