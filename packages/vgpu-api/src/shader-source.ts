@@ -1,7 +1,7 @@
 import type { ShaderSource } from "@vgpu/wgsl";
 import type { Reflection } from "@vgpu/wgsl/reflect-source";
 import { invalidShaderSourceError, unpreparedShaderSourceError, unsupportedShaderSourceVersionError } from "./errors.ts";
-import { clonePreparedShaderData } from "./shader-source-snapshot.ts";
+import { clonePreparedShaderData, isProvenFrozen } from "./shader-source-snapshot.ts";
 import { shaderSourceChecksum } from "./shader-source-checksum.ts";
 
 export interface PreparedShaderSnapshot {
@@ -10,13 +10,26 @@ export interface PreparedShaderSnapshot {
   readonly functionExports?: ShaderSource["functionExports"];
 }
 
-/** Copies and validates the complete prepared artifact before renderer state retains any metadata. */
+// Validated snapshots of artifacts whose whole consumed graph was frozen before it was read. Weak keys:
+// an entry lives only as long as its artifact, and nothing here is tied to a device.
+const immutableSnapshots = new WeakMap<object, PreparedShaderSnapshot>();
+// The checksum of the exact wgsl text last seen on each artifact; the supplied checksum is still compared every time.
+const checksums = new WeakMap<object, { readonly wgsl: string; readonly checksum: string }>();
+
+/**
+ * Copies and validates the complete prepared artifact before renderer state retains any metadata.
+ * A deeply frozen artifact is validated once and its snapshot reused; any other artifact is revalidated on each call.
+ */
 export function snapshotShaderSource(input: ShaderSource): PreparedShaderSnapshot {
   if (typeof input === "string") throw unpreparedShaderSourceError();
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     throw invalidShaderSourceError("shader", "expected a prepared ShaderSource object");
   }
+  const cached = immutableSnapshots.get(input);
+  if (cached) return cached;
 
+  // The version is consumed data too: the root must be frozen before it is read.
+  const rootFrozen = isProvenFrozen(input);
   const version = ownData(input, "version");
   if (version === 1) throw unpreparedShaderSourceError();
   if (typeof version === "number" && Number.isInteger(version) && version !== 2) {
@@ -24,19 +37,23 @@ export function snapshotShaderSource(input: ShaderSource): PreparedShaderSnapsho
   }
   if (version !== 2) throw invalidShaderSourceError("version", "expected integer artifact version 2");
 
-  const data = clonePreparedShaderData(input);
+  const { data, immutable } = clonePreparedShaderData(input);
   if (!/^fnv1a64-utf16le-v1:[0-9a-f]{16}$/.test(data.sourceChecksum)) {
     throw invalidShaderSourceError("sourceChecksum", "expected fnv1a64-utf16le-v1 followed by 16 lowercase hexadecimal digits");
   }
-  if (data.sourceChecksum !== shaderSourceChecksum(data.wgsl)) {
+  let known = checksums.get(input);
+  if (known?.wgsl !== data.wgsl) checksums.set(input, known = { wgsl: data.wgsl, checksum: shaderSourceChecksum(data.wgsl) });
+  if (data.sourceChecksum !== known.checksum) {
     throw invalidShaderSourceError("sourceChecksum", "checksum does not match wgsl");
   }
 
-  return deepFreeze({
+  const snapshot = deepFreeze({
     wgsl: data.wgsl,
     reflection: data.reflection,
     ...(data.functionExports !== undefined ? { functionExports: data.functionExports } : {}),
   });
+  if (rootFrozen && immutable) immutableSnapshots.set(input, snapshot);
+  return snapshot;
 }
 
 function ownData(object: object, key: string): unknown {

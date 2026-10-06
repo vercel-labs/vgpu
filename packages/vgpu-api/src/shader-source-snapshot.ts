@@ -15,20 +15,43 @@ type PreparedData = {
 };
 
 const active = new WeakSet<object>();
+// Set while a clone runs; restored afterwards so a reentrant clone (e.g. from a Proxy trap) keeps its own answer.
+let visit: { immutable: boolean } | undefined;
 
-export function clonePreparedShaderData(input: ShaderSource): PreparedData {
-  return withRecord(input, "shader", object => {
-    const functionExports = optional(object, "functionExports", "functionExports");
-    const reflection = cloneReflection(required(object, "reflection", "reflection"), "reflection");
-    validateReflection(reflection);
-    return {
-      wgsl: stringField(object, "wgsl", "wgsl", true),
-      reflection,
-      sourceChecksum: stringField(object, "sourceChecksum", "sourceChecksum"),
-      producer: stringField(object, "producer", "producer"),
-      ...(functionExports.present ? { functionExports: cloneArray(functionExports.value, "functionExports", cloneFunctionExport) } : {}),
-    };
-  });
+/**
+ * Copies and validates the consumed artifact graph. `immutable` is true only when every visited
+ * object and array was already frozen before any of its fields were read, so nothing consumed can change later.
+ */
+export function clonePreparedShaderData(input: ShaderSource): { readonly data: PreparedData; readonly immutable: boolean } {
+  const outer = visit;
+  const current = visit = { immutable: true };
+  try {
+    const data = withRecord(input, "shader", object => {
+      const functionExports = optional(object, "functionExports", "functionExports");
+      const reflection = cloneReflection(required(object, "reflection", "reflection"), "reflection");
+      validateReflection(reflection);
+      return {
+        wgsl: stringField(object, "wgsl", "wgsl", true),
+        reflection,
+        sourceChecksum: stringField(object, "sourceChecksum", "sourceChecksum"),
+        producer: stringField(object, "producer", "producer"),
+        ...(functionExports.present ? { functionExports: cloneArray(functionExports.value, "functionExports", cloneFunctionExport) } : {}),
+      };
+    });
+    return { data, immutable: current.immutable };
+  } finally {
+    visit = outer;
+  }
+}
+
+/** False when the value is not frozen or its integrity cannot be inspected (a Proxy trap may throw). */
+export function isProvenFrozen(value: object): boolean {
+  try { return Object.isFrozen(value); } catch { return false; }
+}
+
+// Must run before reading anything from the container: a frozen container can never change afterwards.
+function noteFrozen(value: object): void {
+  if (visit?.immutable && !isProvenFrozen(value)) visit.immutable = false;
 }
 
 function cloneReflection(value: unknown, path: string): Reflection {
@@ -536,6 +559,7 @@ function dataEqual(a: unknown, b: unknown): boolean {
 
 function cloneArray<T>(value: unknown, path: string, clone: (value: unknown, path: string) => T): T[] {
   if (!Array.isArray(value)) fail(path, "expected an array");
+  noteFrozen(value);
   return withActive(value, path, () => {
     const result: T[] = [];
     for (let index = 0; index < value.length; index++) {
@@ -550,6 +574,7 @@ function cloneArray<T>(value: unknown, path: string, clone: (value: unknown, pat
 
 function withRecord<T>(value: unknown, path: string, build: (value: Record<string, unknown>) => T): T {
   if (typeof value !== "object" || value === null || Array.isArray(value)) fail(path, "expected a plain data object");
+  noteFrozen(value);
   let prototype: object | null;
   try { prototype = Object.getPrototypeOf(value); } catch { return fail(path, "could not inspect object prototype"); }
   if (prototype !== Object.prototype && prototype !== null) fail(path, "expected a plain data object");
