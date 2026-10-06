@@ -6,6 +6,7 @@ import { entryMetadata } from "./entry-metadata.ts";
 import { claimedGroupIncompatibleError, claimedGroupSetError, destroyedBindingError, neverSetError, ownershipFlipError, unsupportedError } from "./errors.ts";
 import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, pipelineLayoutFor } from "./set-layouts.ts";
 import { assertResourceBindable, isPlainObject, isPlainValue, normalizeResource } from "./set-resources.ts";
+import { bytesEqual } from "./bytes-equal.ts";
 import { writeLayoutValue } from "./set-packing.ts";
 
 export type SetBag = Record<string, unknown>;
@@ -60,6 +61,7 @@ type MutableBindingState = {
   dirtyUniform?: boolean;
   liveUniform?: boolean;
   uniformValue?: () => UniformValue;
+  ownedValue?: UniformValue;
   prepareUniform?: (retain: boolean) => void;
   libValue?: unknown;
   resource?: GPUBindingResource;
@@ -127,10 +129,17 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     const bytes = writeLayoutValue(layout, value);
     state.libValue = value;
     if (!state.buffer) createLibBuffer(state, layout.size);
-    state.bytes = bytes;
-    state.revision = (state.revision ?? 0) + 1;
-    state.dirtyUniform = true;
-    if (state.liveUniform || state.info.addressSpace !== "uniform") prepareUniform(state, false);
+    // Equal packed bytes keep the revision (and frame snapshot) and any pending upload as they are.
+    if (!state.bytes || !bytesEqual(state.bytes, bytes)) {
+      state.bytes = bytes;
+      state.revision = (state.revision ?? 0) + 1;
+      state.dirtyUniform = true;
+    }
+    // Storage and live uniform buffers can change behind our back: always write them.
+    if (state.liveUniform || state.info.addressSpace !== "uniform") {
+      state.dirtyUniform = true;
+      prepareUniform(state, false);
+    }
   }
 
   function prepareUniform(state: MutableBindingState, retain: boolean): void {
@@ -235,7 +244,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     const groupBindings = options.reflection.bindings.filter((binding) => binding.group === group && active.has(binding.binding));
     const resolved = groupBindings.map(binding => {
       const state = requiredState(binding);
-      const value = state.uniformValue?.() ?? (state.bytes && binding.addressSpace === "uniform" ? { owner: state, revision: state.revision!, bytes: new Uint8Array(state.bytes) } : undefined);
+      const value = state.uniformValue?.() ?? (state.bytes && binding.addressSpace === "uniform" ? ownedUniformValue(state) : undefined);
       const captured = capture && value ? capture.capture(value, options.cache) : undefined;
       if (!captured) prepareUniform(state, false);
       return { binding: binding.binding, resource: captured?.resource ?? state.resource!, identity: captured?.identity ?? state.identity! };
@@ -290,6 +299,12 @@ export function createSetCore(options: SetCoreOptions): SetCore {
       return { info: state.info, ownership: state.ownership, resource: state.resource, identity: state.identity };
     },
   };
+}
+
+function ownedUniformValue(state: MutableBindingState): UniformValue {
+  const value = state.ownedValue;
+  if (value && value.revision === state.revision) return value;
+  return state.ownedValue = { owner: state, revision: state.revision!, bytes: new Uint8Array(state.bytes!) };
 }
 
 function initializeBindings(reflection: Reflection): Map<string, MutableBindingState> {
