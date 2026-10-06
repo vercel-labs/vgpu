@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { effect, frame, init, target, uniforms, type Frame } from "../../src/mock.ts";
+import { draw, effect, frame, getMockGPUDeviceInstrumentation, init, target, uniforms, type Frame } from "../../src/mock.ts";
 import { CAPTURE_PAGE_KIND, createBindGroupCache, type BufferRangeIdentity } from "../../src/bind-cache.ts";
 import { FrameUniforms, MAX_RETAINED_UNIFORM_PAGES, disposeFrameUniforms } from "../../src/frame-uniforms.ts";
 import { liveKernel } from "../../src/live-kernel.ts";
@@ -321,6 +321,28 @@ test("page identities are unique across devices", async () => {
     disposeFrameUniforms(a.device);
     expect(cache.stats().entries).toBe(1);
   } finally { a.dispose(); b.dispose(); }
+});
+
+test("replacing a group's layout recreates its bind groups once, then reuses them", async () => {
+  const gpu = await init();
+  try {
+    const probe = instrument(gpu);
+    const shader = SHADER.replace("@fragment", "@vertex fn vs_main() -> @builtin(position) vec4f { return vec4f(0, 0, 0, 1); }\n@fragment");
+    const d = draw(gpu, { shader, vertices: 3, set: { camera: uniforms(gpu, { value: 0 }), params: { value: 1 } } });
+    const color = target(gpu, { size: [1, 1] });
+    const descriptors = getMockGPUDeviceInstrumentation(gpu.gpu).createBindGroupDescriptors;
+    for (let i = 0; i < 2; i++) await frame(gpu, f => f.pass(color, p => p.draw(d))).done;
+    const staticLayout = d.layout(1);
+    const dynamic = d.layout(1, { dynamicOffsets: true });
+    expect(dynamic).not.toBe(staticLayout);
+    const before = probe.bindGroups();
+    await frame(gpu, f => f.pass(color, p => p.draw(d, { offsets: { 1: [0] } }))).done;
+    expect(probe.bindGroups()).toBeGreaterThan(before);
+    expect(descriptors.slice(before).find(desc => desc.label?.endsWith(".group1"))?.layout).toBe(dynamic);
+    const after = probe.bindGroups();
+    for (let i = 0; i < 2; i++) await frame(gpu, f => f.pass(color, p => p.draw(d, { offsets: { 1: [0] } }))).done;
+    expect(probe.bindGroups()).toBe(after);
+  } finally { gpu.dispose(); }
 });
 
 test("changing draw order and discarded draws keep the cache bounded", async () => {

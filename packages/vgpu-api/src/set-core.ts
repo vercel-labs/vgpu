@@ -265,6 +265,8 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     const bgl = layout(group);
     const cached = activeBindingsByGroup.get(group);
     if (cached?.layout === bgl) return cached.bindings;
+    // A replaced layout (draw.layout(n, { dynamicOffsets: true })) invalidates the bind groups built for the old one.
+    if (cached) options.cache.clearDraw(options.drawId, group);
     const active = new Set(bindGroupLayoutMetadata(bgl)?.entries.map((entry) => entry.binding));
     const bindings = options.reflection.bindings.filter((binding) => binding.group === group && active.has(binding.binding));
     activeBindingsByGroup.set(group, { layout: bgl, bindings });

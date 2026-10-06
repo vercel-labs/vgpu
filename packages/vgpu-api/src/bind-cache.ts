@@ -24,7 +24,8 @@ export interface BindGroupCache {
    * (a {@link bindGroupClock} value), entries used after it are kept.
    */
   evictIdentity(identity: BindGroupIdentityPart, unusedSince?: number): void;
-  clearDraw(drawId: number | string): void;
+  /** Evicts the draw's entries, or only those of one group. */
+  clearDraw(drawId: number | string, group?: number): void;
   dispose(): void;
   /** @internal Index sizes, for tests and benchmarks. */
   stats(): BindGroupCacheStats;
@@ -90,8 +91,9 @@ export function createBindGroupCache(): BindGroupCache {
         if (unusedSince === undefined || entry.used <= unusedSince) remove(entry);
       }
     },
-    clearDraw(drawId) {
-      for (const entry of byDraw.get(String(drawId)) ?? []) remove(entry);
+    clearDraw(drawId, group) {
+      const prefix = `${drawId}:${group}:`;
+      for (const entry of byDraw.get(String(drawId)) ?? []) if (group === undefined || entry.bucket.startsWith(prefix)) remove(entry);
     },
     dispose() {
       entries.clear();

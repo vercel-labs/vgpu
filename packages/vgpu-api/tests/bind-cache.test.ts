@@ -35,6 +35,12 @@ describe("bind-group cache", () => {
     get(1, 0, [buffer(2), buffer(1)]);
     get(1, 0, [buffer(1)]);
     expect(created()).toBe(5);
+    get(1, 1, [buffer(1)]);
+    cache.clearDraw(1, 0);
+    get(1, 1, [buffer(1)]);
+    expect(created()).toBe(6);
+    get(1, 0, [buffer(1)]);
+    expect(created()).toBe(7);
   });
 
   test("buffer ranges are distinct identities that share their base identity", () => {
@@ -100,6 +106,12 @@ describe("bind-group cache", () => {
     expect(created()).toBe(4);
     get(1, 0, [buffer(1)]);
     expect(created()).toBe(5);
+    get(1, 1, [buffer(1)]);
+    cache.clearDraw(1, 0);
+    get(1, 1, [buffer(1)]);
+    expect(created()).toBe(6);
+    get(1, 0, [buffer(1)]);
+    expect(created()).toBe(7);
   });
 
   test("captured variants are bounded per draw and group, least recently used first", () => {
