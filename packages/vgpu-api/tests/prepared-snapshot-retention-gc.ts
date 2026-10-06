@@ -81,8 +81,9 @@ try {
       effect: drawReflection(effectDraw(first.effect)),
       compute: (first.compute as ComputePipeline).reflection,
     };
+    const effectImpl = effectDraw(first.effect);
     first.draw.dispose();
-    return { shared, firstRefs: [new WeakRef(first.draw), new WeakRef(first.effect), new WeakRef(first.compute)] };
+    return { shared, firstRefs: [new WeakRef(first.draw), new WeakRef(first.effect), new WeakRef(effectImpl), new WeakRef(first.compute)] };
   }
 
   function makeAbandoned(count: number, dispose: boolean): WeakRef<object>[] {
@@ -91,12 +92,13 @@ try {
       const consumers = makeConsumers(index + 1);
       consumers.compute.dispatch(1);
       frame(gpu, (currentFrame) => currentFrame.pass(output, (pass) => { pass.draw(consumers.draw); pass.draw(consumers.effect); }));
+      const effectImpl = effectDraw(consumers.effect);
       if (dispose) {
         consumers.draw.dispose();
         consumers.effect.dispose();
         consumers.compute.dispose();
       }
-      created.push(new WeakRef(consumers.draw), new WeakRef(consumers.effect), new WeakRef(consumers.compute));
+      created.push(new WeakRef(consumers.draw), new WeakRef(consumers.effect), new WeakRef(effectImpl), new WeakRef(consumers.compute));
     }
     return created;
   }

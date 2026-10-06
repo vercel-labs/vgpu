@@ -21,7 +21,7 @@ test("consumers of a long-lived prepared artifact collect after use or dispose w
     });
     const probe = spawnSync(process.execPath, ["--expose-gc", outfile], { encoding: "utf8", timeout: 60_000 });
     expect(probe.status, `GC probe failed\nstdout:\n${probe.stdout}\nstderr:\n${probe.stderr}`).toBe(0);
-    expect(JSON.parse(probe.stdout.trim())).toEqual({ collected: 195, retained: true, reused: true, frozen: true });
+    expect(JSON.parse(probe.stdout.trim())).toEqual({ collected: 260, retained: true, reused: true, frozen: true });
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
