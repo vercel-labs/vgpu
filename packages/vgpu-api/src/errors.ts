@@ -127,6 +127,26 @@ export function bundleDisposedError(bundleId: string): VGPUError {
   });
 }
 
+export function drawDisposedError(label: string, operation: string): VGPUError {
+  return new VGPUError({
+    code: "VGPU-DRAW-DISPOSED",
+    message: `Draw '${label}' has been disposed.`,
+    where: `${label}.${operation}`,
+    fix: "Create a new draw(gpu, ...) or effect(gpu, ...); disposed render units cannot be reused.",
+    detail: { label },
+  });
+}
+
+export function computeDisposedError(label: string, operation: string): VGPUError {
+  return new VGPUError({
+    code: "VGPU-COMPUTE-DISPOSED",
+    message: `Compute '${label}' has been disposed.`,
+    where: `${label}.${operation}`,
+    fix: "Create a new compute(gpu, ...); disposed computes cannot be reused.",
+    detail: { label },
+  });
+}
+
 export function bundleBlendConstantError(bundleId: string, drawLabel: string): VGPUError {
   return new VGPUError({
     code: "VGPU-BUNDLE-BLEND-CONSTANT",

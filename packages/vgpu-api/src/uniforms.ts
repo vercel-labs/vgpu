@@ -33,6 +33,7 @@ export class SharedUniformsImpl<T extends Record<string, unknown>> implements Sh
   #bufferRef?: Buffer;
   #dirty = false;
   #liveUniform = false;
+  readonly #captureToken = {};
   #uniformValue?: UniformValue;
 
   constructor(private readonly device: Device, initialValues: T) {
@@ -73,20 +74,22 @@ export class SharedUniformsImpl<T extends Record<string, unknown>> implements Sh
     const buffer = this.#requiredBuffer();
     assertBufferUsable(buffer, `${sourceHint}.set`);
     return {
+      resourceLabel: buffer.options.label ?? buffer.gpu.label,
       resource: { buffer: buffer.gpu, offset: 0, size: adopted.layout.size },
       ...(adopted.addressSpace === "uniform" ? {
         uniformValue: () => this.#currentUniformValue(),
         prepareUniform: (retain: boolean) => this.#prepareUniform(retain),
       } : {}),
       identity: buffer.resourceIdentity,
-      unsubscribe: (cb) => buffer.onDestroy(cb),
+      tracked: [{ resource: buffer, identity: buffer.resourceIdentity, subscribe: (cb) => buffer.onDestroy(cb) }],
     };
   }
 
   #currentUniformValue(): UniformValue {
     const value = this.#uniformValue;
     if (value?.revision === this.#revision && value.bytes === this.#bytes) return value;
-    return this.#uniformValue = { owner: this, revision: this.#revision, bytes: this.#bytes! };
+    // Captures key on the inert token: a pending frame must not retain this facade.
+    return this.#uniformValue = { owner: this.#captureToken, revision: this.#revision, bytes: this.#bytes! };
   }
 
   #ensureLayout(binding: BindingInfo, sourceHint: string): SharedUniformLayoutState {

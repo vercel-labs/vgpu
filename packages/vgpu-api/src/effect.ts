@@ -6,7 +6,6 @@ import type { BindGroupCache } from "./bind-cache.ts";
 import type { PipelineLayoutCache, PipelineStore, ShaderModuleCache } from "./pipeline-store.ts";
 import type { SetBag } from "./set-core.ts";
 import type { CompileTarget, Target } from "./target.ts";
-import { isTarget } from "./target-utils.ts";
 import { FRAME_DRAWABLE, type FrameDrawableProtocol } from "./frame-protocols.ts";
 import { liveKernel } from "./live-kernel.ts";
 import { renderService } from "./render-service.ts";
@@ -57,6 +56,7 @@ const effectImpls = new WeakMap<Effect, InternalDraw>();
 
 export interface Effect {
   readonly gpu: GPURenderPipeline | undefined;
+  dispose(): void;
   set(values: SetBag): this;
   draw(target?: Target | DrawCallOptions): void;
   /** Prepares a pipeline for a target; a live Surface is accepted without acquiring its current texture. */
@@ -67,6 +67,8 @@ export interface Effect {
 
 export class InternalEffect implements Effect {
   get gpu(): GPURenderPipeline | undefined { return effectImpl(this).gpu; }
+
+  dispose(): void { effectImpl(this).dispose(); }
 
   constructor(device: Device, source: string, opts: EffectOptions = {}, cache?: BindGroupCache, defaultTarget?: Target, pipelineStore?: PipelineStore, shaderModules?: ShaderModuleCache, pipelineLayouts?: PipelineLayoutCache, errorSink?: ValidationErrorSink, trackSettled?: (promise: Promise<unknown>) => void) {
     const entry = opts.entry;
@@ -80,7 +82,7 @@ export class InternalEffect implements Effect {
   }
 
   set(values: SetBag): this { effectImpl(this).set(values); return this; }
-  draw(target: Target | DrawCallOptions = {}): void { effectImpl(this).draw(isTarget(target) ? { target } : target); }
+  draw(target: Target | DrawCallOptions = {}): void { effectImpl(this).draw(target); }
   compile(target?: CompileTarget): Promise<this> { return effectImpl(this).compile(target).then(() => this); }
   compileSync(target?: CompileTarget): this { effectImpl(this).compileSync(target); return this; }
 
@@ -96,7 +98,11 @@ export class InternalEffect implements Effect {
   get [FRAME_DRAWABLE](): FrameDrawableProtocol { return effectImpl(this)[FRAME_DRAWABLE]; }
 }
 
-export function effectDraw(effect: Effect): InternalDraw { return effectImpl(effect); }
+export function effectDraw(effect: Effect): InternalDraw {
+  const impl = effectImpl(effect);
+  impl.assertUsable("draw");
+  return impl;
+}
 
 function effectImpl(effect: Effect): InternalDraw {
   const impl = effectImpls.get(effect);

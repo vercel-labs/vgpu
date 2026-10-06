@@ -40,7 +40,7 @@ describe("tracked texture lifetimes", () => {
     } finally { gpu.dispose(); }
   });
 
-  test("failed recordings release all captured resource subscriptions", async () => {
+  test("failed recordings add no per-bundle resource subscriptions", async () => {
     const gpu = await init();
     try {
       const source = target(gpu, { size: [4, 4] });
@@ -55,16 +55,16 @@ describe("tracked texture lifetimes", () => {
         recorder.draw(post);
         throw new Error("record failed");
       })).toThrow("record failed");
-      expect(offs).toHaveLength(1);
-      expect(offs[0]).toHaveBeenCalledTimes(1);
+      expect(offs).toHaveLength(0);
     } finally { gpu.dispose(); }
   });
 
-  test("repeated Target resize replaces subscriptions instead of accumulating them", async () => {
+  test("repeated Target resize resolves lazily without per-consumer subscriptions", async () => {
     const gpu = await init();
     try {
       const source = target(gpu, { size: [4, 4] });
       const alternate = target(gpu, { size: [4, 4] });
+      const output = target(gpu, { size: [4, 4] });
       const subscribe = source.onTexturesRecreated!.bind(source);
       const offs: ReturnType<typeof vi.fn>[] = [];
       vi.spyOn(source, "onTexturesRecreated").mockImplementation(cb => {
@@ -72,13 +72,11 @@ describe("tracked texture lifetimes", () => {
       });
       const post = effect(gpu, SAMPLE, { set: { src: source } });
       for (let size = 5; size <= 14; size++) source.resize([size, size]);
-      expect(offs).toHaveLength(11);
-      for (const off of offs.slice(0, -1)) expect(off).toHaveBeenCalledTimes(1);
-      expect(offs.at(-1)).not.toHaveBeenCalled();
+      expect(offs).toHaveLength(0);
+      expect(() => frame(gpu, f => f.pass(output, p => p.draw(post)))).not.toThrow();
       post.set({ src: alternate });
-      expect(offs.at(-1)).toHaveBeenCalledTimes(1);
       source.resize([16, 16]);
-      expect(offs).toHaveLength(11);
+      expect(offs).toHaveLength(0);
     } finally { gpu.dispose(); }
   });
 

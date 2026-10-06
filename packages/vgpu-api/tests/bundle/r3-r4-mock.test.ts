@@ -28,6 +28,21 @@ struct Obj { value: f32 }
 }
 `;
 
+test("BundleRecorder.draw rejects invalid Draw instances with the stable TypeError", async () => {
+  const gpu = await init();
+  const scene = target(gpu, { size: [4, 4] });
+
+  try {
+    for (const invalid of [{}, null]) {
+      expect(() => bundle(gpu, { target: scene }, (recorder) => recorder.draw(invalid as never))).toThrowError(
+        new TypeError("Invalid Draw instance"),
+      );
+    }
+  } finally {
+    gpu.dispose();
+  }
+});
+
 test("R3 bundle replay stays valid after JS value writes and stales on bind-group identity changes", async () => {
   const gpu = await init();
   const scene = target(gpu, { size: [4, 4] });

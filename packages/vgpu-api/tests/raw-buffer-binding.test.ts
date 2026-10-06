@@ -32,7 +32,8 @@ describe("raw GPUBuffer and GPUBufferBinding values", () => {
       expect(state().ownership).toBe("user");
       fx.draw(color);
       await frame(gpu, f => f.pass(color, fx)).done;
-      expect(descriptors()).toEqual([{ buffer }]);
+      // The whole buffer binds as its canonical range.
+      expect(descriptors()).toEqual([{ buffer, offset: 0, size: buffer.size }]);
     } finally { gpu.dispose(); }
   });
 
