@@ -197,6 +197,8 @@ gpu.dispose();
 
 `Frame.computePass()` encodes into the frame's encoder; multiple dispatches and render passes submit once, in pass order. Canceling the frame discards its encoded compute commands. Standalone `simulation.dispatch()` always submits independently, even inside a frame callback.
 
-Each direct frame draw/dispatch captures managed uniform values when encoded. Storage buffers remain live, so later dispatches observe earlier GPU writes. `uniforms()` adopted as storage, raw buffers, claimed bind groups, and render bundles retain live buffer semantics. Ordinary host writes are not ordered frame commands.
+Each direct frame draw/dispatch captures managed uniform values when encoded. If a `set()` leaves the packed bytes equal to the previous ones, later dispatches in the same frame reuse the snapshot already captured; changed bytes capture again. Storage buffers remain live, so later dispatches observe earlier GPU writes, and every `set()` writes JS-owned storage values even when equal. `uniforms()` adopted as storage, raw buffers, claimed bind groups, and render bundles retain live buffer semantics. Ordinary host writes are not ordered frame commands.
+
+A raw `GPUBuffer` or `{ buffer, offset?, size? }` passed to `compute.set()` for a uniform or storage buffer binding is bound as a live user-owned resource, keyed by buffer, effective offset and size; vgpu never packs or captures it. The storage aliasing check works per buffer: two ranges of one buffer with a writable binding still throw `VGPU-R1-STORAGE-ALIASING`.
 
 Additional errors: `VGPU-COMPUTE-DISPATCH-INVALID` for invalid direct counts; `VGPU-COMPUTE-WORKGROUP-INVALID` for known workgroup limit violations; `VGPU-COMPILE-FAILED` for pipeline creation/validation failures; `VGPU-COMPUTE-VALIDATION` for asynchronous compute execution validation. Automatic use of a failed pipeline throws; explicit compilation can retry.

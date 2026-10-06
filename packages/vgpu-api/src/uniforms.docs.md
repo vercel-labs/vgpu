@@ -59,11 +59,17 @@ globals.set({ exposure: 1.25 });
 
 When used in the uniform address space, direct frame draws and compute dispatches capture the current values. Calling `set()` between operations changes only later operations. The same revision can share an upload slice across pipelines in a frame.
 
-`set()` validates and packs the merged values immediately, but frame-only consumers upload through the frame's captured pages instead of also writing the stable backing buffer. One-shot draws and dispatches flush pending stable-buffer values when used; repeated calls without an update do not upload them again. Canceled frames leave CPU updates applied but do not upload their captured pages.
+`set()` validates and packs the merged values on every call and always updates the stored CPU values, so partial updates merge over the latest call. Frame-only consumers upload through the frame's captured pages instead of also writing the stable backing buffer. One-shot draws and dispatches flush pending stable-buffer values when used; repeated calls without an update do not upload them again. Canceled frames leave CPU updates applied but do not upload their captured pages.
 
-When adopted as storage, this object keeps a live backing buffer so GPU-written state persists. Render bundles, raw/low-level resources and claimed bind groups also retain live contents; they do not acquire per-operation uniform snapshots.
+Equal bytes are not a new revision. When the newly packed bytes equal the previous packed bytes, later draws and dispatches in the same frame reuse the snapshot already captured for that revision. A pending one-shot upload is neither queued again nor dropped, and a pending or failed upload is still flushed or retried on next use. Changed bytes start a new revision. The first `set()` always uploads.
 
-Once a uniform is recorded in a render bundle, later updates keep its stable buffer live, including for raw WebGPU bundle replay. Accessing the implementation's `.buffer` or `.gpu` handle likewise flushes pending values and preserves immediate future writes for direct consumers; those handles are not part of the public `SharedUniforms` type.
+Equality is bitwise on the packed bytes, after layout padding and `f32`/integer encoding. Mutating a typed array in place and calling `set()` again is detected, `+0` and `-0` differ, and values that round to the same `f32` are equal. You do not need to compare values or pack buffers yourself; skipping a redundant `set()` only saves the CPU validation, packing and comparison work.
+
+When adopted as storage, this object keeps a live backing buffer so GPU-written state persists, and every `set()` writes it whether or not the bytes changed — the GPU may have modified the contents since the last write. Render bundles, raw/low-level resources and claimed bind groups also retain live contents; they do not acquire per-operation uniform snapshots.
+
+Once a uniform is recorded in a render bundle, later updates keep its stable buffer live, including for raw WebGPU bundle replay. Accessing the implementation's `.buffer` or `.gpu` handle likewise flushes pending values and preserves immediate future writes for direct consumers; those handles are not part of the public `SharedUniforms` type. For these live uniforms every `set()` writes the buffer even when the bytes are equal, while frame captures still keep their revision.
+
+Frame captures are written into pooled uniform pages. A page belongs to one frame until that frame's GPU work completes, or until the frame is canceled or fails to submit, so frames in flight never share pages. Bind groups follow the pooled page range, so frames that repeat the same draws in the same order reuse their bind groups. Changing draw order, culling draws, or varying the number of frames in flight can create bind groups again within bounded retention. Each frame still flushes its own captured pages; reuse removes bind-group and page churn, not the per-frame upload.
 
 ## Notes
 
