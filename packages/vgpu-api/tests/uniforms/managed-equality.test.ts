@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { bundle, compute, effect, frame, init, target, uniforms, type Frame } from "../../src/mock.ts";
 import { bytesEqual } from "../../src/bytes-equal.ts";
@@ -44,7 +45,7 @@ function recordRanges(gpu: Gpu) {
 
 function setup(gpu: Gpu, ownership: "owned" | "shared", initial: Record<string, unknown> = { value: 1 }) {
   const shared = ownership === "shared" ? uniforms(gpu, { tail: [0, 0, 0, 0], ...initial }) : undefined;
-  const fx = effect(gpu, FRAGMENT, { set: { params: shared ?? { tail: [0, 0, 0, 0], ...initial } } });
+  const fx = effect(gpu, prepareShader(FRAGMENT), { set: { params: shared ?? { tail: [0, 0, 0, 0], ...initial } } });
   const set = (values: Record<string, unknown>) => { if (shared) shared.set(values); else fx.set({ params: values }); };
   const color = target(gpu, { size: [1, 1] });
   return { fx, set, shared, color, pass: (f: Frame) => f.pass(color, fx) };
@@ -260,7 +261,7 @@ test("a member shorthand starts from zero and its first set uploads", async () =
   try {
     const writes = stableWrites(gpu);
     const take = recordRanges(gpu);
-    const fx = effect(gpu, FRAGMENT);
+    const fx = effect(gpu, prepareShader(FRAGMENT));
     const color = target(gpu, { size: [1, 1] });
     fx.set({ value: 0 });
     fx.set({ tail: [0, 0, 0, 0] });
@@ -274,7 +275,7 @@ test.each(["owned", "shared"] as const)("%s storage bindings write every set, eq
   const gpu = await init();
   try {
     const shared = ownership === "shared" ? uniforms(gpu, { value: 1 }) : undefined;
-    const sim = compute(gpu, STORAGE, { set: { params: shared ?? { value: 1 } } });
+    const sim = compute(gpu, prepareShader(STORAGE), { set: { params: shared ?? { value: 1 } } });
     sim.dispatch(1);
     const writes = stableWrites(gpu);
     for (let i = 0; i < 3; i++) {

@@ -549,14 +549,15 @@ A raw `GPUBuffer` or `GPUBufferBinding` (`{ buffer, offset?, size? }`) set on a 
 
 ```ts
 import { init, effect, frame, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const colorTarget = target(gpu, { size: [8, 8] });
-const tint = effect(gpu, `
+const tint = effect(gpu, prepareShader(`
   struct Tint { color: vec4f }
   @group(0) @binding(0) var<uniform> tint: Tint;
   @fragment fn fs_main() -> @location(0) vec4f { return tint.color; }
-`);
+`));
 
 const UNIFORM_COPY_DST = 0x40 | 0x08; // GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
 const paletteBuffer = gpu.gpu.createBuffer({ size: 512, usage: UNIFORM_COPY_DST });
