@@ -88,11 +88,14 @@ describe.each(harnesses)("$name packed metadata graph", (harness) => {
       expect(bNames).toContain("uniqueB");
       expect(bNames).not.toContain("uniqueA");
 
+      expect(() => { (shaderA.reflection as any).bindings[0].layout.members[0].name = "mutated-a"; }).toThrow(TypeError);
+      const copyA = structuredClone(shaderA) as any;
       const beforeB = structuredClone(shaderB.reflection);
       const beforeAHost = structuredClone((shaderA.reflection as any).hostShareableLayouts[0]);
-      (shaderA.reflection as any).bindings[0].layout.members[0].name = "mutated-a";
+      copyA.reflection.bindings[0].layout.members[0].name = "mutated-a";
       expect(shaderB.reflection).toStrictEqual(beforeB);
       expect((shaderA.reflection as any).hostShareableLayouts[0]).toStrictEqual(beforeAHost);
+      expect(copyA.reflection.hostShareableLayouts[0]).toStrictEqual(beforeAHost);
       expect((shaderA.reflection as any).bindings[0].layout)
         .not.toBe((shaderA.reflection as any).hostShareableLayouts[0]);
 
@@ -698,6 +701,7 @@ function decodeQuery(query: string): unknown {
 }
 
 function expectExactLoaderArtifact(artifact: ShaderSource, originalDiagnosticPath: string): void {
+  expect(isDeeplyFrozen(artifact), "loader artifacts must be deeply frozen").toBe(true);
   expect(artifact).toStrictEqual(prepareShader({
     wgsl: artifact.wgsl,
     functionExports: artifact.functionExports,
@@ -710,6 +714,13 @@ function expectExactLoaderArtifact(artifact: ShaderSource, originalDiagnosticPat
     "producer",
     "functionExports",
   ]);
+}
+
+function isDeeplyFrozen(value: unknown, seen = new Set<object>()): boolean {
+  if (typeof value !== "object" || value === null) return true;
+  if (seen.has(value)) return false;
+  seen.add(value);
+  return Object.isFrozen(value) && Object.values(value).every((nested) => isDeeplyFrozen(nested, seen));
 }
 
 function singleUniformFallbackShader(marker: "A" | "B"): string {

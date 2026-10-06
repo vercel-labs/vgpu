@@ -3,6 +3,10 @@ import { prepareShader } from "../prepare.ts";
 import { packedModuleAssets } from "./packed-query.ts";
 import { selectInlinePackedReflection, selectPackedReflection } from "./packed-selection.ts";
 
+// Module-local deep freeze for the emitted artifact (decoded packed reflection included). Inlined rather than
+// imported because `plain` modules cannot import anything; the PURE call keeps unused modules tree-shakeable.
+const FREEZE_HELPER = 'const _vgpuFreeze=v=>(v!==null&&typeof v==="object"&&Object.values(Object.freeze(v)).forEach(_vgpuFreeze),v);';
+
 export type PackedImportMode =
   | { readonly kind: "standard" }
   | { readonly kind: "inline"; readonly decoder?: string }
@@ -30,7 +34,7 @@ export function shaderSourceModuleWithPackedImports(
     : mode.kind === "inline"
       ? selectInlinePackedReflection(prepared.reflection)
       : selectPackedReflection(prepared.reflection);
-  if (plan === null) return `export default ${javascriptLiteral(prepared)};`;
+  if (plan === null) return frozenDefaultExport(javascriptLiteral(prepared));
 
   const { decoder, anchor } = packedModuleAssets();
   const sharedNames = plan.shared.map((_, index) => `_vgpuPackedBlock${index}`);
@@ -50,7 +54,11 @@ export function shaderSourceModuleWithPackedImports(
       : javascriptLiteral((prepared as unknown as Record<string, unknown>)[key]);
     return `${javascriptKey(key)}:${value}`;
   });
-  return `${imports.join("\n")}\nexport default {${fields.join(",")}};`;
+  return `${imports.join("\n")}\n${frozenDefaultExport(`{${fields.join(",")}}`)}`;
+}
+
+function frozenDefaultExport(expression: string): string {
+  return `${FREEZE_HELPER}\nexport default /* @__PURE__ */ _vgpuFreeze(${expression});`;
 }
 
 function javascriptLiteral(value: unknown): string {

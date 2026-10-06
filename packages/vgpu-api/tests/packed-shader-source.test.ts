@@ -45,21 +45,27 @@ describe("loader-emitted packed ShaderSource acceptance", () => {
     expect(structuredClone(actual)).toStrictEqual(actual);
   });
 
-  test("separate artifacts and equal decoded records remain independently mutable", async () => {
-    const first = mutable(await evaluateShaderModule(EMITTED));
-    const second = mutable(await evaluateShaderModule(EMITTED));
+  test("separate artifacts and equal decoded records stay distinct, frozen and independently copyable", async () => {
+    const first = await evaluateShaderModule(EMITTED);
+    const second = await evaluateShaderModule(EMITTED);
     const duplicates = findEqualObjectPair(first.reflection);
 
     expect(first).not.toBe(second);
     expect(first.reflection).not.toBe(second.reflection);
     expect(duplicates).toBeDefined();
     expect(duplicates?.[0]).not.toBe(duplicates?.[1]);
+    expect(Object.isFrozen(duplicates?.[0])).toBe(true);
+    expect(() => { mutable(first).reflection.entryPoints[0]!.name = "mutated"; }).toThrow(TypeError);
 
-    if (duplicates) {
-      duplicates[0].testMutation = "first-only";
-      expect(duplicates[1]).not.toHaveProperty("testMutation");
+    // Copies are the supported way to obtain mutable data; they never alias the frozen artifact.
+    const copy = mutableCopy(first);
+    const copiedDuplicates = findEqualObjectPair(copy.reflection);
+    if (copiedDuplicates) {
+      copiedDuplicates[0].testMutation = "first-only";
+      expect(copiedDuplicates[1]).not.toHaveProperty("testMutation");
     }
-    first.reflection.entryPoints[0]!.name = "mutated";
+    copy.reflection.entryPoints[0]!.name = "mutated";
+    expect(first.reflection.entryPoints[0]?.name).not.toBe("mutated");
     expect(second.reflection.entryPoints[0]?.name).not.toBe("mutated");
   });
 
@@ -89,7 +95,7 @@ describe("loader-emitted packed ShaderSource acceptance", () => {
   test("renderer snapshotting and public corruption diagnostics are unchanged", async () => {
     const gpu = await init();
     try {
-      const artifact = mutable(await evaluateShaderModule(EMITTED));
+      const artifact = mutableCopy(await evaluateShaderModule(EMITTED));
       const accepted = effect(gpu, artifact, { entry: { fragment: "fs_main" } });
       const snapshot = drawReflection(effectDraw(accepted));
       const originalName = artifact.reflection.entryPoints[0]?.name;
@@ -97,15 +103,15 @@ describe("loader-emitted packed ShaderSource acceptance", () => {
       expect(snapshot.entryPoints[0]?.name).toBe(originalName);
       expect(originalName).not.toBe("after-construction");
 
-      const checksum = mutable(await evaluateShaderModule(EMITTED));
+      const checksum = mutableCopy(await evaluateShaderModule(EMITTED));
       checksum.wgsl += "\n";
       expectCode(() => effect(gpu, checksum), "VGPU-SHADER-SOURCE-INVALID");
 
-      const layout = mutable(await evaluateShaderModule(EMITTED));
+      const layout = mutableCopy(await evaluateShaderModule(EMITTED));
       layout.reflection.bindings[0]!.layout.size += 4;
       expectCode(() => draw(gpu, { shader: layout }), "VGPU-SHADER-SOURCE-INVALID");
 
-      const sampling = mutable(await evaluateShaderModule(EMITTED));
+      const sampling = mutableCopy(await evaluateShaderModule(EMITTED));
       const texture = sampling.reflection.bindings.find((binding) => binding.kind === "texture");
       if (!texture || texture.kind !== "texture") throw new Error("fixture lost its sampled texture binding");
       texture.bindingLayout.texture.sampleType = "malformed";
@@ -147,6 +153,10 @@ override WG_SIZE: u32 = 1;
 
 function mutable(value: ShaderSource): MutableShaderSource {
   return value as MutableShaderSource;
+}
+
+function mutableCopy(value: ShaderSource): MutableShaderSource {
+  return structuredClone(value) as MutableShaderSource;
 }
 
 type MutableShaderSource = {

@@ -1,5 +1,6 @@
 import { reflectSource } from "./runtime/reflect-source.ts";
 import { wgslError } from "./runtime/errors.ts";
+import { deepFreezeData } from "./preparation/freeze-data.ts";
 import { normalizePreparationInput } from "./preparation/normalize-input.ts";
 import { serializeReflection } from "./preparation/serialize-reflection.ts";
 import { sourceChecksum } from "./preparation/source-checksum.ts";
@@ -16,7 +17,8 @@ export function prepareShader(
   }
   const normalized = normalizePreparationInput(source);
 
-  return {
+  // Deeply frozen so the renderer can validate it once and reuse the snapshot; inputs were copied above.
+  return deepFreezeData({
     version: 2,
     wgsl: normalized.wgsl,
     reflection: serializeReflection(reflectSource(normalized.wgsl, path)),
@@ -25,5 +27,5 @@ export function prepareShader(
     ...(normalized.functionExports !== undefined
       ? { functionExports: normalized.functionExports }
       : {}),
-  };
+  });
 }

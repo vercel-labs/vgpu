@@ -55,7 +55,7 @@ test("over-cap extraction requests retain a useful inline packed plan", () => {
   expect(decodePackedMetadata(plan!.table)).toEqual(prepared.reflection);
 });
 
-test("emitted packed modules reconstruct exact mutable own-data ShaderSource artifacts", async () => {
+test("emitted packed modules reconstruct exact deeply frozen own-data ShaderSource artifacts", async () => {
   const source = layoutShader(8);
   const path = "/packed shared.wgsl";
   const code = shaderSourceModule(source, path);
@@ -77,11 +77,12 @@ test("emitted packed modules reconstruct exact mutable own-data ShaderSource art
   expect(first.reflection).not.toBe(second.reflection);
   expect(Object.getOwnPropertyDescriptor(first, "reflection")).toMatchObject({
     enumerable: true,
-    writable: true,
-    configurable: true,
+    writable: false,
+    configurable: false,
   });
-  expect(Object.isFrozen(first)).toBe(false);
-  expect(Object.isFrozen(first.reflection)).toBe(false);
+  expect(Object.isFrozen(first)).toBe(true);
+  expect(Object.isFrozen(first.reflection)).toBe(true);
+  expect(Object.isFrozen(first.reflection.bindings[0]?.layout)).toBe(true);
   expect(first.reflection.bindings[0]?.struct).toEqual(first.reflection.structs[0]);
   expect(first.reflection.bindings[0]?.struct).not.toBe(first.reflection.structs[0]);
   expect(first.reflection.bindings[0]?.layout).toEqual(first.reflection.hostShareableLayouts[0]);
@@ -135,7 +136,8 @@ test("Turbopack synthetic paths safely retain ordinary literal metadata", () => 
     _module: { __reserved: "TurbopackContext" },
   }, layoutShader(8));
 
-  expect(code).toMatch(/^export default \{/u);
+  expect(code).toMatch(/^const _vgpuFreeze=[^\n]*\nexport default \/\* @__PURE__ \*\/ _vgpuFreeze\(\{/u);
+  expect(code).not.toMatch(/^\s*import\b/mu);
   expect(code).not.toContain("decodePackedMetadata");
   expect(code).not.toContain("metadata.wgsl?__vgpu_packed_v1=");
 });

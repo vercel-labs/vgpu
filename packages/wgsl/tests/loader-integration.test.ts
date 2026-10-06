@@ -137,7 +137,8 @@ test("loaders emit data-only prepared modules", async () => {
   const webpackCode = wgslWebpackLoader.call({ resourcePath: "/data-webpack.wgsl" }, source) ?? "";
 
   for (const code of [viteCode, webpackCode]) {
-    expect(code).toMatch(/^export default \{/u);
+    expect(code).toMatch(/^const _vgpuFreeze=[^\n]*\nexport default \/\* @__PURE__ \*\/ _vgpuFreeze\(\{/u);
+    expect(code).not.toMatch(/^\s*import\b/mu);
     expect(code).not.toContain("prepareShader");
     expect(code).not.toContain("reflectSource");
     expect(await shaderSource(code)).toMatchObject({
