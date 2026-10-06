@@ -34,7 +34,7 @@ Normal development targets `canary`. The linked production/release workflows def
 ## Agent team
 
 Repository specialists (researchers, API designer, planner, implementer, implementer-simple, writer,
-reviewer, fixer) are defined in `.subharness/agents/` and run through the `subharness` CLI. The lead workflow —
+PR writer, reviewer, fixer) are defined in `.subharness/agents/` and run through the `subharness` CLI. The lead workflow —
 research, API design, human-validated decisions, planning, parallel implementation, integration —
 is in `.claude/skills/vgpu-agent-flow/SKILL.md`. Pipeline artifacts live in the gitignored
 `.context/work/<topic>/`.

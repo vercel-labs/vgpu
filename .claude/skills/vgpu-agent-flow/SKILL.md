@@ -27,6 +27,7 @@ The normal API phases below still apply if the asset work changes a public API.
 | `repo:implementer` | Claude `claude-opus-5.5` high → Codex `gpt-5.6-sol` high | Complex implementation, test-first; runs `writer` and `reviewer` as children; commits |
 | `repo:implementer-simple` | Claude `claude-sonnet-5.5` high → Codex `gpt-5.6-sol` high | Scaffolding and straightforward tasks; same writer, reviewer, verification, and commit workflow |
 | `repo:writer` | Claude `claude-sonnet-5.5` high → Codex `gpt-5.6-sol` high | Docs in house style (called by either implementer, or by you for docs-only work) |
+| `repo:pr-writer` | Claude `claude-sonnet-5.5` high (no fallback) | Human problem/solution walkthrough, small SVGs and native code blocks, then the technical PR record; lead reviews and publishes |
 | `repo:reviewer` | Codex `gpt-6-astra` high → Claude `claude-opus-5.5` high | Read-only review (called by either implementer per task, and by you after integration) |
 | `repo:fixer` | Claude `claude-sonnet-5.5` high → Codex `gpt-5.6-sol` high | Applies a bounded list of integration-review findings |
 | `repo:asset-author` | Codex `gpt-6-astra` high (no fallback) | Blender modeling, renders, environment lighting and AO/lightmap bakes; declares runtime and critic children |
@@ -54,6 +55,11 @@ All pipeline artifacts are gitignored scratch under `.context/work/<topic>/` (ke
   plan/progress.md         # planner creates; you keep it current
   plan/progress/T01.md     # implementers
   reviews/integration-*.md # you: saved integration review output
+  pr/body.md              # pr-writer: human walkthrough, then technical record
+  pr/title.txt            # pr-writer: proposed title
+  pr/assets.json          # pr-writer: local SVG paths or existing attachment URLs + alt text
+  pr/assets/*.svg         # pr-writer: small diagrams, one concept each
+  pr/checks.md             # pr-writer: source revisions, evidence and editorial checks
 .context/worktrees/<topic>-<lane>/   # git worktrees for parallel lanes
 ```
 
@@ -166,9 +172,19 @@ For each lane that can start:
    ```
    Re-review if the fixer changed behavior. Then summarize to the human: what shipped, checks
    run, and remaining findings. When the human asks for a PR, follow
-   `.github/guides/pull-requests.md` and `.github/pull_request_template.md` against `canary`. Build
-   the description from `plan/index.md`'s PR record, the key `decisions.md` entries, and the
-   implementers' validation notes; reviewers cannot see `.context/`. Declare exactly one PR type
+   `.github/guides/pull-requests.md` and `.github/pull_request_template.md` against `canary`. Run
+   `repo:pr-writer` with the exact base/head revisions, workflow/origin, `plan/index.md`'s PR record,
+   key `decisions.md` entries, implementation/review receipts and any current PR body. It follows
+   the [PR writing guide](../../../.subharness/tools/pr-writing.ts): explicitly label the old
+   problem before the first user-code example, then explain the solution, using normal Markdown
+   text/code and small SVG chunks. Educational PDFs never become PR attachments. The final
+   technical record must stand alone; reviewers cannot see `.context/`.
+   Review `pr/body.md`, `pr/title.txt`, `pr/assets.json` and `pr/checks.md`. The PR writer drafts
+   only; you own publication. Reuse verified existing asset URLs or upload new SVGs as GitHub
+   attachments without committing PR-only assets. Check the installed CLI's `gh pr edit --help`
+   for `--attach` support; use the supported CLI or browser upload flow. Replace local image paths,
+   verify the published assets/body, and check for concurrent description edits before updating.
+   Do not add an approval round when publication is already authorized. Declare exactly one PR type
    (`development` for normal work) and one release impact matching the diff, and run
    `pnpm migrations:check`. For adoption, link the sources and credit the actual contribution; add a
    `Co-authored-by` trailer only when verified and warranted. Opening a PR does not authorize
