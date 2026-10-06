@@ -109,21 +109,21 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("storage textures on Dawn"
         { bytesPerRow: 8, rowsPerImage: 2 },
         [2, 2],
       );
-      compute(gpu, `
+      compute(gpu, prepareShader(`
         @group(0) @binding(0) var out: texture_storage_2d<rgba8unorm, write>;
         @compute @workgroup_size(4, 4) fn main(@builtin(global_invocation_id) id: vec3u) {
           textureStore(out, id.xy, vec4f(1, 0, 0, 1));
         }
-      `, { set: { out: mipped } }).dispatch(1);
+      `), { set: { out: mipped } }).dispatch(1);
 
       const output = target(gpu, { size: [2, 1], format: "rgba8unorm" });
-      const inspect = effect(gpu, `
+      const inspect = effect(gpu, prepareShader(`
         @group(0) @binding(0) var source: texture_2d<f32>;
         @fragment fn main(@builtin(position) position: vec4f) -> @location(0) vec4f {
           let mip = select(0, 1, position.x >= 1.0);
           return textureLoad(source, vec2i(0), mip);
         }
-      `, { set: { source: mipped } });
+      `), { set: { source: mipped } });
       await frame(gpu, current => current.pass(output, inspect)).done;
       expect([...(await output.color.read({ mipLevel: 0, region: "all" }))]).toEqual([
         255, 0, 0, 255,

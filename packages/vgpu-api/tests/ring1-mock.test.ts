@@ -125,7 +125,7 @@ test("R2 cache hits when alternating between two user-owned resource identities"
 
 test("already-destroyed tracked buffer candidates use binding errors and preserve the live value", async () => {
   const gpu = await init();
-  const drawable = effect(gpu, CAMERA_SHADER, { label: "dead-buffer-candidate" });
+  const drawable = effect(gpu, prepareShader(CAMERA_SHADER), { label: "dead-buffer-candidate" });
   const output = target(gpu, { size: [4, 4] });
   const live = gpu.device.createBuffer({ size: 4, usage: ["uniform", "copy_dst"], label: "live-camera" });
   const dead = gpu.device.createBuffer({ size: 4, usage: ["uniform", "copy_dst"], label: "dead-camera" });

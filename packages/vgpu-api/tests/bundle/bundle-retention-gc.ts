@@ -38,7 +38,7 @@ try {
     return originalOnDestroy(callback);
   };
 
-  const shared = effect(gpu, SAMPLED, { label: "shared-dropped", set: { source: source.color } });
+  const shared = effect(gpu, prepareShader(SAMPLED), { label: "shared-dropped", set: { source: source.color } });
   const retainedEvidence = makeRetainedBundle();
   const followedEvidence = makeFollowedTargetBundle();
   const geometryEvidence = makeGeometryBundle();
@@ -152,7 +152,7 @@ try {
   })}\n`);
 
   function makeRetainedBundle() {
-    const drawable = effect(gpu, SAMPLED, { label: "retained-factory-local", set: { source: source.color } });
+    const drawable = effect(gpu, prepareShader(SAMPLED), { label: "retained-factory-local", set: { source: source.color } });
     const internal = effectDraw(drawable);
     const { cache, owner } = drawCacheOwnerTestState(internal);
     const retained = bundle(gpu, { target: output, label: "retained-control" }, recorder => recorder.draw(drawable));
@@ -167,7 +167,7 @@ try {
 
   function makeFollowedTargetBundle() {
     const followedSource = target(gpu, { size: [4, 4] });
-    const drawable = effect(gpu, SAMPLED, { label: "retained-followed-local", set: { source: followedSource } });
+    const drawable = effect(gpu, prepareShader(SAMPLED), { label: "retained-followed-local", set: { source: followedSource } });
     const internal = effectDraw(drawable);
     const retained = bundle(gpu, { target: output, label: "retained-followed" }, recorder => recorder.draw(drawable));
     return { retained, source: followedSource, effectRef: new WeakRef(drawable), drawRef: new WeakRef(internal) };
@@ -177,7 +177,7 @@ try {
     const mesh = geometry(gpu, {
       buffers: [{ data: new Float32Array([-1, -1, 1, -1, 0, 1]), attributes: { position: { format: "float32x2", location: 0 } } }],
     });
-    const drawable = draw(gpu, { shader: GEOMETRY_DRAW, geometry: mesh, label: "retained-geometry-local" });
+    const drawable = draw(gpu, { shader: prepareShader(GEOMETRY_DRAW), geometry: mesh, label: "retained-geometry-local" });
     const retained = bundle(gpu, { target: output, label: "retained-geometry" }, recorder => recorder.draw(drawable));
     return { retained, mesh, drawRef: new WeakRef(drawable) };
   }

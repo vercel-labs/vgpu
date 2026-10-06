@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { compute, draw, effect, init, target } from "../src/mock.ts";
 import { InternalDraw } from "../src/draw.ts";
 import { expect, test, vi } from "vitest";
@@ -16,7 +17,7 @@ test("live invalid compute workgroups still reject compile() instead of throwing
   const gpu = await init();
   try {
     Object.defineProperty(gpu.gpu.limits, "maxComputeWorkgroupSizeX", { value: 1 });
-    const invalid = compute(gpu, "@compute @workgroup_size(2) fn main() {}", { label: "invalid-workgroup" });
+    const invalid = compute(gpu, prepareShader("@compute @workgroup_size(2) fn main() {}"), { label: "invalid-workgroup" });
     let pending: ReturnType<typeof invalid.compile> | undefined;
 
     expect(() => { pending = invalid.compile(); }).not.toThrow();
@@ -143,7 +144,7 @@ test("Draw disposal wins when native success is waiting on validation scope sett
       popErrorScope: vi.fn(() => validation.promise),
     });
     const output = target(gpu, { size: [2, 2] });
-    const drawable = draw(gpu, { shader: DRAW_SHADER, label: "validation-delayed" });
+    const drawable = draw(gpu, { shader: prepareShader(DRAW_SHADER), label: "validation-delayed" });
     const pending = drawable.compile(output);
     let settled = false;
     void pending.finally(() => { settled = true; }).catch(() => undefined);
@@ -182,7 +183,7 @@ test.each(["draw", "effect", "compute"] as const)("pending live %s compile prese
 test("disposed consumer wins when GPU teardown settles its pending compile", async () => {
   const gpu = await init();
   vi.spyOn(gpu.gpu, "createComputePipelineAsync").mockReturnValue(new Promise(() => undefined));
-  const pipeline = compute(gpu, COMPUTE_SHADER, { label: "retired-before-gpu" });
+  const pipeline = compute(gpu, prepareShader(COMPUTE_SHADER), { label: "retired-before-gpu" });
   const pending = pipeline.compile();
   const rejection = expect(pending).rejects.toMatchObject({
     code: "VGPU-COMPUTE-DISPOSED",
@@ -201,7 +202,7 @@ test.each(["success", "failure"] as const)("internal Draw pipelineForAsync check
     const gate = deferred<GPURenderPipeline>();
     vi.spyOn(gpu.gpu, "createRenderPipelineAsync").mockReturnValue(gate.promise);
     const output = target(gpu, { size: [2, 2] });
-    const drawable = draw(gpu, { shader: DRAW_SHADER, label: `internal-${outcome}` }) as InternalDraw;
+    const drawable = draw(gpu, { shader: prepareShader(DRAW_SHADER), label: `internal-${outcome}` }) as InternalDraw;
     const pending = drawable.pipelineForAsync(output);
     const rejection = expect(pending).rejects.toMatchObject({
       code: "VGPU-DRAW-DISPOSED",
@@ -227,18 +228,18 @@ type CompileOwner = {
 
 function compileOwners(kind: "draw" | "effect" | "compute", gpu: Awaited<ReturnType<typeof init>>): readonly [CompileOwner, CompileOwner] {
   if (kind === "compute") {
-    const retired = compute(gpu, COMPUTE_SHADER, { label: "compute-retired" });
-    const peer = compute(gpu, COMPUTE_SHADER, { label: "compute-peer" });
+    const retired = compute(gpu, prepareShader(COMPUTE_SHADER), { label: "compute-retired" });
+    const peer = compute(gpu, prepareShader(COMPUTE_SHADER), { label: "compute-peer" });
     return [compileOwner(retired, () => retired.compile(), () => retired.compileSync()), compileOwner(peer, () => peer.compile(), () => peer.compileSync())];
   }
   const output = target(gpu, { size: [2, 2] });
   if (kind === "effect") {
-    const retired = effect(gpu, EFFECT_SHADER, { label: "effect-retired" });
-    const peer = effect(gpu, EFFECT_SHADER, { label: "effect-peer" });
+    const retired = effect(gpu, prepareShader(EFFECT_SHADER), { label: "effect-retired" });
+    const peer = effect(gpu, prepareShader(EFFECT_SHADER), { label: "effect-peer" });
     return [compileOwner(retired, () => retired.compile(output), () => retired.compileSync(output)), compileOwner(peer, () => peer.compile(output), () => peer.compileSync(output))];
   }
-  const retired = draw(gpu, { shader: DRAW_SHADER, label: "draw-retired" });
-  const peer = draw(gpu, { shader: DRAW_SHADER, label: "draw-peer" });
+  const retired = draw(gpu, { shader: prepareShader(DRAW_SHADER), label: "draw-retired" });
+  const peer = draw(gpu, { shader: prepareShader(DRAW_SHADER), label: "draw-peer" });
   return [compileOwner(retired, () => retired.compile(output), () => retired.compileSync(output)), compileOwner(peer, () => peer.compile(output), () => peer.compileSync(output))];
 }
 

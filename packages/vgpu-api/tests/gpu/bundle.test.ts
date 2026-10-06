@@ -140,10 +140,10 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
       const seed = effect(gpu, prepareShader(SOLID_GREEN), { label: "seed" });
       frame(gpu, (f) => f.pass({ target: read, clear: [0, 0, 0, 1] }, (p) => p.draw(seed)));
 
-      const evenEffect = effect(gpu, COPY, { label: "sim-even", set: { src: read } });
+      const evenEffect = effect(gpu, prepareShader(COPY), { label: "sim-even", set: { src: read } });
       const even = bundle(gpu, { target: write, label: "even" }, (b) => b.draw(evenEffect));
       [read, write] = [write, read];
-      const oddEffect = effect(gpu, COPY, { label: "sim-odd", set: { src: read } });
+      const oddEffect = effect(gpu, prepareShader(COPY), { label: "sim-odd", set: { src: read } });
       const odd = bundle(gpu, { target: write, label: "odd" }, (b) => b.draw(oddEffect));
       [read, write] = [write, read];
 
@@ -165,7 +165,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu bundle GPU acceptanc
       const output = target(gpu, { size: [4, 4], format: "rgba8unorm" });
       const first = target(gpu, { size: [4, 4], format: "rgba8unorm" });
       const second = target(gpu, { size: [4, 4], format: "rgba8unorm" });
-      const shared = effect(gpu, COPY, { label: "shared-sim", set: { src: first } });
+      const shared = effect(gpu, prepareShader(COPY), { label: "shared-sim", set: { src: first } });
       const older = bundle(gpu, { target: output, label: "older" }, (b) => b.draw(shared));
       bundle(gpu, { target: output, label: "newer" }, (b) => {
         shared.set({ src: second });

@@ -124,7 +124,7 @@ test("disposed, stale, and swept bundle snapshots release their reverse records"
     const output = target(gpu, { size: [4, 4] });
     const source = target(gpu, { size: [4, 4] });
     const replacement = target(gpu, { size: [4, 4] });
-    const sampled = effect(gpu, SAMPLED, { set: { source: source.color } });
+    const sampled = effect(gpu, prepareShader(SAMPLED), { set: { source: source.color } });
     frame(gpu, current => current.pass(output, pass => pass.draw(sampled)));
     const cache = bindGroupCacheTestState(renderService(kernelOf(gpu)).binds);
     const baselineRecords = cache.lifetime.records;

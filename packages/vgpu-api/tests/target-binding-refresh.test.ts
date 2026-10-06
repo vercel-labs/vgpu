@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { expect, test, vi } from "vitest";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
 import { bundle, effect, frame, init, target } from "../src/mock.ts";
@@ -30,7 +31,7 @@ test("a followed Target resolves only its newest attachment without recreate sub
     const source = target(gpu, { size: [4, 4] });
     const output = target(gpu, { size: [4, 4] });
     const recreate = vi.spyOn(source, "onTexturesRecreated");
-    const sampled = effect(gpu, SAMPLE, { label: "lazy-target", set: { source } });
+    const sampled = effect(gpu, prepareShader(SAMPLE), { label: "lazy-target", set: { source } });
     const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
     const groupsBefore = mock.calls.createBindGroup;
 
@@ -53,7 +54,7 @@ test("reflected depth bindings follow the newest depth attachment", async () => 
   try {
     const source = target(gpu, { size: [4, 4], depth: true });
     const output = target(gpu, { size: [4, 4] });
-    const sampled = effect(gpu, DEPTH, { set: { source } });
+    const sampled = effect(gpu, prepareShader(DEPTH), { set: { source } });
     source.resize([8, 8]);
     source.resize([16, 16]);
     expect(() => frame(gpu, current => current.pass(output, pass => pass.draw(sampled)))).not.toThrow();
@@ -65,7 +66,7 @@ test("same-size and failed Target resizes preserve the resolved cache entry", as
   try {
     const source = target(gpu, { size: [4, 4] });
     const output = target(gpu, { size: [4, 4] });
-    const sampled = effect(gpu, SAMPLE, { set: { source } });
+    const sampled = effect(gpu, prepareShader(SAMPLE), { set: { source } });
     const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
     const render = () => frame(gpu, current => current.pass(output, pass => pass.draw(sampled)));
     render();
@@ -87,7 +88,7 @@ test("recreation callbacks see the new generation and reject the obsolete bundle
   try {
     const source = target(gpu, { size: [4, 4] });
     const output = target(gpu, { size: [4, 4] });
-    const sampled = effect(gpu, SAMPLE, { label: "followed", set: { source } });
+    const sampled = effect(gpu, prepareShader(SAMPLE), { label: "followed", set: { source } });
     const obsolete = bundle(gpu, { target: output, label: "obsolete" }, recorder => recorder.draw(sampled));
     let fresh: ReturnType<typeof bundle> | undefined;
     source.onTexturesRecreated!(() => {
@@ -111,8 +112,8 @@ test("fixed attachments and destroyed Targets fail, while followed replacements 
     const followedSource = target(gpu, { size: [4, 4] });
     const fixedSource = target(gpu, { size: [4, 4] });
     const output = target(gpu, { size: [4, 4] });
-    const followed = effect(gpu, SAMPLE, { label: "followed", set: { source: followedSource } });
-    const fixed = effect(gpu, SAMPLE, { label: "fixed", set: { source: fixedSource.color } });
+    const followed = effect(gpu, prepareShader(SAMPLE), { label: "followed", set: { source: followedSource } });
+    const fixed = effect(gpu, prepareShader(SAMPLE), { label: "fixed", set: { source: fixedSource.color } });
     const render = (drawable: typeof followed) => frame(gpu, current => current.pass(output, pass => pass.draw(drawable)));
     fixedSource.color.destroy();
     expect(() => render(fixed)).toThrowError(expect.objectContaining({ code: "VGPU-R1-BINDING-DESTROYED" }));
@@ -133,7 +134,7 @@ test("each dead binding can be replaced transactionally despite another dead bin
     const firstReplacement = target(gpu, { size: [4, 4] });
     const secondReplacement = target(gpu, { size: [4, 4] });
     const output = target(gpu, { size: [4, 4] });
-    const sampled = effect(gpu, TWO_TEXTURES, { set: { first: first.color, second: second.color } });
+    const sampled = effect(gpu, prepareShader(TWO_TEXTURES), { set: { first: first.color, second: second.color } });
     first.color.destroy();
     second.color.destroy();
     expect(() => sampled.set({ first: firstReplacement.color })).not.toThrow();
@@ -150,7 +151,7 @@ test("a fresh followed bundle stays live and destination-only resize stays signa
   try {
     const source = target(gpu, { size: [4, 4] });
     const output = target(gpu, { size: [4, 4] });
-    const sampled = effect(gpu, SAMPLE, { set: { source } });
+    const sampled = effect(gpu, prepareShader(SAMPLE), { set: { source } });
     source.resize([8, 8]);
     const recorded = bundle(gpu, { target: output }, recorder => recorder.draw(sampled));
     expect(() => frame(gpu, current => current.pass(output, pass => pass.bundles(recorded)))).not.toThrow();

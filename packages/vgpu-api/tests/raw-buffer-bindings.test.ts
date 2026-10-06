@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
 import { expect, test, vi } from "vitest";
 import { compute, frame, init, uniforms } from "../src/mock.ts";
@@ -7,11 +8,11 @@ test("raw GPUBuffer and GPUBufferBinding values bind as caller-owned resources",
   try {
     const alignment = gpu.gpu.limits.minUniformBufferOffsetAlignment;
     const raw = gpu.gpu.createBuffer({ size: alignment * 2, usage: 64 });
-    const kernel = compute(gpu, `
+    const kernel = compute(gpu, prepareShader(`
       @group(0) @binding(0) var<uniform> first: vec4f;
       @group(0) @binding(1) var<uniform> second: vec4f;
       @compute @workgroup_size(1) fn main() { let value = first + second; }
-    `, { set: { first: raw, second: { buffer: raw, offset: alignment, size: 16 } } });
+    `), { set: { first: raw, second: { buffer: raw, offset: alignment, size: 16 } } });
 
     kernel.dispatch(1);
 
@@ -30,10 +31,10 @@ test("canonical ranges reuse equivalent defaults and snapshot mutable descriptor
   try {
     const alignment = gpu.gpu.limits.minUniformBufferOffsetAlignment;
     const raw = gpu.gpu.createBuffer({ size: alignment * 2, usage: 64 });
-    const kernel = compute(gpu, `
+    const kernel = compute(gpu, prepareShader(`
       @group(0) @binding(0) var<uniform> params: vec4f;
       @compute @workgroup_size(1) fn main() { let value = params; }
-    `);
+    `));
     const mock = getMockGPUDeviceInstrumentation(gpu.gpu);
     const dispatch = () => kernel.dispatch(1);
 
@@ -71,10 +72,10 @@ test("GPUBufferBinding dictionaries may expose inherited accessors", async () =>
       offset: 0,
       size: 16,
     }) as GPUBufferBinding;
-    const kernel = compute(gpu, `
+    const kernel = compute(gpu, prepareShader(`
       @group(0) @binding(0) var<uniform> params: vec4f;
       @compute @workgroup_size(1) fn main() { let value = params; }
-    `);
+    `));
     expect(() => kernel.set({ params: descriptor }).dispatch(1)).not.toThrow();
     expect(getMockGPUDeviceInstrumentation(gpu.gpu).createBindGroupDescriptors.at(-1)!.entries[0]!.resource).toEqual({
       buffer: raw,
@@ -89,11 +90,11 @@ test("GPUBufferBinding dictionaries may expose inherited accessors", async () =>
 test("plain structs with buffer-like member names still pack and SharedUniforms remain nominal", async () => {
   const gpu = await init();
   try {
-    const packed = compute(gpu, `
+    const packed = compute(gpu, prepareShader(`
       struct Range { buffer: u32, offset: u32, size: u32 }
       @group(0) @binding(0) var<uniform> range: Range;
       @compute @workgroup_size(1) fn main() { let value = range.buffer + range.offset + range.size; }
-    `);
+    `));
     packed.set({ range: { buffer: 3, offset: 4, size: 8 } }).set({ offset: 12 }).dispatch(1);
     const packedResource = getMockGPUDeviceInstrumentation(gpu.gpu).createBindGroupDescriptors.at(-1)!.entries[0]!.resource as GPUBufferBinding;
     const bytes = (packedResource.buffer as GPUBuffer & { __vgpuMockBytes: Uint8Array }).__vgpuMockBytes;
@@ -102,16 +103,16 @@ test("plain structs with buffer-like member names still pack and SharedUniforms 
 
     const writes = vi.spyOn(gpu.gpu.queue, "writeBuffer");
     const shared = uniforms(gpu, { value: 7 });
-    const sharedKernel = compute(gpu, `
+    const sharedKernel = compute(gpu, prepareShader(`
       struct Params { value: u32 }
       @group(0) @binding(0) var<uniform> params: Params;
       @compute @workgroup_size(1) fn main() { let value = params.value; }
-    `, { set: { params: shared } });
-    compute(gpu, `
+    `), { set: { params: shared } });
+    compute(gpu, prepareShader(`
       struct OtherParams { value: u32 }
       @group(0) @binding(0) var<uniform> params: OtherParams;
       @compute @workgroup_size(1) fn main() { let value = params.value; }
-    `, { set: { params: shared } });
+    `), { set: { params: shared } });
     expect(writes).not.toHaveBeenCalled();
     expect(() => sharedKernel.dispatch(1)).not.toThrow();
     expect(writes).toHaveBeenCalledTimes(1);
@@ -125,10 +126,10 @@ test("invalid raw ranges fail transactionally with binding-specific fixes", asyn
   try {
     const alignment = gpu.gpu.limits.minUniformBufferOffsetAlignment;
     const raw = gpu.gpu.createBuffer({ size: alignment * 2, usage: 64 });
-    const kernel = compute(gpu, `
+    const kernel = compute(gpu, prepareShader(`
       @group(0) @binding(0) var<uniform> params: vec4f;
       @compute @workgroup_size(1) fn main() { let value = params; }
-    `, { label: "ranges", set: { params: { buffer: raw, offset: 0, size: 16 } } });
+    `), { label: "ranges", set: { params: { buffer: raw, offset: 0, size: 16 } } });
     kernel.dispatch(1);
     const mock = getMockGPUDeviceInstrumentation(gpu.gpu);
     const groups = mock.calls.createBindGroup;
@@ -174,10 +175,10 @@ test("storage ranges require four-byte sizes and enforce granted maximums", asyn
   try {
     const alignment = gpu.gpu.limits.minStorageBufferOffsetAlignment;
     const raw = gpu.gpu.createBuffer({ size: alignment * 2, usage: 128 });
-    const kernel = compute(gpu, `
+    const kernel = compute(gpu, prepareShader(`
       @group(0) @binding(0) var<storage, read> values: array<u32>;
       @compute @workgroup_size(1) fn main() { let value = values[0]; }
-    `);
+    `));
     expect(() => kernel.set({ values: { buffer: raw, offset: 0, size: 6 } })).toThrowError(expect.objectContaining({
       code: "VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE",
       message: expect.stringContaining("multiple of 4"),
@@ -204,13 +205,13 @@ test("raw and JS binding ownership cannot flip, and rejected raw candidates do n
       @compute @workgroup_size(1) fn main() { let value = params; }
     `;
 
-    const rawFirst = compute(gpu, shader, { set: { params: raw } });
+    const rawFirst = compute(gpu, prepareShader(shader), { set: { params: raw } });
     expect(() => rawFirst.set({ params: [1, 2, 3, 4] })).toThrowError(expect.objectContaining({ code: "VGPU-R1-OWNERSHIP-FLIP" }));
 
-    const jsFirst = compute(gpu, shader, { set: { params: [1, 2, 3, 4] } });
+    const jsFirst = compute(gpu, prepareShader(shader), { set: { params: [1, 2, 3, 4] } });
     expect(() => jsFirst.set({ params: raw })).toThrowError(expect.objectContaining({ code: "VGPU-R1-OWNERSHIP-FLIP" }));
 
-    const rejectedFirst = compute(gpu, shader);
+    const rejectedFirst = compute(gpu, prepareShader(shader));
     expect(() => rejectedFirst.set({ params: wrongUsage })).toThrowError(expect.objectContaining({ code: "VGPU-R1-BINDING-INCOMPATIBLE-RESOURCE" }));
     expect(() => rejectedFirst.set({ params: [1, 2, 3, 4] }).dispatch(1)).not.toThrow();
   } finally {
@@ -278,7 +279,7 @@ test("writable storage aliasing compares native allocation across ranges and spe
     ];
 
     for (const variant of variants) {
-      const aliased = compute(gpu, shader, { label: variant.name, set: {
+      const aliased = compute(gpu, prepareShader(shader), { label: variant.name, set: {
         source: variant.source,
         destination: variant.destination,
       } });
@@ -299,7 +300,7 @@ test("writable storage aliasing compares native allocation across ranges and spe
       pending.cancel();
     }
 
-    const distinct = compute(gpu, shader, { set: { source: raw, destination: other } });
+    const distinct = compute(gpu, prepareShader(shader), { set: { source: raw, destination: other } });
     expect(() => distinct.dispatch(1)).not.toThrow();
   } finally {
     gpu.dispose();
@@ -311,11 +312,11 @@ test("multiple read-only bindings may share one allocation while retaining range
   try {
     const alignment = gpu.gpu.limits.minStorageBufferOffsetAlignment;
     const raw = gpu.gpu.createBuffer({ size: alignment * 2, usage: 128 });
-    const kernel = compute(gpu, `
+    const kernel = compute(gpu, prepareShader(`
       @group(0) @binding(0) var<storage, read> first: array<u32>;
       @group(0) @binding(1) var<storage, read> second: array<u32>;
       @compute @workgroup_size(1) fn main() { let value = first[0] + second[0]; }
-    `, { set: {
+    `), { set: {
       first: { buffer: raw, offset: 0, size: 4 },
       second: { buffer: raw, offset: alignment, size: 4 },
     } });

@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { describe, expect, test } from "vitest";
 import { compute, draw, effect, frame, geometry, init, storage, target, texture, uniforms } from "../../src/node.ts";
 
@@ -47,9 +48,9 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("consumer disposal native 
       const effectOutput = target(gpu, { size: [1, 1], format: "rgba8unorm" });
       const values = storage(gpu, 4);
       values.write(new Uint32Array([0]));
-      const drawable = draw(gpu, { shader: DRAW_SHADER, label: "pending-draw", set: { params: { value: 0.25 } } });
-      const fullscreen = effect(gpu, EFFECT_SHADER, { label: "pending-effect", set: { params: { value: 0.5 } } });
-      const simulation = compute(gpu, COMPUTE_SHADER, { label: "pending-compute", set: { params: { value: 1 }, output: values } });
+      const drawable = draw(gpu, { shader: prepareShader(DRAW_SHADER), label: "pending-draw", set: { params: { value: 0.25 } } });
+      const fullscreen = effect(gpu, prepareShader(EFFECT_SHADER), { label: "pending-effect", set: { params: { value: 0.5 } } });
+      const simulation = compute(gpu, prepareShader(COMPUTE_SHADER), { label: "pending-compute", set: { params: { value: 1 }, output: values } });
       await Promise.all([drawable.compile(first), fullscreen.compile(effectOutput), simulation.compile()]);
 
       const pending = frame(gpu);
@@ -79,7 +80,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("consumer disposal native 
 
       const canceledValues = storage(gpu, 4);
       canceledValues.write(new Uint32Array([7]));
-      const canceledCompute = compute(gpu, COMPUTE_SHADER, { set: { params: { value: 9 }, output: canceledValues } });
+      const canceledCompute = compute(gpu, prepareShader(COMPUTE_SHADER), { set: { params: { value: 9 }, output: canceledValues } });
       await canceledCompute.compile();
       const canceled = frame(gpu);
       canceled.computePass(pass => pass.dispatch(canceledCompute, 1));
@@ -89,7 +90,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("consumer disposal native 
       expect(new Uint32Array(await canceledValues.read())[0]).toBe(7);
 
       const canceledOutput = target(gpu, { size: [1, 1], format: "rgba8unorm" });
-      const canceledDraw = draw(gpu, { shader: DRAW_SHADER, set: { params: { value: 0.25 } } });
+      const canceledDraw = draw(gpu, { shader: prepareShader(DRAW_SHADER), set: { params: { value: 0.25 } } });
       frame(gpu, current => current.pass(canceledOutput, pass => pass.draw(canceledDraw)));
       await gpu.settled();
       expect(await readPixel(canceledOutput)).toEqual([64, 0, 0, 255]);
@@ -115,10 +116,10 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("consumer disposal native 
       const peerOutput = target(gpu, { size: [1, 1], format: "rgba8unorm" });
       const borrowed = storage(gpu, 4);
       borrowed.write(new Uint32Array([4]));
-      const retiredDraw = draw(gpu, { shader: DRAW_SHADER, label: "retired-owner", set: { params: { value: 0.25 } } });
-      const peerDraw = draw(gpu, { shader: DRAW_SHADER, label: "live-peer", set: { params: { value: 0.5 } } });
-      const retiredCompute = compute(gpu, COMPUTE_SHADER, { label: "retired-compute-owner", set: { params: { value: 3 }, output: borrowed } });
-      const peerCompute = compute(gpu, COMPUTE_SHADER, { label: "live-compute-peer", set: { params: { value: 2 }, output: borrowed } });
+      const retiredDraw = draw(gpu, { shader: prepareShader(DRAW_SHADER), label: "retired-owner", set: { params: { value: 0.25 } } });
+      const peerDraw = draw(gpu, { shader: prepareShader(DRAW_SHADER), label: "live-peer", set: { params: { value: 0.5 } } });
+      const retiredCompute = compute(gpu, prepareShader(COMPUTE_SHADER), { label: "retired-compute-owner", set: { params: { value: 3 }, output: borrowed } });
+      const peerCompute = compute(gpu, prepareShader(COMPUTE_SHADER), { label: "live-compute-peer", set: { params: { value: 2 }, output: borrowed } });
       await Promise.all([retiredDraw.compile(retiredOutput), peerDraw.compile(peerOutput), retiredCompute.compile(), peerCompute.compile()]);
 
       retiredDraw.dispose();
@@ -165,13 +166,13 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("consumer disposal native 
       const retiredOutput = target(gpu, { size: [1, 1], format: "rgba8unorm" });
       const peerOutput = target(gpu, { size: [1, 1], format: "rgba8unorm" });
       const retired = draw(gpu, {
-        shader: BORROWED_DRAW_SHADER,
+        shader: prepareShader(BORROWED_DRAW_SHADER),
         geometry: fullscreen,
         label: "retired-borrower",
         set: { source, params },
       });
       const peer = draw(gpu, {
-        shader: BORROWED_DRAW_SHADER,
+        shader: prepareShader(BORROWED_DRAW_SHADER),
         geometry: fullscreen,
         label: "live-borrower",
         set: { source, params },

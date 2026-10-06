@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { expect, test, vi } from "vitest";
 import { bundle, draw, effect, frame, geometry, init, target } from "../../src/mock.ts";
 
@@ -25,7 +26,7 @@ test("recording-local rebinding stales older bundles and captures both resources
     const output = target(gpu, { size: [4, 4] });
     const first = target(gpu, { size: [4, 4] });
     const second = target(gpu, { size: [4, 4] });
-    const sampled = effect(gpu, SAMPLED, { label: "sampled", set: { source: first.color } });
+    const sampled = effect(gpu, prepareShader(SAMPLED), { label: "sampled", set: { source: first.color } });
     const older = bundle(gpu, { target: output, label: "older" }, recorder => recorder.draw(sampled));
     const newer = bundle(gpu, { target: output, label: "newer" }, recorder => {
       recorder.draw(sampled);
@@ -52,8 +53,8 @@ test("captured geometry and a captured slice both validate their backing geometr
     const mesh = geometry(gpu, {
       buffers: [{ data: new Float32Array([-1, -1, 1, -1, 0, 1]), attributes: { position: { format: "float32x2", location: 0 } } }],
     });
-    const whole = draw(gpu, { shader: GEOMETRY, geometry: mesh });
-    const sliced = draw(gpu, { shader: GEOMETRY, geometry: mesh.slice({ firstVertex: 0, vertexCount: 3 }) });
+    const whole = draw(gpu, { shader: prepareShader(GEOMETRY), geometry: mesh });
+    const sliced = draw(gpu, { shader: prepareShader(GEOMETRY), geometry: mesh.slice({ firstVertex: 0, vertexCount: 3 }) });
     const recorded = bundle(gpu, { target: output }, recorder => {
       recorder.draw(whole);
       recorder.draw(sliced);
@@ -68,8 +69,8 @@ test("a mixed live and stale bundle list executes none of the list", async () =>
   try {
     const output = target(gpu, { size: [4, 4] });
     const source = target(gpu, { size: [4, 4] });
-    const liveDraw = effect(gpu, SOLID);
-    const sampled = effect(gpu, SAMPLED, { set: { source: source.color } });
+    const liveDraw = effect(gpu, prepareShader(SOLID));
+    const sampled = effect(gpu, prepareShader(SAMPLED), { set: { source: source.color } });
     const live = bundle(gpu, { target: output, label: "live" }, recorder => recorder.draw(liveDraw));
     const stale = bundle(gpu, { target: output, label: "stale" }, recorder => recorder.draw(sampled));
     source.color.destroy();
@@ -98,7 +99,7 @@ test("consumer disposal permanently stales managed replay with the exact draw ca
   const gpu = await init();
   try {
     const output = target(gpu, { size: [4, 4] });
-    const drawable = effect(gpu, SOLID, { label: "retired-effect" });
+    const drawable = effect(gpu, prepareShader(SOLID), { label: "retired-effect" });
     const recorded = bundle(gpu, { target: output, label: "retired-bundle" }, recorder => recorder.draw(drawable));
     const savedNative = recorded.gpu;
 
@@ -121,7 +122,7 @@ test("recording an already-disposed consumer fails with its tombstone before nat
   const gpu = await init();
   try {
     const output = target(gpu, { size: [4, 4] });
-    const drawable = effect(gpu, SOLID, { label: "already-retired" });
+    const drawable = effect(gpu, prepareShader(SOLID), { label: "already-retired" });
     drawable.dispose();
 
     expect(() => bundle(gpu, { target: output, label: "failed-recording" }, recorder => recorder.draw(drawable))).toThrowError(
@@ -139,7 +140,7 @@ test("recording an already-disposed plain Draw reports the recorder draw operati
   const gpu = await init();
   try {
     const output = target(gpu, { size: [4, 4] });
-    const drawable = draw(gpu, { shader: SOLID, label: "already-retired-draw" });
+    const drawable = draw(gpu, { shader: prepareShader(SOLID), label: "already-retired-draw" });
     drawable.dispose();
 
     expect(() => bundle(gpu, { target: output }, recorder => recorder.draw(drawable))).toThrowError(
@@ -154,7 +155,7 @@ test("disposal during recording stales immediately", async () => {
   const gpu = await init();
   try {
     const output = target(gpu, { size: [4, 4] });
-    const drawable = effect(gpu, SOLID, { label: "recording-retired" });
+    const drawable = effect(gpu, prepareShader(SOLID), { label: "recording-retired" });
     const recorded = bundle(gpu, { target: output, label: "recording-bundle" }, recorder => {
       recorder.draw(drawable);
       drawable.dispose();
@@ -176,7 +177,7 @@ test("the first permanent stale cause wins over later consumer disposal", async 
   try {
     const output = target(gpu, { size: [4, 4] });
     const source = target(gpu, { size: [4, 4] });
-    const drawable = effect(gpu, SAMPLED, { label: "first-cause", set: { source: source.color } });
+    const drawable = effect(gpu, prepareShader(SAMPLED), { label: "first-cause", set: { source: source.color } });
     const recorded = bundle(gpu, { target: output, label: "first-cause-bundle" }, recorder => recorder.draw(drawable));
 
     source.color.destroy();
@@ -199,8 +200,8 @@ test("consumer disposal stales every bundle that recorded it and leaves unrelate
   const gpu = await init();
   try {
     const output = target(gpu, { size: [4, 4] });
-    const retired = effect(gpu, SOLID, { label: "retired-many" });
-    const live = effect(gpu, SOLID, { label: "live-many" });
+    const retired = effect(gpu, prepareShader(SOLID), { label: "retired-many" });
+    const live = effect(gpu, prepareShader(SOLID), { label: "live-many" });
     const first = bundle(gpu, { target: output, label: "first-many" }, recorder => recorder.draw(retired));
     const second = bundle(gpu, { target: output, label: "second-many" }, recorder => {
       recorder.draw(live);

@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { bindGroupCacheTestState, createBindGroupCache } from "../src/bind-cache.ts";
 import { bindingTextureView, bindingViewCacheTestState } from "../src/binding-views.ts";
 import { bundle, compute, draw, effect, frame, init, target, texture, uniforms } from "../src/mock.ts";
@@ -96,7 +97,7 @@ try {
   refs.push(...disposedBundleConsumerRefs);
   await gpu.settled();
 
-  const retained = effect(gpu, SAMPLED, { label: "retained-control", set: { source } });
+  const retained = effect(gpu, prepareShader(SAMPLED), { label: "retained-control", set: { source } });
   const retainedRef = new WeakRef(retained);
   const { cacheControl, ownerShardRef, bindGroupRef } = makeCacheControl();
   const { viewTextures, defaultViewRefs, generatedViewRefs, serviceRefs, sharedVariant } = makeIndependentViewServiceControl();
@@ -155,7 +156,7 @@ try {
   // The shared blocks are positive controls: still set and drawn after the consumers bound to them were collected.
   for (const shared of retainedShared) {
     shared.set({ value: 4 });
-    const reuse = effect(gpu, UNIFORM, { label: "pooled-shared-reuse", set: { params: shared } });
+    const reuse = effect(gpu, prepareShader(UNIFORM), { label: "pooled-shared-reuse", set: { params: shared } });
     await frame(gpu, current => current.pass(output, pass => pass.draw(reuse))).done;
     reuse.dispose();
   }
@@ -188,7 +189,7 @@ try {
   function makeDraws(count: number, dispose = false): WeakRef<object>[] {
     return Array.from({ length: count }, (_, index) => {
       const sourceValue = index % 3 === 0 ? source : index % 3 === 1 ? source.color : rawView;
-      const drawable = draw(gpu, { shader: SAMPLED_DRAW, label: `draw-${index}`, set: { source: sourceValue } });
+      const drawable = draw(gpu, { shader: prepareShader(SAMPLED_DRAW), label: `draw-${index}`, set: { source: sourceValue } });
       if (index % 2 === 0) frame(gpu, current => current.pass(output, pass => pass.draw(drawable)));
       if (dispose) drawable.dispose();
       return new WeakRef(drawable);
@@ -199,10 +200,10 @@ try {
     return Array.from({ length: count }, (_, index) => {
       const variant = index % 5;
       const drawable = variant === 3
-        ? effect(gpu, UNIFORM, { label: `effect-buffer-${index}`, set: { params: uniformBuffer } })
+        ? effect(gpu, prepareShader(UNIFORM), { label: `effect-buffer-${index}`, set: { params: uniformBuffer } })
         : variant === 4
-          ? effect(gpu, UNIFORM, { label: `effect-packed-${index}`, set: { params: { value: index } } })
-          : effect(gpu, SAMPLED, { label: `effect-${index}`, set: { source: variant === 0 ? source : variant === 1 ? source.color : rawView } });
+          ? effect(gpu, prepareShader(UNIFORM), { label: `effect-packed-${index}`, set: { params: { value: index } } })
+          : effect(gpu, prepareShader(SAMPLED), { label: `effect-${index}`, set: { source: variant === 0 ? source : variant === 1 ? source.color : rawView } });
       if (index % 2 === 0) frame(gpu, current => current.pass(output, pass => pass.draw(drawable)));
       const underlying = effectDraw(drawable);
       if (dispose) drawable.dispose();
@@ -212,7 +213,7 @@ try {
 
   function makeComputes(count: number, dispose = false): WeakRef<object>[] {
     return Array.from({ length: count }, (_, index) => {
-      const pipeline = compute(gpu, STORAGE, { label: `compute-${index}`, set: { values: storageBuffer } });
+      const pipeline = compute(gpu, prepareShader(STORAGE), { label: `compute-${index}`, set: { values: storageBuffer } });
       if (index % 2 === 0) pipeline.dispatch(1);
       if (dispose) pipeline.dispose();
       return new WeakRef(pipeline);
@@ -224,7 +225,7 @@ try {
     const shared = uniforms(gpu, { value: 1 });
     const references: WeakRef<object>[] = [];
     const drawables = Array.from({ length: count }, (_, index) => {
-      const drawable = effect(gpu, UNIFORM, { label: `pooled-effect-${index}`, set: { params: index % 2 === 0 ? shared : { value: index } } });
+      const drawable = effect(gpu, prepareShader(UNIFORM), { label: `pooled-effect-${index}`, set: { params: index % 2 === 0 ? shared : { value: index } } });
       references.push(new WeakRef(drawable), new WeakRef(effectDraw(drawable)));
       return drawable;
     });
@@ -242,7 +243,7 @@ try {
   }
 
   function makePendingEffect(pendingFrame: ReturnType<typeof frame>, dispose = false): WeakRef<object>[] {
-    const drawable = effect(gpu, UNIFORM, { label: dispose ? "pending-disposed-effect" : "pending-effect", set: { params: { value: 1 } } });
+    const drawable = effect(gpu, prepareShader(UNIFORM), { label: dispose ? "pending-disposed-effect" : "pending-effect", set: { params: { value: 1 } } });
     pendingFrame.pass(output, pass => pass.draw(drawable));
     const underlying = effectDraw(drawable);
     if (dispose) drawable.dispose();
@@ -257,7 +258,7 @@ try {
       { descriptor: true, encode: false, dispose: true },
     ].flatMap(({ descriptor, encode, dispose }, index) => {
       const params = descriptor ? { buffer: rawUniformBuffer, offset: uniformAlignment, size: 4 } : rawUniformBuffer;
-      const drawable = effect(gpu, UNIFORM, { label: `raw-effect-${index}`, set: { params } });
+      const drawable = effect(gpu, prepareShader(UNIFORM), { label: `raw-effect-${index}`, set: { params } });
       if (encode) frame(gpu, current => current.pass(output, drawable));
       const underlying = effectDraw(drawable);
       if (dispose) drawable.dispose();
@@ -273,7 +274,7 @@ try {
       { descriptor: true, encode: false, dispose: true },
     ].map(({ descriptor, encode, dispose }, index) => {
       const values = descriptor ? { buffer: rawStorageBuffer, offset: storageAlignment, size: 4 } : rawStorageBuffer;
-      const pipeline = compute(gpu, STORAGE, { label: `raw-compute-${index}`, set: { values } });
+      const pipeline = compute(gpu, prepareShader(STORAGE), { label: `raw-compute-${index}`, set: { values } });
       if (encode) pipeline.dispatch(1);
       if (dispose) pipeline.dispose();
       return new WeakRef(pipeline);
@@ -281,7 +282,7 @@ try {
   }
 
   function makePendingRawEffect(pendingFrame: ReturnType<typeof frame>, dispose = false): WeakRef<object>[] {
-    const drawable = effect(gpu, UNIFORM, {
+    const drawable = effect(gpu, prepareShader(UNIFORM), {
       label: dispose ? "pending-disposed-raw-effect" : "pending-raw-effect",
       set: { params: { buffer: rawUniformBuffer, offset: uniformAlignment, size: 4 } },
     });
@@ -292,7 +293,7 @@ try {
   }
 
   function makePendingRawCompute(pendingFrame: ReturnType<typeof frame>, dispose = false): WeakRef<object>[] {
-    const pipeline = compute(gpu, STORAGE, {
+    const pipeline = compute(gpu, prepareShader(STORAGE), {
       label: dispose ? "pending-disposed-raw-compute" : "pending-raw-compute",
       set: { values: { buffer: rawStorageBuffer, offset: storageAlignment, size: 4 } },
     });
@@ -309,35 +310,35 @@ try {
     disposedBundleConsumerRefs: WeakRef<object>[];
   } {
     const geometry = { vertexBufferLayouts: [] };
-    const geometryOwner = draw(gpu, { shader: SAMPLED_DRAW, label: "disposed-geometry", geometry });
+    const geometryOwner = draw(gpu, { shader: prepareShader(SAMPLED_DRAW), label: "disposed-geometry", geometry });
     const geometryRef = new WeakRef(geometry);
     geometryOwner.dispose();
 
     const claimed = {} as GPUBindGroup;
-    const claimedOwner = draw(gpu, { shader: SAMPLED_DRAW, label: "disposed-claim" });
+    const claimedOwner = draw(gpu, { shader: prepareShader(SAMPLED_DRAW), label: "disposed-claim" });
     claimedOwner.group(0, claimed);
     const claimedRef = new WeakRef(claimed);
     claimedOwner.dispose();
 
     const rawView = {} as GPUTextureView;
-    const resourceOwner = effect(gpu, SAMPLED, { label: "disposed-resource", set: { source: rawView } });
+    const resourceOwner = effect(gpu, prepareShader(SAMPLED), { label: "disposed-resource", set: { source: rawView } });
     const resourceRef = new WeakRef(rawView);
     resourceOwner.dispose();
 
     const packedValue = { value: 3 };
-    const valueOwner = effect(gpu, UNIFORM, { label: "disposed-value", set: { params: packedValue } });
+    const valueOwner = effect(gpu, prepareShader(UNIFORM), { label: "disposed-value", set: { params: packedValue } });
     const valueRef = new WeakRef(packedValue);
     valueOwner.dispose();
 
     const computeConstructorSet = gpu.device.createBuffer({ size: 16, usage: ["storage"] });
-    const computeOwner = compute(gpu, STORAGE, {
+    const computeOwner = compute(gpu, prepareShader(STORAGE), {
       label: "disposed-compute-constructor-set",
       set: { values: computeConstructorSet },
     });
     const computeConstructorSetRef = new WeakRef(computeConstructorSet);
     computeOwner.dispose();
 
-    const bundleOwner = effect(gpu, SAMPLED, {
+    const bundleOwner = effect(gpu, prepareShader(SAMPLED), {
       label: "disposed-retained-bundle-owner",
       set: { source },
     });

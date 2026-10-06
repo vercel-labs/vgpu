@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { describe, expect, test } from "vitest";
 import { compute, effect, frame, init, storage, target } from "../../src/node.ts";
 
@@ -28,7 +29,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("raw buffer bindings on Da
       gpu.gpu.queue.writeBuffer(raw, alignment, new Float32Array([0, 1, 0, 1]));
       const second = { buffer: raw, offset: alignment, size: 16 };
       const output = target(gpu, { size: [2, 1], format: "rgba8unorm" });
-      const ranges = effect(gpu, UNIFORM_RANGES, {
+      const ranges = effect(gpu, prepareShader(UNIFORM_RANGES), {
         label: "raw-uniform-ranges",
         set: { first: { buffer: raw, offset: 0, size: 16 }, second },
       });
@@ -46,7 +47,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("raw buffer bindings on Da
       ]);
 
       const peerOutput = target(gpu, { size: [2, 1], format: "rgba8unorm" });
-      const peer = effect(gpu, UNIFORM_RANGES, {
+      const peer = effect(gpu, prepareShader(UNIFORM_RANGES), {
         set: { first: { buffer: raw, offset: 0, size: 16 }, second },
       });
       await frame(gpu, current => current.pass(peerOutput, peer)).done;
@@ -70,7 +71,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("raw buffer bindings on Da
       gpu.gpu.queue.writeBuffer(raw, 0, new Uint32Array([10]));
       gpu.gpu.queue.writeBuffer(raw, alignment, new Uint32Array([32]));
       const output = storage(gpu, 4);
-      const ranges = compute(gpu, STORAGE_RANGES, { set: {
+      const ranges = compute(gpu, prepareShader(STORAGE_RANGES), { set: {
         first: { buffer: raw, offset: 0, size: 4 },
         second: { buffer: raw, offset: alignment, size: 4 },
         output,
@@ -83,11 +84,11 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("raw buffer bindings on Da
       await frame(gpu, current => current.computePass(pass => pass.dispatch(ranges, 1))).done;
       expect(new Uint32Array(await output.read())[0]).toBe(42);
 
-      const aliased = compute(gpu, `
+      const aliased = compute(gpu, prepareShader(`
         @group(0) @binding(0) var<storage, read> source: array<u32>;
         @group(0) @binding(1) var<storage, read_write> destination: array<u32>;
         @compute @workgroup_size(1) fn main() { destination[0] = source[0]; }
-      `, { set: {
+      `), { set: {
         source: { buffer: raw, offset: 0, size: 4 },
         destination: { buffer: raw, offset: alignment, size: 4 },
       } });
@@ -100,7 +101,7 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("raw buffer bindings on Da
 
       ranges.dispose();
       output.write(new Uint32Array([0]));
-      const peer = compute(gpu, STORAGE_RANGES, { set: {
+      const peer = compute(gpu, prepareShader(STORAGE_RANGES), { set: {
         first: { buffer: raw, offset: 0, size: 4 },
         second: { buffer: raw, offset: alignment, size: 4 },
         output,
