@@ -518,6 +518,7 @@ Each color/depth/sample-count variant is a different pipeline. A missed variant 
 
 ```ts
 import { init, draw, frame, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const sceneTarget = target(gpu, { size: [64, 64] });
@@ -525,7 +526,7 @@ const sceneTarget = target(gpu, { size: [64, 64] });
 // ---cut---
 const marker = draw(gpu, {
   label: "marker",
-  shader: `
+  shader: prepareShader(`
     struct Params { tint: vec4f }
     @group(0) @binding(0) var<uniform> params: Params;
     @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
@@ -533,7 +534,7 @@ const marker = draw(gpu, {
       return vec4f(p[vi], 0, 1);
     }
     @fragment fn fs_main() -> @location(0) vec4f { return params.tint; }
-  `,
+  `),
   set: { params: { tint: [1, 0, 0, 1] } },
 });
 
@@ -564,6 +565,7 @@ Bind a raw `GPUBuffer` you created on `gpu.gpu` (the shared `GPUDevice`) when yo
 
 ```ts
 import { init, draw, frame, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const sceneTarget = target(gpu, { size: [64, 64] });
@@ -579,7 +581,7 @@ const palette = gpu.gpu.createBuffer({ label: "palette", size: coolOffset + TINT
 gpu.gpu.queue.writeBuffer(palette, 0, new Float32Array([1, 0.4, 0.2, 1])); // warm tint
 gpu.gpu.queue.writeBuffer(palette, coolOffset, new Float32Array([0.2, 0.5, 1, 1])); // cool tint
 
-const stripeShader = `
+const stripeShader = prepareShader(`
   struct Tint { color: vec4f }
   struct Stripe { offset: f32, size: f32, buffer: f32 } // plain data that shares member names with a buffer binding
   @group(0) @binding(0) var<uniform> tint: Tint;
@@ -594,7 +596,7 @@ const stripeShader = `
     let coverage = 1.0 - smoothstep(stripe.size, stripe.size + stripe.buffer, gap);
     return vec4f(tint.color.rgb, coverage);
   }
-`;
+`);
 
 const coolRange: GPUBufferBinding = { buffer: palette, offset: coolOffset }; // size defaults to the remaining 16 bytes
 const warmStripe = draw(gpu, {

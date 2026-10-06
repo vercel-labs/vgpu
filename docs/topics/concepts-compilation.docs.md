@@ -195,13 +195,14 @@ Compiled pipelines belong to the device-wide cache, not to the draw that request
 
 ```ts
 import { init, effect, VGPUError } from "vgpu";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
-const oceanSource = `
+const oceanSource = prepareShader(`
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     return vec4f(uv, 0.8, 1.0);
   }
-`;
+`);
 
 // ---cut---
 const signature = { colors: [navigator.gpu.getPreferredCanvasFormat()] };

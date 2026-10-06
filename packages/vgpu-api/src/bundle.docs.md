@@ -90,13 +90,14 @@ Create a draw or effect inside the function that records it and return only the 
 
 ```ts
 import { init, bundle, effect, frame, target, type Bundle, type Gpu, type Target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const sceneTarget = target(gpu, { size: [64, 64] });
 
 // ---cut---
 function recordBackground(gpu: Gpu, sceneTarget: Target): Bundle {
-  const background = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.1, 0.2, 0.4, 1); }`);
+  const background = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.1, 0.2, 0.4, 1); }`));
   return bundle(gpu, { target: sceneTarget, label: "background" }, (recorded) => recorded.draw(background));
 } // `background` is unreachable once this returns; the bundle keeps its own snapshots
 
@@ -233,16 +234,17 @@ Disposing a recorded draw or effect is a change. `draw.dispose()` and `effect.di
 
 ```ts
 import { init, bundle, effect, frame, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const sceneTarget = target(gpu, { size: [64, 64] });
 
 // ---cut---
-let sky = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.4, 0.6, 0.9, 1); }`, { label: "daySky" });
+let sky = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.4, 0.6, 0.9, 1); }`), { label: "daySky" });
 let skyBundle = bundle(gpu, { target: sceneTarget, label: "day" }, (recorded) => recorded.draw(sky));
 
 function switchToNight(): void {
-  const nextSky = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.02, 0.03, 0.1, 1); }`, { label: "nightSky" });
+  const nextSky = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.02, 0.03, 0.1, 1); }`), { label: "nightSky" });
   const nextBundle = bundle(gpu, { target: sceneTarget, label: "night" }, (recorded) => recorded.draw(nextSky));
   const previousSky = sky;
   const previousBundle = skyBundle;

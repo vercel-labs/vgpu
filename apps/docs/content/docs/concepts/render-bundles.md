@@ -212,19 +212,20 @@ A bundle captures the resources bound at each `b.draw()` call. Rebinding a draw 
 
 ```ts
 import { init, bundle, effect, frameLoop, surface, target } from "vgpu";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
 const canvasTarget = surface(gpu, canvas);
 const leftTarget = target(gpu, { size: [256, 256] });
 const rightTarget = target(gpu, { size: [256, 256] });
-const preview = effect(gpu, `
+const preview = effect(gpu, prepareShader(`
   @group(0) @binding(0) var src: texture_2d<f32>;
 
   @fragment fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
     return textureLoad(src, vec2i(position.xy) % vec2i(256), 0);
   }
-`, { set: { src: leftTarget } });
+`), { set: { src: leftTarget } });
 
 // ---cut---
 const leftOnly = bundle(gpu, { target: canvasTarget }, (b) => b.draw(preview));
@@ -248,6 +249,7 @@ A bundle does not hold the draws and effects it recorded. It keeps independent s
 
 ```ts
 import { init, bundle, effect, frameLoop, surface, type Bundle, type Gpu, type Surface } from "vgpu";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
@@ -255,11 +257,11 @@ const canvasTarget = surface(gpu, canvas);
 
 // ---cut---
 function recordBackdrop(gpu: Gpu, canvasTarget: Surface): Bundle {
-  const backdrop = effect(gpu, `
+  const backdrop = effect(gpu, prepareShader(`
     @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
       return vec4f(0.1, 0.3, 0.6 + uv.y * 0.2, 1.0);
     }
-  `);
+  `));
   return bundle(gpu, { target: canvasTarget, label: "backdrop" }, (b) => b.draw(backdrop));
 } // backdrop is unreachable after this returns — the bundle does not need it
 
@@ -277,21 +279,22 @@ Letting a draw go and disposing it are different. Collection is silent: the bund
 
 ```ts
 import { init, bundle, effect, frameLoop, surface } from "vgpu";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
 const canvasTarget = surface(gpu, canvas);
 
 // ---cut---
-let backdrop = effect(gpu, `
+let backdrop = effect(gpu, prepareShader(`
   @fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.1, 0.3, 0.6, 1.0); }
-`, { label: "dayBackdrop" });
+`), { label: "dayBackdrop" });
 let backdropBundle = bundle(gpu, { target: canvasTarget, label: "day" }, (b) => b.draw(backdrop));
 
 function useNightBackdrop(): void {
-  const nextBackdrop = effect(gpu, `
+  const nextBackdrop = effect(gpu, prepareShader(`
     @fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.02, 0.03, 0.1, 1.0); }
-  `, { label: "nightBackdrop" });
+  `), { label: "nightBackdrop" });
   const nextBundle = bundle(gpu, { target: canvasTarget, label: "night" }, (b) => b.draw(nextBackdrop));
   const previousBackdrop = backdrop;
   const previousBundle = backdropBundle;

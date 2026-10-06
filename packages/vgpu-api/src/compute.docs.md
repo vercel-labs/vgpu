@@ -172,17 +172,18 @@ GPU-driven dispatch: the first pass writes the workgroup counts from GPU-side st
 
 ```ts
 import { init, compute, frame, storage } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const particles = storage(gpu, 4 * 256);
 
 // ---cut---
-const integrate = compute(gpu, `
+const integrate = compute(gpu, prepareShader(`
   @group(0) @binding(0) var<storage, read_write> particles: array<f32>;
   @group(0) @binding(1) var<uniform> dt: f32;
   @compute @workgroup_size(64)
   fn cs_main(@builtin(global_invocation_id) id: vec3u) { particles[id.x] += dt; }
-`, { label: "integrate", set: { particles, dt: 0.016 } });
+`), { label: "integrate", set: { particles, dt: 0.016 } });
 await integrate.compile();
 
 const pending = frame(gpu); // manual frame: nothing submits until submit()

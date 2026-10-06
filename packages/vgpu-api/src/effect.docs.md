@@ -166,12 +166,13 @@ Stop whatever still calls the effect before you dispose it — the frame loop an
 
 ```ts
 import { init, effect, frameLoop, surface } from "vgpu";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const canvasSurface = surface(gpu, document.querySelector("canvas")!);
 
 // ---cut---
-const vignette = effect(gpu, `
+const vignette = effect(gpu, prepareShader(`
   struct Params { width: f32, height: f32 }
   @group(0) @binding(0) var<uniform> params: Params;
 
@@ -179,7 +180,7 @@ const vignette = effect(gpu, `
     let centered = position.xy / vec2f(params.width, params.height) - 0.5;
     return vec4f(vec3f(1.0 - length(centered)), 1.0);
   }
-`, { label: "vignette" });
+`), { label: "vignette" });
 
 const unsubscribe = canvasSurface.onResize(({ width, height }) => {
   vignette.set({ params: { width, height } });

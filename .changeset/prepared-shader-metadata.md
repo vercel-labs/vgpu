@@ -26,7 +26,8 @@ rehashing `wgsl` text that is unchanged since the previous creation, while still
 supplied `sourceChecksum`. Reuse is per artifact, so use one artifact per source revision: a new or
 rebuilt artifact (including after HMR) is validated on its own first use. The reuse cache is weakly
 keyed by the artifact and keeps no global registry; draws, effects, and computes still hold the
-metadata they use, collection is not deterministic, and GPU resource disposal is unchanged.
+metadata they use until `dispose()`, collection is not deterministic, and GPU resource disposal is
+unchanged.
 `prepareShader()` still copies supplied `functionExports` and never freezes the caller's arrays.
 
 The `@vgpu/wgsl` Vite and webpack/Turbopack loaders emit prepared ESM modules for every `.wgsl`

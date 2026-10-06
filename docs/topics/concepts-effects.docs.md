@@ -163,6 +163,7 @@ One effect can run a horizontal and a vertical blur back to back:
 
 ```ts
 import { init, effect, frame, sampler, surface, target } from "vgpu";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
@@ -172,7 +173,7 @@ const horizontalTarget = target(gpu, { size: [512, 512] });
 const linear = sampler(gpu, { minFilter: "linear", magFilter: "linear" });
 
 // ---cut---
-const blur = effect(gpu, `
+const blur = effect(gpu, prepareShader(`
   struct Params { direction: vec2f }
   @group(0) @binding(0) var<uniform> params: Params;
   @group(0) @binding(1) var src: texture_2d<f32>;
@@ -185,7 +186,7 @@ const blur = effect(gpu, `
       + textureSampleLevel(src, samp, uv + texel, 0.0);
     return vec4f(sum.rgb / 3.0, 1.0);
   }
-`, { set: { samp: linear } });
+`), { set: { samp: linear } });
 
 frame(gpu, (currentFrame) => {
   blur.set({ params: { direction: [1, 0] }, src: sceneTarget });
@@ -211,18 +212,19 @@ then dispose it:
 
 ```ts
 import { clock, init, effect, frameLoop, surface } from "vgpu";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const canvas = document.querySelector("canvas")!;
 const canvasSurface = surface(gpu, canvas);
-const pulse = effect(gpu, `
+const pulse = effect(gpu, prepareShader(`
   struct Params { time: f32, width: f32, height: f32 }
   @group(0) @binding(0) var<uniform> params: Params;
 
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     return vec4f(uv, sin(params.time) * 0.5 + 0.5, 1.0);
   }
-`, { label: "pulse", set: { params: { time: 0, width: canvasSurface.size[0], height: canvasSurface.size[1] } } });
+`), { label: "pulse", set: { params: { time: 0, width: canvasSurface.size[0], height: canvasSurface.size[1] } } });
 
 // ---cut---
 const unsubscribe = canvasSurface.onResize(({ width, height }) => {
