@@ -7,10 +7,25 @@
 
 Renderer shaders are now prepared ahead of time. `draw(gpu, { shader })`, `effect(gpu, source)`, and
 `compute(gpu, source)` accept only a prepared `ShaderSource` (`version: 2`): the final WGSL plus its
-`reflection`, a `sourceChecksum`, and a `producer`. The renderer validates that metadata when you
-create the draw, effect, or compute and never parses WGSL, so prepared-only browser consumers that
+`reflection`, a `sourceChecksum`, and a `producer`. The renderer validates that metadata before a
+draw, effect, or compute uses it and never parses WGSL, so prepared-only browser consumers that
 import `.wgsl` files and do not call `prepareShader()` at runtime no longer ship the WGSL scanner,
 parser, or reflection.
+
+Prepared artifacts from the loaders and from `prepareShader()` are deeply immutable: the root,
+`reflection`, `functionExports`, and every nested object and array are frozen. The renderer fully
+validates an immutable artifact (checksum and reflection) the first time a draw, effect, or compute
+uses it and then reuses that validated, device-independent snapshot for later draws, effects, and
+computes built from the same artifact, on any gpu, so large scenes no longer pay validation cost per
+draw. Labels, `set` values, bindings, uniform buffers, and pipelines remain per instance. Mutable
+artifacts built elsewhere — a `structuredClone` or JSON copy, an object spread, a hand-built object,
+or one frozen only at its root — are still accepted and revalidated on every creation, as before;
+vgpu never freezes or retains them and only skips rehashing `wgsl` text that is unchanged since the
+previous creation, while still comparing the supplied `sourceChecksum`. Reuse is per artifact, so
+use one artifact per source revision: a new or rebuilt artifact (including after HMR) is validated
+on its own first use. The reuse cache is weakly keyed by the artifact and keeps no global registry;
+it does not change GPU resource disposal. `prepareShader()` still copies supplied `functionExports`
+and never freezes the caller's arrays.
 
 The `@vgpu/wgsl` Vite and webpack/Turbopack loaders emit prepared ESM modules for every `.wgsl`
 import — ordinary leaf files included, with `functionExports: []`. Generated modules never import
@@ -66,6 +81,10 @@ following to `draw(gpu, { shader })`, `effect(gpu, source)`, or `compute(gpu, so
   persistent bundler cache, a prebuilt or committed asset, or a third-party package;
 - a `ResolvedShader` object from `resolveShader()` or `compile()`.
 
+Separately, code that mutates a `.wgsl` import or a `prepareShader()` result — including caching hacks
+that write extra properties into it or edit its `reflection` — now throws a `TypeError` in strict mode
+(module code is strict), because those artifacts are deeply frozen.
+
 TypeScript reports these calls, because the parameters are now `ShaderSource` instead of
 `string | ShaderSource`. At runtime they throw `VGPU-SHADER-SOURCE-UNPREPARED`,
 `VGPU-SHADER-SOURCE-VERSION`, or `VGPU-SHADER-SOURCE-INVALID`. Builds that import `.wgsl` files can
@@ -108,6 +127,12 @@ Keep passing the imported shader object to the renderer; the loader prepares it 
    release depends on before importing `@vgpu/wgsl/prepare`.
 6. Fix any `VGPU-WGSL-*` reflection error the build now reports in a leaf `.wgsl` file, as you would
    the same error at runtime.
+7. Stop mutating prepared artifacts. When the WGSL or its metadata changes, prepare a new artifact —
+   rebuild through the loader or call `prepareShader()` again — instead of editing the existing one;
+   never hand-edit `reflection`. Keep per-app data (caches, tags) in your own objects or a `WeakMap`
+   keyed by the artifact rather than as properties on it. A `structuredClone` or JSON copy is valid
+   but mutable: it is revalidated on every creation and does not get snapshot reuse. An object spread
+   is not a mutable copy either, because its nested objects stay frozen.
 
 Browser code that imports `@vgpu/wgsl/prepare` bundles the WGSL parser into that consumer. Prefer
 `.wgsl` imports or prepared build-time artifacts for static shaders, and reserve runtime preparation
@@ -150,6 +175,11 @@ const legacy = effect(gpu, prepareShader(legacyAsset, "shaders/legacy.wgsl"));
   shader is compatible with the renderer.
 - Render once and confirm no `VGPU-SHADER-SOURCE-UNPREPARED`, `VGPU-SHADER-SOURCE-VERSION`, or
   `VGPU-SHADER-SOURCE-INVALID` is thrown.
+- Start the app and confirm no strict-mode `TypeError` ("Cannot assign to read only property" or
+  "object is not extensible") comes from code that writes to a shader artifact.
+  `Object.isFrozen(shader) && Object.isFrozen(shader.reflection)` is `true` for an imported `.wgsl`
+  file or a `prepareShader()` result; that root-level check is illustrative only, not proof that every
+  nested object is frozen.
 - In a Vite or webpack watch build, remove and restore an imported `.wgsl` dependency and confirm
   the importer rebuilds without restarting the build.
 - Keep `npx vgpu check --require-validation <file>` in CI for device validation, which neither the

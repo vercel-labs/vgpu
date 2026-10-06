@@ -83,7 +83,7 @@ writeFileSync("frame.png", PNG.sync.write(png));
 gpu.dispose();                              // stops Dawn's polling so the process exits
 ```
 
-Nothing about this changes when the shader grows: `resolveShader()` inlines the whole import graph, and `prepareShader()` reflects the one finished string it returns. Pass the `resolved` object rather than `resolved.wgsl` so direct `export fn` metadata carries over; `prepareShader()` reflects the final WGSL again and ignores `resolved.reflection`. Prepare once at startup, not per draw — every call reparses. Animating? Call `shader.set({ params: { time } })` and draw again in a loop, reading the target after each draw.
+Nothing about this changes when the shader grows: `resolveShader()` inlines the whole import graph, and `prepareShader()` reflects the one finished string it returns. Pass the `resolved` object rather than `resolved.wgsl` so direct `export fn` metadata carries over; `prepareShader()` reflects the final WGSL again and ignores `resolved.reflection`. Prepare once at startup, not per draw — every call reparses. The prepared artifact is deeply frozen, so the renderer validates it the first time and reuses the result when you pass the same artifact to more effects, draws, or computes; prepare a new artifact when the WGSL changes instead of editing this one. Animating? Call `shader.set({ params: { time } })` and draw again in a loop, reading the target after each draw.
 
 Rendering an actual 3D scene rather than a fullscreen effect? See [Two-pass rendering](two-pass-rendering.docs.md) for the offscreen-depth-target recipe — it composes with this same no-bundler setup.
 
