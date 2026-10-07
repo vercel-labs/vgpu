@@ -24,6 +24,8 @@ interface ReverseRecord {
 }
 
 export interface BindingLifetimeService {
+  /** Increments whenever a tracked resource is destroyed or the service is disposed. */
+  readonly destroyEpoch: number;
   marker(
     resource: object,
     dependency: string,
@@ -82,7 +84,8 @@ export function createBindingLifetimeService(): BindingLifetimeService {
     disposed: false,
   };
 
-  const service: BindingLifetimeService = {
+  const service: BindingLifetimeService & { destroyEpoch: number } = {
+    destroyEpoch: 0,
     marker(resource, dependency, subscribe) {
       let marker = markers.get(resource);
       if (marker) return marker;
@@ -154,6 +157,7 @@ export function createBindingLifetimeService(): BindingLifetimeService {
     dispose() {
       if (state.disposed) return;
       state.disposed = true;
+      service.destroyEpoch++;
       for (const reference of state.markerRefs.values()) {
         state.markerFinalizer.unregister(reference);
         reference.deref()?.unsubscribe?.();
@@ -174,7 +178,7 @@ function subscribeMarker(
   marker: MutableResourceLifetimeMarker,
   markerId: number,
   unregisterToken: WeakRef<MutableResourceLifetimeMarker>,
-  serviceRef: WeakRef<BindingLifetimeService>,
+  serviceRef: WeakRef<BindingLifetimeService & { destroyEpoch: number }>,
 ): UnsubscribeResourceDestroy {
   return subscribe(() => {
     if (marker.destroyed) return;
@@ -184,6 +188,7 @@ function subscribeMarker(
     if (!service || !state) return;
     state.markerFinalizer.unregister(unregisterToken);
     state.markerRefs.delete(markerId);
+    service.destroyEpoch++;
     service.invalidate(marker.dependency);
   });
 }

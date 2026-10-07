@@ -9,12 +9,12 @@ import { endRenderPassWithClaimValidation } from "./claim-validation-encode.ts";
 import { createSetCore, setCoreTestState, type BindingIdentityChange, type BindingResourceSnapshot, type BindingState, type SetBag, type SetCore, type SetCoreTestState } from "./set-core.ts";
 import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, cachedBindGroupLayout, visibilityForEntries, type BindingVisibilityFn } from "./set-layouts.ts";
 import type { CompileTarget, Target, TargetSignature } from "./target.ts";
-import { normalizeConstantsOptions, normalizeSignature, pipelineKeyOf, selectEntryPoint, signatureKeyOf, validateTargetSignature, createPipelineLayoutCache, createPipelineStore, createShaderModuleCache, type PipelineLayoutCache, type PipelineStore, type ShaderModuleCache } from "./pipeline-store.ts";
+import { normalizeConstantsOptions, normalizeSignature, pipelineKeyOf, selectEntryPoint, signatureKeyOf, validateTargetSignature, createPipelineLayoutCache, createPipelineStore, createShaderModuleCache, type ErrorCtx, type PipelineLayoutCache, type PipelineStore, type ShaderModuleCache } from "./pipeline-store.ts";
 import { hasStencilAspect, isTarget } from "./target-utils.ts";
 import { blendConstantInvalidError, blendInvalidError, claimedGroupNativeValidationError, colorsInvalidError, cullInvalidError, depthInvalidError, drawDisposedError, entryInvalidError, frontFaceInvalidError, indirectInvalidError, meshRangeInvalidError, multisampleInvalidError, stencilInvalidError, storageStageLimitError, surfaceNotInFrameError, targetRequiredError, unclippedDepthInvalidError, VGPUError, writeMaskInvalidError } from "./errors.ts";
 import { isFrameActive, isSurface } from "./surface.ts";
 import { assertDeviceUsable } from "./lifecycle.ts";
-import { geometryLayoutResolver, geometryLiveness, geometryLivenessOf, type GeometryLayoutResolvable, type GeometryLive } from "./draw-protocols.ts";
+import { geometryLayoutResolver, geometryLiveness, geometryLivenessOf, targetSignatureOf, type GeometryLayoutResolvable, type GeometryLive } from "./draw-protocols.ts";
 import { resolveIndirect } from "./indirect.ts";
 import type { StorageBuffer } from "./api-types.ts";
 import { FRAME_DRAWABLE, type FrameDrawableProtocol } from "./frame-protocols.ts";
@@ -237,6 +237,9 @@ type DrawState = {
   readonly errorSink?: ValidationErrorSink;
   readonly trackSettled?: (promise: Promise<unknown>) => void;
   readonly resolvedPipelineKeys: Set<string>;
+  /** Derived pipeline keys per target object; absent when the vertex layouts are caller-owned and mutable. */
+  readonly pipelineKeys?: WeakMap<object, PipelineKeyMemo>;
+  pipelineKeyDerivations: number;
   readonly lifecycle: DrawLifecycleToken;
   readonly blendState?: GPUBlendState;
   readonly blendConstant?: GPUColorDict;
@@ -259,6 +262,22 @@ type DrawState = {
 };
 
 type DrawTombstone = { readonly disposed: true; readonly label: string };
+
+/**
+ * A target's derived pipeline key, reused while the mutable key inputs still match: the target's
+ * current signature, the pipeline layout (replaced by dynamic layouts) and the geometry's primitive
+ * fields. Every other key input is immutable draw state. The pipeline itself stays in the store.
+ */
+type PipelineKeyMemo = {
+  readonly signature: TargetSignature;
+  readonly signatureKey: string;
+  readonly key: string;
+  readonly pipelineLayout: GPUPipelineLayout;
+  readonly topology?: GPUPrimitiveTopology;
+  readonly stripIndexFormat?: GPUIndexFormat;
+  readonly create: () => GPURenderPipeline;
+  readonly ctx: ErrorCtx;
+};
 
 const drawStates = new WeakMap<Draw, DrawState | DrawTombstone>();
 const noCleanupFailure = Symbol("no cleanup failure");
@@ -339,7 +358,7 @@ export class InternalDraw implements Draw {
       disposedError: (operation) => drawDisposedError(disposedLabel, operation),
     });
     const { set: initialSet, ...retainedOpts } = opts;
-    drawStates.set(this, { id, device, opts: retainedOpts, vertexBufferLayouts, cache, defaultTarget, reflection, visibility, vertexEntry: vertexEntry?.name ?? "vs_main", fragmentEntry: fragmentEntry?.name ?? "fs_main", entryKey, setCore, bindGroupLayouts, pipelineLayout, vertexShaderModule, fragmentShaderModule, pipelineStore, pipelineLayouts, errorSink, trackSettled, resolvedPipelineKeys: new Set(), lifecycle, ...fragmentState, ...blendConstantOptions, ...primitiveOptions, ...depthOptions, ...stencilOptions, ...multisampleOptions, ...constantsOptions });
+    drawStates.set(this, { id, device, opts: retainedOpts, vertexBufferLayouts, cache, defaultTarget, reflection, visibility, vertexEntry: vertexEntry?.name ?? "vs_main", fragmentEntry: fragmentEntry?.name ?? "fs_main", entryKey, setCore, bindGroupLayouts, pipelineLayout, vertexShaderModule, fragmentShaderModule, pipelineStore, pipelineLayouts, errorSink, trackSettled, resolvedPipelineKeys: new Set(), pipelineKeys: !vertexBufferLayouts || geometryLayoutResolver in geometry! ? new WeakMap() : undefined, pipelineKeyDerivations: 0, lifecycle, ...fragmentState, ...blendConstantOptions, ...primitiveOptions, ...depthOptions, ...stencilOptions, ...multisampleOptions, ...constantsOptions });
     if (initialSet) this.set(initialSet);
     for (const target of opts.targets ?? []) this.compileSync(target);
   }
@@ -486,97 +505,90 @@ export class InternalDraw implements Draw {
   }
 
   encode(pass: GPURenderPassEncoder, target: Target | TargetSignature, opts: DrawCallOptions = {}, claimValidation?: (result: ClaimedGroupValidationResult) => void, capture?: UniformCapture): void {
-    const live = drawState(this, "encode");
-    assertDeviceUsable(live.device, `${this.label}.encode`);
-    live.setCore.preflight();
+    const state = drawState(this, "encode");
+    assertDeviceUsable(state.device, `${this.label}.encode`);
+    state.setCore.preflight();
     const pipeline = this.pipelineFor(target);
     if (!pipeline) return;
     pass.setPipeline(pipeline);
-    const state = drawState(this);
     if (state.blendConstant) pass.setBlendConstant(state.blendConstant);
     // Explicit ref always emits — even 0, which restores the pass default after an earlier draw changed it.
     if (state.stencilRef !== undefined) pass.setStencilReference(state.stencilRef);
-    for (const binding of state.setCore.bindGroups(capture)) this.#setBindGroup(pass, binding, opts, claimValidation);
-    this.#encodeGeometry(pass, opts);
+    for (const binding of state.setCore.bindGroups(capture)) this.#setBindGroup(state, pass, binding, opts, claimValidation);
+    this.#encodeGeometry(state, pass, opts);
   }
 
-  #setBindGroup(pass: GPURenderPassEncoder, binding: BindGroupBinding, opts: DrawCallOptions, claimValidation?: (result: ClaimedGroupValidationResult) => void, capture?: UniformCapture): void {
+  #setBindGroup(state: DrawState, pass: GPURenderPassEncoder, binding: BindGroupBinding, opts: DrawCallOptions, claimValidation?: (result: ClaimedGroupValidationResult) => void): void {
     const offsets = offsetsForGroup(opts.offsets, binding.group, binding.offsets);
     if (!binding.claimValidation || !claimValidation) {
       pass.setBindGroup(binding.group, binding.bindGroup, offsets);
       return;
     }
-    pushClaimedGroupValidationScope(drawState(this).device, binding.claimValidation);
+    pushClaimedGroupValidationScope(state.device, binding.claimValidation);
     try { pass.setBindGroup(binding.group, binding.bindGroup, offsets); }
     catch (error) {
-      discardLastClaimedGroupValidationScope(drawState(this).device);
+      discardLastClaimedGroupValidationScope(state.device);
       throw claimedGroupNativeValidationError(binding.claimValidation.label, binding.claimValidation.group, error);
     }
-    const result = popLastClaimedGroupValidationScope(drawState(this).device);
+    const result = popLastClaimedGroupValidationScope(state.device);
     if (result) claimValidation(result);
   }
 
-  compile(target?: CompileTarget): Promise<this> {
-    const state = drawState(this, "compile");
-    assertDeviceUsable(state.device, `${this.label}.compile`);
-    const { key, signature, signatureKey } = this.#compileKey(state, target, `${this.label}.compile`);
-    const { device, pipelineStore } = state;
-    const promise = pipelineStore.getAsync(key, () => device.gpu.createRenderPipelineAsync(this.#pipelineDescriptor(state, signature)), { where: `${this.label}.compile`, signature: signatureKey, dependencies: pipelineDependencies(state) });
+  compile(target?: CompileTarget): Promise<this> { return this.#pipelineAsync("compile", target, () => this); }
+
+  #pipelineAsync<T>(method: string, target: CompileTarget | undefined, done: (pipeline: GPURenderPipeline) => T): Promise<T> {
+    const state = drawState(this, method);
+    assertDeviceUsable(state.device, `${this.label}.${method}`);
+    const { key, signature, signatureKey } = this.#compileKey(state, target, method);
+    const promise = state.pipelineStore.getAsync(key, () => state.device.gpu.createRenderPipelineAsync(this.#pipelineDescriptor(state, signature)), { where: `${this.label}.${method}`, signature: signatureKey, dependencies: pipelineDependencies(state) });
     return promise.then(
-      () => {
-        const current = drawState(this, "compile");
-        assertDeviceUsable(current.device, `${this.label}.compile`);
+      pipeline => {
+        const current = drawState(this, method);
+        assertDeviceUsable(current.device, `${this.label}.${method}`);
         current.resolvedPipelineKeys.add(key);
-        return this;
+        return done(pipeline);
       },
       error => {
-        drawState(this, "compile");
+        drawState(this, method);
         throw error;
       },
     );
   }
 
   compileSync(target?: CompileTarget): this {
-    const state = drawState(this, "compileSync");
-    assertDeviceUsable(state.device, `${this.label}.compileSync`);
-    const { key, signature, signatureKey } = this.#compileKey(state, target, `${this.label}.compileSync`);
-    const pipeline = state.pipelineStore.getSync(key, () => state.device.gpu.createRenderPipeline(this.#pipelineDescriptor(state, signature)), { where: `${this.label}.compileSync`, retry: true, signature: signatureKey, dependencies: pipelineDependencies(state) });
-    if (pipeline) state.resolvedPipelineKeys.add(key);
+    this.#pipelineSync("compileSync", target, true);
     return this;
   }
 
-  pipelineFor(target: Target | TargetSignature): GPURenderPipeline | undefined {
-    const state = drawState(this, "pipelineFor");
-    assertDeviceUsable(state.device, `${this.label}.pipelineFor`);
-    const { key, signature, signatureKey } = this.#compileKey(state, target, `${this.label}.pipelineFor`);
-    const pipeline = state.pipelineStore.getSync(key, () => state.device.gpu.createRenderPipeline(this.#pipelineDescriptor(state, signature)), { where: `${this.label}.pipelineFor`, signature: signatureKey, dependencies: pipelineDependencies(state) });
+  pipelineFor(target: Target | TargetSignature): GPURenderPipeline | undefined { return this.#pipelineSync("pipelineFor", target); }
+
+  #pipelineSync(method: string, target: CompileTarget | undefined, retry?: true): GPURenderPipeline | undefined {
+    const state = drawState(this, method);
+    assertDeviceUsable(state.device, `${this.label}.${method}`);
+    const { key, create, ctx } = this.#compileKey(state, target, method);
+    // The store is still asked every encode, so delayed validation failures, retries and disposal surface here.
+    const pipeline = state.pipelineStore.getSync(key, create, retry ? { ...ctx, where: `${this.label}.${method}`, retry } : ctx);
     if (pipeline) state.resolvedPipelineKeys.add(key);
     return pipeline;
   }
 
-  pipelineForAsync(target: Target | TargetSignature): Promise<GPURenderPipeline> {
-    const state = drawState(this, "pipelineForAsync");
-    assertDeviceUsable(state.device, `${this.label}.pipelineForAsync`);
-    const { key, signature, signatureKey } = this.#compileKey(state, target, `${this.label}.pipelineForAsync`);
-    const promise = state.pipelineStore.getAsync(key, () => state.device.gpu.createRenderPipelineAsync(this.#pipelineDescriptor(state, signature)), { where: `${this.label}.pipelineForAsync`, signature: signatureKey, dependencies: pipelineDependencies(state) });
-    return promise.then(
-      pipeline => {
-        const current = drawState(this, "pipelineForAsync");
-        assertDeviceUsable(current.device, `${this.label}.pipelineForAsync`);
-        current.resolvedPipelineKeys.add(key);
-        return pipeline;
-      },
-      error => {
-        drawState(this, "pipelineForAsync");
-        throw error;
-      },
-    );
-  }
+  pipelineForAsync(target: Target | TargetSignature): Promise<GPURenderPipeline> { return this.#pipelineAsync("pipelineForAsync", target, (pipeline) => pipeline); }
 
-  #compileKey(state: DrawState, target: CompileTarget | undefined, where: string): { readonly signature: TargetSignature; readonly signatureKey: string; readonly key: string } {
-    const signature = this.#signatureForKeyTarget(state, target, where);
+  #compileKey(state: DrawState, target: CompileTarget | undefined, method: string): PipelineKeyMemo {
+    const resolved = target ?? state.defaultTarget;
+    const geometry = state.opts.geometry;
+    const memo = resolved && state.pipelineKeys?.get(resolved);
+    if (memo && memo.pipelineLayout === state.pipelineLayout && memo.topology === geometry?.topology && memo.stripIndexFormat === stripIndexFormatFor(geometry) && sameSignature(resolved, memo.signature)) return memo;
+    state.pipelineKeyDerivations++;
+    const signature = this.#signatureForKeyTarget(state, target, `${this.label}.${method}`);
     const signatureKey = signatureKeyOf(signature);
-    return { signature, signatureKey, key: this.#pipelineKey(state, signature) };
+    const next: PipelineKeyMemo = {
+      signature, signatureKey, key: this.#pipelineKey(state, signature), pipelineLayout: state.pipelineLayout, topology: geometry?.topology, stripIndexFormat: stripIndexFormatFor(geometry),
+      create: () => state.device.gpu.createRenderPipeline(this.#pipelineDescriptor(state, signature)),
+      ctx: { where: `${this.label}.pipelineFor`, signature: signatureKey, dependencies: pipelineDependencies(state) },
+    };
+    state.pipelineKeys?.set(resolved!, next);
+    return next;
   }
 
   #signatureForKeyTarget(state: DrawState, target: CompileTarget | undefined, where: string): TargetSignature {
@@ -609,12 +621,12 @@ export class InternalDraw implements Draw {
     return pipelineKeyOf({ vertexModule: state.vertexShaderModule, fragmentModule: state.fragmentShaderModule, pipelineLayout: state.pipelineLayout, vertexBufferLayouts: state.vertexBufferLayouts, signature, fragmentKey: state.fragmentKey, topology: geometry?.topology, stripIndexFormat: stripIndexFormatFor(geometry), cullMode: state.cullMode, frontFace: state.frontFace, unclippedDepth: state.unclippedDepth, depthKey: state.depthKey, stencilKey: state.stencilKey, multisampleKey: state.multisampleKey, constantsKey: state.constantsKey, entryKey: state.entryKey });
   }
 
-  #encodeGeometry(pass: GPURenderPassEncoder, callOpts: DrawCallOptions = {}): void {
-    const geometry = drawState(this).opts.geometry;
+  #encodeGeometry(state: DrawState, pass: GPURenderPassEncoder, callOpts: DrawCallOptions): void {
+    const geometry = state.opts.geometry;
     geometryLivenessOf(geometry)?.[geometryLiveness](`${this.label}.geometry`);
     if (geometry?.vertexBuffers) geometry.vertexBuffers.forEach((buffer, index) => pass.setVertexBuffer(index, buffer));
     if (callOpts.indirect !== undefined) return this.#encodeIndirect(pass, geometry, callOpts);
-    const counts = resolveDrawCounts(this.label, geometry, drawState(this).opts, callOpts);
+    const counts = resolveDrawCounts(this.label, geometry, state.opts, callOpts);
     if (!geometry?.indexBuffer) return pass.draw(counts.vertexCount, counts.instanceCount, counts.firstVertex, counts.firstInstance);
     pass.setIndexBuffer(geometry.indexBuffer, geometry.indexFormat ?? "uint32");
     pass.drawIndexed(counts.indexCount, counts.instanceCount, counts.firstIndex, counts.baseVertex, counts.firstInstance);
@@ -723,6 +735,17 @@ function resolveDrawCounts(label: string, geometry: GeometryLike | undefined, dr
     firstIndex,
     baseVertex,
   };
+}
+
+/** Whether `target` normalizes to `signature` now; reads what normalizeSignature reads, index by index and without allocating. */
+function sameSignature(target: CompileTarget, signature: TargetSignature): boolean {
+  const configured = targetSignatureOf(target);
+  const source = (configured ?? target) as { readonly colors?: readonly unknown[]; readonly depth?: unknown; readonly sampleCount?: unknown };
+  const textures = !configured && isTarget(target);
+  const colors = source.colors;
+  if (!Array.isArray(colors) || colors.length !== signature.colors.length) return false;
+  for (let index = 0; index < colors.length; index++) if ((textures ? (colors[index] as { format?: unknown } | undefined)?.format : colors[index]) !== signature.colors[index]) return false;
+  return (textures ? (source.depth as { format?: unknown } | undefined)?.format : source.depth) === signature.depth && (textures ? source.sampleCount : source.sampleCount ?? 1) === signature.sampleCount;
 }
 
 /** Single source of truth for the descriptor's stripIndexFormat, shared with the pipeline cache key. */
@@ -1116,6 +1139,12 @@ export function drawLifecycleToken(draw: InternalDraw): DrawLifecycleToken { ret
 export function drawGeometrySnapshot(draw: InternalDraw): GeometryLive | undefined { return geometryLivenessOf(drawState(draw, "geometry").opts.geometry); }
 
 export function drawCacheOwnerTestState(draw: InternalDraw): SetCoreTestState { return setCoreTestState(drawState(draw, "cacheOwner").setCore); }
+
+/** Test-only: target signature normalization + validation + pipeline key derivations of this draw. */
+export function drawEncodeTestState(draw: InternalDraw): { readonly pipelineKeyDerivations: number } {
+  const state = drawState(draw, "encodeTestState");
+  return { get pipelineKeyDerivations() { return state.pipelineKeyDerivations; } };
+}
 
 export function assertDrawUsable(draw: Draw, operation: string): void { drawState(draw, operation); }
 

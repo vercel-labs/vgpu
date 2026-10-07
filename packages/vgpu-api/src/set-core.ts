@@ -1,7 +1,7 @@
 import type { UniformCapture, UniformValue } from "./frame-uniforms.ts";
 import { bindGroupLayoutMetadata, bindGroupMetadataFor, type Buffer, type Device } from "@vgpu/core";
 import type { BindingInfo, Reflection } from "@vgpu/wgsl/reflect-source";
-import { identityKey, type BindGroupCache, type BindGroupIdentityPart, type BindGroupKeyPart } from "./bind-cache.ts";
+import { bindGroupKeyOf, identityKey, type BindGroupCache, type BindGroupIdentityPart, type BindGroupKeyPart } from "./bind-cache.ts";
 import { entryMetadata } from "./entry-metadata.ts";
 import { claimedGroupIncompatibleError, claimedGroupSetError, destroyedBindingError, neverSetError, ownershipFlipError, unsupportedError } from "./errors.ts";
 import { bindGroupLayoutEntriesForGroup, bindGroupLayoutsForReflection, pipelineLayoutFor } from "./set-layouts.ts";
@@ -70,6 +70,8 @@ export interface BindingState {
 export interface SetCoreTestState {
   readonly cache: BindGroupCache;
   readonly owner: object;
+  /** Full binding scans, and bind group constructions (arrays, required state) of unclaimed groups. */
+  readonly stats: { readonly fullVerifications: number; readonly groupPlanBuilds: number };
 }
 
 interface ActiveGroup {
@@ -78,6 +80,7 @@ interface ActiveGroup {
   readonly bindings: readonly BindingInfo[];
 }
 
+const EMPTY: readonly number[] = Object.freeze([]);
 const setCoreTestStates = new WeakMap<SetCore, SetCoreTestState | { readonly disposedError: (operation: string) => Error }>();
 const noCleanupFailure = Symbol("no cleanup failure");
 
@@ -117,7 +120,19 @@ export function createSetCore(options: SetCoreOptions): SetCore {
   const claimedGroups = new Map<number, GPUBindGroup>();
   const cacheOwner = {};
   const activeByGroup = new Map<number, ActiveGroup>();
+  const stats = { fullVerifications: 0, groupPlanBuilds: 0 };
+  // Unchanged encodes skip the full binding scan while nothing was mutated since it last passed
+  // (`changed()` voids `verified`) and no tracked resource was destroyed (the lifetime service's
+  // destroy epoch). A static group's plan looks its bind group up in the cache, valid until the next mutation.
+  let verified = -1;
+  let followed: MutableBindingState[] = [];
+  const plans = new Map<number, () => { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[] }>();
   refreshLayouts();
+
+  function changed(): void {
+    verified = -1;
+    plans.clear();
+  }
 
   function current(operation: string): SetCoreOptions {
     if (!liveOptions) throw disposedError(operation);
@@ -142,7 +157,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
       const previous = activeByGroup.get(group);
       if (previous?.layout === layout) continue;
       // A replaced layout (draw.layout(n, { dynamicOffsets: true })) retires the bind groups built for the old one.
-      if (previous) options.cache.clearOwner(cacheOwner, group);
+      if (previous) { options.cache.clearOwner(cacheOwner, group); changed(); }
       const active = new Set(bindGroupLayoutMetadata(layout)?.entries.map((entry) => entry.binding) ?? []);
       const bindings = options.reflection.bindings.filter((binding) => binding.group === group && active.has(binding.binding));
       activeByGroup.set(group, { layout, active, bindings });
@@ -225,6 +240,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
 
   function commitNormalized(state: MutableBindingState, value: unknown, normalized: NormalizedBindingResource): void {
     const options = current("set");
+    changed();
     state.resource = normalized.resource;
     state.uniformValue = normalized.uniformValue;
     state.prepareUniform = normalized.prepareUniform;
@@ -243,6 +259,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     validateClaimedGroup(label, group, bindGroup, expectedLayout);
     const previousIdentity = claimedGroups.has(group) ? `claimed-group:${group}` : undefined;
     claimedGroups.set(group, bindGroup);
+    changed();
     return previousIdentity;
   }
 
@@ -255,19 +272,30 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     commitNormalized(state, followed.target, normalizeResource(state.info, followed.target, resourceContext(state.info)));
   }
 
-  function assertUsable(): void {
+  function assertUsable(): MutableBindingState[] {
     current("bindingState");
+    const followedStates: MutableBindingState[] = [];
     for (const state of bindings.values()) {
       if (!bindingIsActive(state) || claimedGroups.has(state.info.group) || !state.resource) continue;
       refreshFollowedTarget(state);
+      if (state.followedTarget) followedStates.push(state);
       if (state.markers?.some((marker) => marker.destroyed)) throw destroyedBindingError(label, state.info, state.resourceLabel);
     }
+    return followedStates;
   }
 
   function preflight(): void {
-    current("preflight");
-    assertUsable();
+    const epoch = current("preflight").cache.lifetime.destroyEpoch;
+    if (verified === epoch) {
+      // A followed Target can swap attachments without destroying them yet; a refresh recommits and voids the stamp.
+      for (const state of followed) refreshFollowedTarget(state);
+      if (verified === epoch) return;
+    }
+    stats.fullVerifications++;
+    followed = assertUsable();
     for (const state of bindings.values()) if (bindingIsActive(state) && !claimedGroups.has(state.info.group)) requiredState(state.info);
+    // The stamp moves only after a passing scan, so a failing binding keeps failing every encode until fixed.
+    verified = epoch;
   }
 
   function captureResources(): readonly BindingResourceSnapshot[] {
@@ -309,14 +337,20 @@ export function createSetCore(options: SetCoreOptions): SetCore {
   function bindGroupFor(group: number, capture?: UniformCapture): { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[]; readonly claimValidation?: { readonly label: string; readonly group: number } } {
     const options = current("bindGroups");
     const claimed = claimedGroups.get(group);
-    if (claimed) return { group, bindGroup: claimed, offsets: [], claimValidation: rawClaimValidation(claimed, group) };
+    if (claimed) return { group, bindGroup: claimed, offsets: EMPTY, claimValidation: rawClaimValidation(claimed, group) };
+    const cached = plans.get(group);
+    if (cached) return cached();
+    stats.groupPlanBuilds++;
     const groupBindings = activeByGroup.get(group)?.bindings ?? [];
     const resources: GPUBindingResource[] = [];
     const keys: BindGroupKeyPart[] = [];
     const dependencies: BindGroupIdentityPart[] = [];
+    // Managed, shared and JS-owned uniform values are captured or flushed per encode, so their groups never get a plan.
+    let fixed = true;
     for (const binding of groupBindings) {
       const state = requiredState(binding);
       const value = state.uniformValue?.() ?? (state.bytes && binding.addressSpace === "uniform" ? ownedUniformValue(state) : undefined);
+      fixed &&= !value && !state.uniformValue && !state.prepareUniform;
       const captured = capture && value ? capture.capture(value, options.cache) : undefined;
       if (!captured) prepareUniform(state, false);
       if (!captured && state.buffer) state.mayHaveNativeConsumers = true;
@@ -326,12 +360,15 @@ export function createSetCore(options: SetCoreOptions): SetCore {
       else if (state.dependencies) dependencies.push(...state.dependencies);
     }
     const bindGroupLayout = layout(group);
-    const bindGroup = options.cache.getOrCreate(cacheOwner, group, bindGroupLayout, keys, dependencies, () => options.device.gpu.createBindGroup({
+    const factory = () => options.device.gpu.createBindGroup({
       label: `${label}.group${group}`,
       layout: bindGroupLayout,
       entries: groupBindings.map((binding, index) => ({ binding: binding.binding, resource: resources[index]! })),
-    }));
-    return { group, bindGroup, offsets: [] };
+    });
+    const key = bindGroupKeyOf(keys);
+    const plan = () => ({ group, bindGroup: options.cache.getOrCreate(cacheOwner, group, bindGroupLayout, keys, dependencies, factory, key), offsets: EMPTY });
+    if (fixed) plans.set(group, plan);
+    return plan();
   }
 
   function rawClaimValidation(bindGroup: GPUBindGroup, group: number): { readonly label: string; readonly group: number } | undefined {
@@ -350,6 +387,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
 
   function createLibBuffer(state: MutableBindingState, size: number): void {
     const options = current("set");
+    changed();
     state.buffer = options.device.createBuffer({ size, usage: ["uniform", "copy_dst"], label: `${label}.${state.info.name}` });
     state.resource = { buffer: state.buffer.gpu, offset: 0, size };
     state.identity = state.buffer.resourceIdentity;
@@ -378,6 +416,8 @@ export function createSetCore(options: SetCoreOptions): SetCore {
       bindings.clear();
       claimedGroups.clear();
       activeByGroup.clear();
+      plans.clear();
+      followed = [];
       if (failure !== noCleanupFailure) throw failure;
     },
     assertUsable,
@@ -397,7 +437,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
       return { info: state.info, ownership: state.ownership, resource: state.resource, identity: state.identity, underlyingBuffer: state.underlyingBuffer };
     },
   };
-  setCoreTestStates.set(core, { cache: options.cache, owner: cacheOwner });
+  setCoreTestStates.set(core, { cache: options.cache, owner: cacheOwner, stats });
   return core;
 }
 

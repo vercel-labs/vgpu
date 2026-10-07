@@ -110,17 +110,13 @@ export function pipelineKeyOf(parts: {
   readonly constantsKey?: string;
   readonly entryKey?: string;
 }): string {
-  const base = `${idFor(shaderModuleIds, parts.vertexModule, () => nextShaderModuleId++)}|${idFor(shaderModuleIds, parts.fragmentModule, () => nextShaderModuleId++)}|${idFor(pipelineLayoutIds, parts.pipelineLayout, () => nextPipelineLayoutId++)}|${vertexLayoutHash(parts.vertexBufferLayouts ?? [])}|${signatureKeyOf(parts.signature)}`;
-  const primitive = parts.topology || parts.stripIndexFormat ? `${base}|${parts.topology ?? "triangle-list"}|${parts.stripIndexFormat ?? "none"}` : base;
-  const culled = parts.cullMode || parts.frontFace ? `${primitive}|${parts.cullMode ?? "none"}|${parts.frontFace ?? "ccw"}` : primitive;
-  const clipped = parts.unclippedDepth ? `${culled}|unclipped` : culled;
-  const withDepth = parts.depthKey ? `${clipped}|${parts.depthKey}` : clipped;
-  const withStencil = parts.stencilKey ? `${withDepth}|${parts.stencilKey}` : withDepth;
-  const withMultisample = parts.multisampleKey ? `${withStencil}|${parts.multisampleKey}` : withStencil;
-  const withConstants = parts.constantsKey ? `${withMultisample}|${parts.constantsKey}` : withMultisample;
+  let key = `${idFor(shaderModuleIds, parts.vertexModule, () => nextShaderModuleId++)}|${idFor(shaderModuleIds, parts.fragmentModule, () => nextShaderModuleId++)}|${idFor(pipelineLayoutIds, parts.pipelineLayout, () => nextPipelineLayoutId++)}|${vertexLayoutHash(parts.vertexBufferLayouts ?? [])}|${signatureKeyOf(parts.signature)}`;
+  if (parts.topology || parts.stripIndexFormat) key += `|${parts.topology ?? "triangle-list"}|${parts.stripIndexFormat ?? "none"}`;
+  if (parts.cullMode || parts.frontFace) key += `|${parts.cullMode ?? "none"}|${parts.frontFace ?? "ccw"}`;
+  if (parts.unclippedDepth) key += "|unclipped";
   // The shader module is shared per byte-identical source, so entry point names must key variants themselves.
-  const withEntry = parts.entryKey ? `${withConstants}|${parts.entryKey}` : withConstants;
-  return parts.fragmentKey ? `${withEntry}|${parts.fragmentKey}` : withEntry;
+  for (const suffix of [parts.depthKey, parts.stencilKey, parts.multisampleKey, parts.constantsKey, parts.entryKey, parts.fragmentKey]) if (suffix) key += `|${suffix}`;
+  return key;
 }
 
 /** Compute variants use the same immutable module/layout identities as render variants. */

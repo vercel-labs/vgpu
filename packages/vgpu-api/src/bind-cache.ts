@@ -26,6 +26,8 @@ export interface BindGroupCache {
     bindings: readonly BindGroupKeyPart[],
     dependencies: readonly BindGroupIdentityPart[],
     factory: BindGroupFactory,
+    /** Precomputed {@link bindGroupKeyOf}(bindings); callers own its correctness. */
+    key?: string,
   ): GPUBindGroup;
   marker(
     resource: object,
@@ -85,7 +87,7 @@ export function createBindGroupCache(): BindGroupCache {
   const state: CacheState = { lifetime: createBindingLifetimeService(), shards: new WeakMap(), disposed: false };
   const cache: BindGroupCache = {
     lifetime: state.lifetime,
-    getOrCreate(owner, group, layout, bindings, dependencies, factory) {
+    getOrCreate(owner, group, layout, bindings, dependencies, factory, key = bindGroupKeyOf(bindings)) {
       let shard = state.shards.get(owner);
       if (!shard) {
         shard = { groups: new Map(), lru: new Map(), captures: new Map() };
@@ -95,13 +97,12 @@ export function createBindGroupCache(): BindGroupCache {
       if (!layouts) shard.groups.set(group, layouts = new Map());
       let entries = layouts.get(layout);
       if (!entries) layouts.set(layout, entries = new Map());
-      const key = bindingKey(bindings);
       const existing = entries.get(key);
+      // A hit only records its use: recency is the use clock, read when a bound evicts. Hits do no
+      // lifetime maintenance; misses (registration), invalidation and clearOwner sweep, and each
+      // record's FinalizationRegistry reclaims dependents dropped meanwhile.
       if (existing) {
-        state.lifetime.maintain();
         existing.used = ++clock;
-        touch(shard.lru, existing);
-        if (existing.capture) touch(shard.captures.get(group)!, existing);
         return existing.bindGroup;
       }
       const capture = bindings.some(({ key }) => isCapturedRange(key));
@@ -113,9 +114,9 @@ export function createBindGroupCache(): BindGroupCache {
         let variants = shard.captures.get(group);
         if (!variants) shard.captures.set(group, variants = new Map());
         variants.set(entry, true);
-        if (variants.size > MAX_CAPTURE_VARIANTS) removeEntry(state, variants.keys().next().value!);
+        if (variants.size > MAX_CAPTURE_VARIANTS) removeEntry(state, leastRecent(variants));
       }
-      if (shard.lru.size > MAX_OWNER_ENTRIES) removeEntry(state, shard.lru.keys().next().value!);
+      if (shard.lru.size > MAX_OWNER_ENTRIES) removeEntry(state, leastRecent(shard.lru));
       return entry.bindGroup;
     },
     marker(resource, identity, subscribe) {
@@ -146,6 +147,7 @@ export function createBindGroupCache(): BindGroupCache {
 }
 
 const keys = new WeakMap<object, string>();
+let keyBuilds = 0;
 
 /** Full identity: `kind:id`, plus `@offset+size` for a buffer range. Identity objects are immutable, so keys are memoized. */
 export function identityKey(identity: BindGroupIdentityPart): string {
@@ -173,17 +175,22 @@ export function bindGroupCacheTestState(cache: BindGroupCache) {
     lifetime,
     ownerEntries(owner: object): number { return state.shards.get(owner)?.lru.size ?? 0; },
     ownerShard(owner: object): object | undefined { return state.shards.get(owner); },
+    /** Binding keys built by any cache or caller, module-wide: compare deltas. */
+    get bindingKeyBuilds(): number { return keyBuilds; },
     /** Reachable entries that have dependencies; computed from the weak reverse records, test use only. */
     trackedEntries(): number { return lifetime.liveTargets().filter((target) => target instanceof CacheEntry).length; },
   };
 }
 
-function touch(lru: Map<CacheEntry, true>, entry: CacheEntry): void {
-  lru.delete(entry);
-  lru.set(entry, true);
+function leastRecent(entries: Map<CacheEntry, true>): CacheEntry {
+  let oldest: CacheEntry | undefined;
+  for (const entry of entries.keys()) if (!oldest || entry.used < oldest.used) oldest = entry;
+  return oldest!;
 }
 
-function bindingKey(bindings: readonly BindGroupKeyPart[]): string {
+/** Compound key of a bind group's binding identities, in binding order. */
+export function bindGroupKeyOf(bindings: readonly BindGroupKeyPart[]): string {
+  keyBuilds++;
   let sorted = true;
   for (let index = 1; index < bindings.length; index++) if (bindings[index - 1]!.binding > bindings[index]!.binding) sorted = false;
   const ordered = sorted ? bindings : [...bindings].sort((left, right) => left.binding - right.binding);
