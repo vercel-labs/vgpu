@@ -110,6 +110,33 @@ test("indexed draw ranges and instance counts use draw options over slice over g
   }
 });
 
+test("odd-length Uint16 indices draw their logical count and never expose the upload padding", async () => {
+  const gpu = await init();
+  const indexedCalls = spyIndexedDraws(gpu.device.gpu);
+  try {
+    const geo = geometry(gpu, {
+      buffers: [{ data: new Float32Array([0, 0, 1, 0, 0, 1]), attributes: { position: { format: "float32x2", location: 0 } } }],
+      indices: new Uint16Array([0, 1, 2]),
+    });
+    const drawable = draw(gpu, { shader: prepareShader(WGSL), label: "odd-indices", geometry: geo });
+    const sliced = draw(gpu, { shader: prepareShader(WGSL), label: "odd-indices-slice", geometry: geo.slice({ firstIndex: 1, indexCount: 2 }) });
+    const colorTarget = target(gpu, { size: [2, 2] });
+
+    drawable.draw(colorTarget);
+    sliced.draw(colorTarget);
+
+    expect(indexedCalls).toEqual([
+      [3, 1, 0, 0, 0],
+      [2, 1, 1, 0, 0],
+    ]);
+    expect(() => drawable.draw({ target: colorTarget, indices: 4 })).toThrowError(/VGPU-MESH-RANGE-INVALID/);
+    expect(() => drawable.draw({ target: colorTarget, indices: 3, firstIndex: 1 })).toThrowError(/VGPU-MESH-RANGE-INVALID/);
+  } finally {
+    gpu.dispose();
+    vi.restoreAllMocks();
+  }
+});
+
 test("structural GeometryLike ranges remain a native-validation escape hatch", async () => {
   const gpu = await init();
   try {
