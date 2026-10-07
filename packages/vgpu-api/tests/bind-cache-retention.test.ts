@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { CAPTURE_PAGE_KIND, bindGroupCacheTestState, bindGroupClock, createBindGroupCache } from "../src/bind-cache.ts";
+import { CAPTURE_PAGE_KIND, bindGroupCacheTestState, bindGroupClock, bindGroupKeyOf, createBindGroupCache } from "../src/bind-cache.ts";
 
 const layout = (name: string): GPUBindGroupLayout => ({ label: name }) as GPUBindGroupLayout;
 const group = (name: string): GPUBindGroup => ({ label: name }) as GPUBindGroup;
@@ -180,4 +180,42 @@ test("clearing one group retires its entries across layouts and keeps the owner'
   expect(state.ownerEntries(owner)).toBe(1);
   expect(state.lifetime.records).toBe(1);
   expect(cache.getOrCreate(owner, 0, layout("unused"), [{ binding: 0, key: "A" }], ["A"], () => group("other-layout"))).not.toBe(kept);
+});
+
+test("cache hits, keyed or not, do no lifetime maintenance and keyed hits build no binding key", () => {
+  const cache = createBindGroupCache();
+  const state = bindGroupCacheTestState(cache);
+  const owner = {};
+  const bgl = layout("hits");
+  for (let index = 0; index < 20; index += 1) cache.getOrCreate(owner, 0, bgl, [{ binding: 0, key: index }], [index], () => group(String(index)));
+  const bindings = [{ binding: 1, key: "B" }, { binding: 0, key: "A" }];
+  const created = cache.getOrCreate(owner, 1, bgl, bindings, ["A", "B"], () => group("AB"));
+  const key = bindGroupKeyOf(bindings);
+  expect(key).toBe(bindGroupKeyOf([...bindings].reverse()));
+  const before = { visits: state.lifetime.maintenanceVisits, targeted: state.lifetime.targetedVisits, records: state.lifetime.records, keys: state.bindingKeyBuilds };
+  for (let index = 0; index < 10; index += 1) {
+    expect(cache.getOrCreate(owner, 1, bgl, bindings, ["A", "B"], () => group("unexpected"), key)).toBe(created);
+  }
+  expect(state.bindingKeyBuilds).toBe(before.keys);
+  expect(cache.getOrCreate(owner, 1, bgl, bindings, ["A", "B"], () => group("unexpected"))).toBe(created);
+  expect(state.bindingKeyBuilds).toBe(before.keys + 1);
+  expect(state.lifetime.maintenanceVisits).toBe(before.visits);
+  expect(state.lifetime.targetedVisits).toBe(before.targeted);
+  expect(state.lifetime.records).toBe(before.records);
+  // A miss still registers and sweeps within the bounded budget.
+  cache.getOrCreate(owner, 1, bgl, [{ binding: 0, key: "C" }], ["C"], () => group("C"));
+  expect(state.lifetime.maintenanceVisits - before.visits).toBeGreaterThan(0);
+  expect(state.lifetime.maintenanceVisits - before.visits).toBeLessThanOrEqual(16);
+});
+
+test("a keyed hit refreshes LRU recency like an unkeyed one", () => {
+  const cache = createBindGroupCache();
+  const owner = {};
+  const bgl = layout("keyed-lru");
+  const part = (index: number) => [{ binding: 0, key: index }];
+  const groups = Array.from({ length: 64 }, (_, index) => cache.getOrCreate(owner, 0, bgl, part(index), [index], () => group(String(index))));
+  expect(cache.getOrCreate(owner, 0, bgl, part(0), [0], () => group("unexpected"), bindGroupKeyOf(part(0)))).toBe(groups[0]);
+  cache.getOrCreate(owner, 0, bgl, part(64), [64], () => group("64"), bindGroupKeyOf(part(64)));
+  expect(cache.getOrCreate(owner, 0, bgl, part(0), [0], () => group("unexpected"))).toBe(groups[0]);
+  expect(cache.getOrCreate(owner, 0, bgl, part(1), [1], () => group("replacement-1"))).not.toBe(groups[1]);
 });

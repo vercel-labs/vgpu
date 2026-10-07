@@ -26,6 +26,8 @@ export interface BindGroupCache {
     bindings: readonly BindGroupKeyPart[],
     dependencies: readonly BindGroupIdentityPart[],
     factory: BindGroupFactory,
+    /** Precomputed {@link bindGroupKeyOf}(bindings); callers own its correctness. */
+    key?: string,
   ): GPUBindGroup;
   marker(
     resource: object,
@@ -85,7 +87,7 @@ export function createBindGroupCache(): BindGroupCache {
   const state: CacheState = { lifetime: createBindingLifetimeService(), shards: new WeakMap(), disposed: false };
   const cache: BindGroupCache = {
     lifetime: state.lifetime,
-    getOrCreate(owner, group, layout, bindings, dependencies, factory) {
+    getOrCreate(owner, group, layout, bindings, dependencies, factory, key = bindGroupKeyOf(bindings)) {
       let shard = state.shards.get(owner);
       if (!shard) {
         shard = { groups: new Map(), lru: new Map(), captures: new Map() };
@@ -95,10 +97,10 @@ export function createBindGroupCache(): BindGroupCache {
       if (!layouts) shard.groups.set(group, layouts = new Map());
       let entries = layouts.get(layout);
       if (!entries) layouts.set(layout, entries = new Map());
-      const key = bindGroupKeyOf(bindings);
       const existing = entries.get(key);
+      // Hits do no lifetime maintenance: misses (registration), invalidation and clearOwner sweep,
+      // and each record's FinalizationRegistry reclaims dependents that were dropped meanwhile.
       if (existing) {
-        state.lifetime.maintain();
         existing.used = ++clock;
         touch(shard.lru, existing);
         if (existing.capture) touch(shard.captures.get(group)!, existing);
