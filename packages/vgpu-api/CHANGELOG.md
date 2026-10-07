@@ -1,5 +1,133 @@
 # vgpu
 
+## 0.6.0-rc.1
+
+### Minor Changes
+
+- 018410e: Fix abandoned Draw, Effect, and Compute retention and add optional `dispose()` methods with exact disposed-consumer diagnostics. Disposal releases consumer state without destroying borrowed resources or invalidating native work already encoded or saved, while managed bundles recorded from the consumer become stale. Letting a consumer be collected without disposing it leaves its retained bundles valid through independent resource snapshots. Raw `GPUBuffer` and `GPUBufferBinding` buffer bindings now reject checkably invalid usage and byte ranges at `set()`, keeping the previous binding, and bind a snapshot of the canonical `{ buffer, offset, size }` range; tracked Buffer, Uniform-like, and provider bindings add the same checkable range validation while retaining synchronous usage validation. Compute rejects writable aliases by underlying allocation, including a tracked Buffer bound beside its raw `GPUBuffer`, and compatible generated texture views are reused without changing `Texture.createView()` freshness. Bundled Draw, Effect, and Compute documentation covers the new lifetime and binding behavior.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.6.0-rc.1/docs/migrations/0.6.0.docs.md).
+
+- d5ea651: Renderer shaders are now prepared ahead of time. `draw(gpu, { shader })`, `effect(gpu, source)`, and
+  `compute(gpu, source)` accept only a prepared `ShaderSource` (`version: 2`): the final WGSL plus its
+  `reflection`, a `sourceChecksum`, and a `producer`. The renderer validates that metadata before a
+  draw, effect, or compute uses it and never parses WGSL, so prepared-only browser consumers that
+  import `.wgsl` files and do not call `prepareShader()` at runtime no longer ship the WGSL scanner,
+  parser, or reflection.
+
+  Prepared artifacts from the loaders and from `prepareShader()` are deeply immutable: the root,
+  `reflection`, `functionExports`, and every nested object and array are frozen. The renderer fully
+  validates an immutable artifact (checksum and reflection) the first time a draw, effect, or compute
+  uses it and then reuses that validated, device-independent snapshot for later draws, effects, and
+  computes built from the same artifact, on any gpu, so large scenes no longer pay validation cost per
+  draw. Each draw, effect, and compute keeps its own label, `set` values, and binding assignments;
+  existing pipeline, shader-module, and layout caches and explicitly shared resources behave as before.
+  Artifacts whose consumed data is not entirely frozen — such as a `structuredClone` or JSON copy, an
+  object spread, a root-only `Object.freeze`, or a typical hand-built object — are still accepted and
+  revalidated on every creation, as before; vgpu never freezes or retains them and only skips
+  rehashing `wgsl` text that is unchanged since the previous creation, while still comparing the
+  supplied `sourceChecksum`. Reuse is per artifact, so use one artifact per source revision: a new or
+  rebuilt artifact (including after HMR) is validated on its own first use. The reuse cache is weakly
+  keyed by the artifact and keeps no global registry; draws, effects, and computes still hold the
+  metadata they use until `dispose()`, collection is not deterministic, and GPU resource disposal is
+  unchanged.
+  `prepareShader()` still copies supplied `functionExports` and never freezes the caller's arrays.
+
+  The `@vgpu/wgsl` Vite and webpack/Turbopack loaders emit prepared ESM modules for every `.wgsl`
+  import — ordinary leaf files included, with `functionExports: []`. Generated modules never import
+  the WGSL parser. For eligible reflections, a bounded conservative estimate that requires distinct
+  substantial uniform layouts can select compact metadata decoded by a small parser-free helper;
+  Vite and webpack can also share private,
+  independently reachable encoded metadata modules. Compact and literal forms export the same full
+  own-data `ShaderSource` v2 object, while small inputs, bounded-work cases, and estimates that do not
+  justify packing fall back to the literal form. Final bundler compression can vary, so compact
+  selection estimates savings rather than guaranteeing them. The decoder, generated metadata modules,
+  and requests are private implementation details, not author APIs, and require no extra configuration.
+
+  Because leaf files are now reflected at build time, reflection-detectable parse and layout errors
+  (for example a `bool` in a uniform struct, `VGPU-WGSL-REFLECT-BOOL-HOST-SHAREABLE`) fail the build
+  instead of surfacing at runtime. Loaders still do not run device validation; keep
+  `npx vgpu check --require-validation` as the WGSL gate. When an import names a missing WGSL file,
+  `resolveShader()` reports the missing candidate paths through its existing `onDependency` callback
+  before `VGPU-WGSL-RES-NOTFOUND`, allowing Vite and webpack watch builds to rebuild after the file is
+  restored; successful dependency reporting is unchanged.
+
+  The new `prepareShader(source, path?)` from `@vgpu/wgsl/prepare` builds a prepared artifact at
+  runtime from a WGSL string, a `resolveShader()` result, or a legacy v1 asset, preserving
+  `functionExports` from object input. `ShaderReflection`, the type of `ShaderSource.reflection`, is
+  now exported from `@vgpu/wgsl`, `vgpu`, `vgpu/node`, `vgpu/mock`, and `vgpu/client`.
+
+  Renderers report unprepared or incompatible input synchronously:
+
+  - `VGPU-SHADER-SOURCE-UNPREPARED` for a raw WGSL string or a `version: 1` artifact.
+  - `VGPU-SHADER-SOURCE-VERSION` for any other integer `version`; the message names the received and
+    supported versions and, when present, the artifact's `producer`.
+  - `VGPU-SHADER-SOURCE-INVALID` for a missing or malformed field, inconsistent reflection, or a
+    `sourceChecksum` that does not match `wgsl`.
+
+  The checksum detects accidental replacement of `wgsl`; it does not authenticate an artifact or prove
+  that its reflection matches the WGSL. Prepared metadata is trusted: produce it with the loaders or
+  `prepareShader()` and never hand-edit it.
+
+  Unchanged: `reflectSource()` and `compile()` keep their string contracts (`compile()` still returns
+  a `ResolvedShader`, which is not a renderer input), native `device.createShaderModule({ code })`
+  calls still take strings, and `vgpu/three` still accepts raw strings, structural
+  `{ wgsl, functionExports }` objects, and v1 artifacts.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.6.0-rc.1/docs/migrations/0.6.0.docs.md).
+
+### Patch Changes
+
+- 6284cf7: Managed uniform `set()` calls whose packed bytes are unchanged no longer start a new frame snapshot revision, so later draws and dispatches in the same frame reuse the snapshot already captured. Storage bindings and live uniforms (recorded into a render bundle, or a `uniforms()` object whose buffer was accessed) are still written on every `set()`. Frame uniform pages are now pooled and reused across frames with bounded idle retention, and their bind groups are reused by frames that repeat the same draws in the same order, without a whole-cache invalidation scan on frame completion. Raw `GPUBuffer` and `GPUBufferBinding` values set on uniform or storage buffer bindings are now bound as live resources keyed by buffer, offset and size instead of being treated as struct values.
+- a5833da: `@vgpu/wgsl/next` adds `wgslTurbopackRule(options?)`, a Node configuration helper that returns a
+  complete Next.js Turbopack rule for `"*.wgsl"`. It resolves the loader from its own `@vgpu/wgsl`
+  installation and adds a content hash of the installed compiler files — `package.json`, the shipped
+  metadata anchor, and every published `dist` JavaScript file — to the loader options when Next
+  evaluates the config. Turbopack keys loader output on those options, so a restored `.next/cache`
+  rebuilds shader output after the compiler changes, while an unchanged installation keeps its warm
+  cache. `options.minify` uses the raw loader's vocabulary and defaults. Unlike the raw loader, the
+  helper rejects unknown or mistyped options with `VGPU-WGSL-NEXT-OPTIONS` and invalid identifier
+  modes with `VGPU-WGSL-MINIFY-IDENTIFIERS`; it throws `VGPU-WGSL-CACHE-IDENTITY` when its installation's
+  compiler files cannot be read or are inconsistent. The helper configures Turbopack only, does not
+  depend on or import `next`, and is not re-exported from browser entrypoints.
+
+  `@vgpu/wgsl/loader-webpack` keeps its public specifier, default export, and supported options.
+  Its output is the prepared `ShaderSource` v2 format introduced in this release; applications
+  upgrading from 0.5.0 must rebuild their shaders. It now
+  registers the same compiler files on every run, before metadata requests, ordinary leaves, or shader
+  errors end the transform: through `addBuildDependency()` in webpack, and through `addDependency()` in
+  Turbopack or contexts without build dependencies. Shader dependency and missing-import registration
+  are unchanged. Contexts with neither hook still transform. A compiler inventory failure throws
+  `VGPU-WGSL-CACHE-IDENTITY` (`where: "wgslWebpackLoader"`). The public specifier now
+  resolves to a new internal file that re-exports the same loader; the previous file still ships.
+
+  Webpack's default managed-package snapshot trusts an installed package's `name@version` instead of
+  hashing internal files. The authentic 0.5.0 `require.resolve()` upgrade rebuilt exact v2 with its
+  cache retained because the public resolved target changed; a separate disposable bare-rule replay
+  also rebuilt when the candidate manifest version changed. A bare same-version replacement stayed on
+  v1 even with the new build dependencies. Workspace symlinks observed same-version compiler edits
+  and recovery.
+
+  The retained-cache matrix passes on Next 16.3.3: the authentic resolved-rule upgrade and the
+  bare-rule-to-helper migration both rebuilt exact v2 without deleting the cache. Stable Next 15.5
+  cannot enable Turbopack's persistent cache — 15.5.25 rejects
+  `experimental.turbopackPersistentCaching: true` with `CanaryOnlyError` — while builds, config types,
+  and dev edit/delete/recreate recovery pass there.
+
+  The bundled Next.js guide and loader reference now use `wgslTurbopackRule()` for Turbopack, require
+  a direct `@vgpu/wgsl` dependency for JavaScript tooling imports, distinguish Next 15 and 16 bundler
+  defaults, and replace the previous blanket `addDependency()` claim with Next 16.3.3 behavior.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.6.0-rc.1/docs/migrations/0.6.0.docs.md).
+
+- Updated dependencies [d5ea651]
+- Updated dependencies [a5833da]
+  - @vgpu/wgsl@0.6.0-rc.1
+  - @vgpu/core@0.6.0-rc.1
+  - @vgpu/adapter-mock@0.6.0-rc.1
+  - @vgpu/adapter-node@0.6.0-rc.1
+  - @vgpu/wgsl-std@0.6.0-rc.1
+
 ## 0.6.0-rc.0
 
 ### Minor Changes

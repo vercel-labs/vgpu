@@ -21,10 +21,13 @@
     "bundle-retention",
     "compute-frame-passes",
     "defer-unused-uniform-uploads",
+    "draw-consumer-lifetimes",
     "frame-async-callbacks",
     "gpu-device-loss",
     "optional-scene-math-skill",
     "preferred-canvas-format-docs",
+    "prepared-shader-metadata",
+    "reuse-managed-uniform-bind-groups",
     "scene-composition-utilities",
     "scene-math-boundary",
     "scene-skill-reference",
@@ -33,6 +36,7 @@
     "stage-entry-selection",
     "surface-binding-rejection",
     "surface-depth-msaa",
-    "surface-signature-compile"
+    "surface-signature-compile",
+    "wgsl-loader-cache-safety"
   ]
 }
