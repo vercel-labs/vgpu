@@ -1,5 +1,11 @@
 # @vgpu/native
 
+## 0.6.0-rc.2
+
+### Patch Changes
+
+- @vgpu/wgsl@0.6.0-rc.2
+
 ## 0.6.0-rc.1
 
 ### Patch Changes

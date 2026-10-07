@@ -1,6 +1,6 @@
 {
   "name": "@vgpu/native",
-  "version": "0.6.0-rc.1",
+  "version": "0.6.0-rc.2",
   "private": false,
   "description": "Beta build-time WGSL compiler and Swift/Metal package generator for vgpu native tooling.",
   "license": "MIT",

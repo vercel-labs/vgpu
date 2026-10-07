@@ -1,5 +1,19 @@
 # docs
 
+## 0.1.9-rc.2
+
+### Patch Changes
+
+- Updated dependencies [4c2e627]
+- Updated dependencies [7670671]
+  - vgpu@0.6.0-rc.2
+  - @vgpu/cli@0.2.4-rc.0
+  - @vgpu/core@0.6.0-rc.2
+  - @vgpu/wgsl@0.6.0-rc.2
+  - @vgpu/wgsl-std@0.6.0-rc.2
+  - @vgpu/adapter-node@0.6.0-rc.2
+  - @vgpu/adapter-mock@0.6.0-rc.2
+
 ## 0.1.9-rc.1
 
 ### Patch Changes

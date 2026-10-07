@@ -1,5 +1,11 @@
 # @vgpu/render
 
+## 0.6.0-rc.2
+
+### Patch Changes
+
+- @vgpu/core@0.6.0-rc.2
+
 ## 0.6.0-rc.1
 
 ### Patch Changes
