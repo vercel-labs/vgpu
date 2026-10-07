@@ -486,8 +486,21 @@ function normalizeIndex(device: Device, opts: GeometryOptions, where: string): {
   const format: GPUIndexFormat = data instanceof Uint16Array ? "uint16" : "uint32";
   const bytes = data.byteLength;
   if (bytes % (format === "uint16" ? 2 : 4) !== 0) throw meshDataMisalignedError(where, `Index byteLength ${bytes} is invalid for ${format}.`);
-  const owned = device.createBuffer({ label: opts.label ? `${opts.label}.indices` : undefined, size: Math.max(4, bytes), usage: ["index", "copy_dst"] });
-  owned.write(data as GeometryData);
+  // writeBuffer needs a 4-byte multiple, so an odd uint16 count uploads a zero-padded copy of the
+  // view. Count and byteLength stay logical: the padding is neither drawable nor writable.
+  const size = Math.max(4, Math.ceil(bytes / 4) * 4);
+  const owned = device.createBuffer({ label: opts.label ? `${opts.label}.indices` : undefined, size, usage: ["index", "copy_dst"] });
+  try {
+    if (bytes % 4 === 0) owned.write(data as GeometryData);
+    else {
+      const padded = new Uint8Array(size);
+      padded.set(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+      owned.write(padded);
+    }
+  } catch (cause) {
+    owned.destroy();
+    throw cause;
+  }
   return { gpu: owned.gpu, owned, format, count: data.length, byteLength: bytes };
 }
 
