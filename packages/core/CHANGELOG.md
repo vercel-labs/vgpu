@@ -1,5 +1,13 @@
 # @vgpu/core
 
+## 0.6.0-rc.1
+
+### Patch Changes
+
+- Updated dependencies [d5ea651]
+- Updated dependencies [a5833da]
+  - @vgpu/wgsl@0.6.0-rc.1
+
 ## 0.6.0-rc.0
 
 ### Patch Changes
