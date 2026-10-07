@@ -1,10 +1,34 @@
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { getMockGPUDeviceInstrumentation, init, VGPUError, geometry } from "../../src/mock.ts";
 import { geometry as geometryOf } from "../../src/scene/geometry-descriptor.ts";
+
+const INDEX_USAGE = 16;
+
+afterEach(() => { vi.restoreAllMocks(); });
 
 function meshErrorOf(fn: () => unknown): VGPUError {
   try { fn(); } catch (error) { if (error instanceof VGPUError) return error; throw error; }
   throw new Error("Expected a VGPUError");
+}
+
+function positions() {
+  return { data: new Float32Array(12), attributes: { position: { format: "float32x2" as const, location: 0 } } };
+}
+
+function mockBytes(buffer: GPUBuffer | undefined): number[] {
+  return [...(buffer as unknown as { __vgpuMockBytes: Uint8Array }).__vgpuMockBytes];
+}
+
+function bytesOf(view: ArrayBufferView): number[] {
+  return [...new Uint8Array(view.buffer, view.byteOffset, view.byteLength)];
+}
+
+/** Payloads handed to the native `writeBuffer` for index buffers; the mock does not enforce its 4-byte rule. */
+function spyIndexWrites(gpu: Awaited<ReturnType<typeof init>>): () => ArrayBufferView[] {
+  const writeBuffer = vi.spyOn(gpu.device.gpu.queue, "writeBuffer");
+  return () => writeBuffer.mock.calls
+    .filter(([buffer]) => (buffer.usage & INDEX_USAGE) !== 0)
+    .map(([, , data]) => data as ArrayBufferView);
 }
 
 test("geometry(gpu, ...) normalizes record attributes, derives counts, and freezes slice layout identity", async () => {
@@ -191,6 +215,180 @@ test("geometry writes are range checked and slices validate indexed/non-indexed 
     expect(() => indexed.slice({ firstVertex: 0, vertexCount: 1 })).toThrowError(/VGPU-MESH-RANGE-INVALID/);
     expect(() => indexed.slice({ firstIndex: 1, indexCount: 2 })).toThrowError(/VGPU-MESH-RANGE-INVALID/);
     expect(() => indexed.writeIndices(new Uint32Array([0]), 8)).toThrowError(/VGPU-MESH-WRITE-RANGE/);
+  } finally {
+    gpu.dispose();
+  }
+});
+
+// --- initial index uploads (#490) -------------------------------------------------------------
+
+test.each([[1, 4], [3, 8], [5, 12]])("an odd-length Uint16Array of %i indices uploads zero-padded to %i bytes", async (length, size) => {
+  const gpu = await init();
+  const indexWrites = spyIndexWrites(gpu);
+  try {
+    const source = Uint16Array.from({ length }, (_, i) => i + 1);
+    const geo = geometry(gpu, { buffers: [positions()], indices: source });
+
+    expect(geo.indexCount).toBe(length);
+    expect(geo.indexFormat).toBe("uint16");
+    expect(geo.indexBuffer?.size).toBe(size);
+    const descriptor = getMockGPUDeviceInstrumentation(gpu.device.gpu).createBufferDescriptors.find((desc) => (desc.usage & INDEX_USAGE) !== 0);
+    expect(descriptor?.size).toBe(size);
+    const writes = indexWrites();
+    expect(writes).toHaveLength(1);
+    expect(writes[0]!.byteLength).toBe(size);
+    expect(writes[0]!.byteLength % 4).toBe(0);
+    expect(mockBytes(geo.indexBuffer)).toEqual([...bytesOf(source), 0, 0]);
+  } finally {
+    gpu.dispose();
+  }
+});
+
+test("padding is not logical index capacity: writes and counts stay bounded by the source array", async () => {
+  const gpu = await init();
+  try {
+    const geo = geometry(gpu, { buffers: [positions()], indices: new Uint16Array([0, 1, 2]) });
+
+    expect(meshErrorOf(() => geo.writeIndices(new Uint16Array([0, 1, 2, 0]))).code).toBe("VGPU-MESH-WRITE-RANGE");
+    expect(meshErrorOf(() => geo.writeIndices(new Uint16Array([0, 1]), 4)).code).toBe("VGPU-MESH-WRITE-RANGE");
+    expect(() => geo.writeIndices(new Uint16Array([2, 1]), 0)).not.toThrow();
+    expect(mockBytes(geo.indexBuffer)).toEqual(bytesOf(new Uint16Array([2, 1, 2, 0])));
+    expect(meshErrorOf(() => geometry(gpu, { buffers: [positions()], indices: new Uint16Array([0, 1, 2]), indexCount: 4 })).code).toBe("VGPU-MESH-RANGE-INVALID");
+  } finally {
+    gpu.dispose();
+  }
+});
+
+test("an even-length array with an explicit indexCount keeps every drawn index rewritable", async () => {
+  const gpu = await init();
+  try {
+    const geo = geometry(gpu, { buffers: [positions()], indices: new Uint16Array([0, 1, 2, 0]), indexCount: 3 });
+
+    expect(geo.indexCount).toBe(3);
+    expect(() => geo.writeIndices(new Uint16Array([2, 1, 0, 0]))).not.toThrow();
+    expect(mockBytes(geo.indexBuffer)).toEqual(bytesOf(new Uint16Array([2, 1, 0, 0])));
+  } finally {
+    gpu.dispose();
+  }
+});
+
+test("index subarrays upload only their own bytes, padded or not", async () => {
+  const gpu = await init();
+  try {
+    const backing = Uint16Array.of(9, 0, 1, 2, 8);
+    const odd = backing.subarray(1, 4);
+    expect(odd.byteOffset).toBe(2);
+    const oddGeo = geometry(gpu, { buffers: [positions()], indices: odd });
+    expect(oddGeo.indexCount).toBe(3);
+    expect(oddGeo.indexBuffer?.size).toBe(8);
+    expect(mockBytes(oddGeo.indexBuffer)).toEqual(bytesOf(new Uint16Array([0, 1, 2, 0])));
+
+    const aligned = backing.subarray(2, 4);
+    expect(aligned.byteOffset).toBe(4);
+    const alignedGeo = geometry(gpu, { buffers: [positions()], indices: aligned });
+    expect(alignedGeo.indexCount).toBe(2);
+    expect(alignedGeo.indexBuffer?.size).toBe(4);
+    expect(mockBytes(alignedGeo.indexBuffer)).toEqual(bytesOf(new Uint16Array([1, 2])));
+
+    const wide = Uint32Array.of(9, 0, 1, 8).subarray(1, 3);
+    const wideGeo = geometry(gpu, { buffers: [positions()], indices: wide });
+    expect(wideGeo.indexFormat).toBe("uint32");
+    expect(wideGeo.indexCount).toBe(2);
+    expect(mockBytes(wideGeo.indexBuffer)).toEqual(bytesOf(new Uint32Array([0, 1])));
+  } finally {
+    gpu.dispose();
+  }
+});
+
+test("empty and 4-byte-aligned index arrays keep their size and upload the caller's array directly", async () => {
+  const gpu = await init();
+  const indexWrites = spyIndexWrites(gpu);
+  try {
+    for (const empty of [new Uint16Array(0), new Uint32Array(0)]) {
+      const geo = geometry(gpu, { buffers: [positions()], indices: empty });
+      expect(geo.indexCount).toBe(0);
+      expect(geo.indexBuffer?.size).toBe(4);
+    }
+    const aligned = [new Uint16Array([0, 1]), new Uint16Array([0, 1, 2, 3]), new Uint16Array([0, 1, 2, 3, 4, 5]), new Uint32Array([0]), new Uint32Array([0, 1, 2])];
+    for (const indices of aligned) {
+      const before = indexWrites().length;
+      const geo = geometry(gpu, { buffers: [positions()], indices });
+      expect(geo.indexCount).toBe(indices.length);
+      expect(geo.indexFormat).toBe(indices instanceof Uint16Array ? "uint16" : "uint32");
+      expect(geo.indexBuffer?.size).toBe(indices.byteLength);
+      expect(indexWrites().slice(before)).toEqual([indices]);
+      expect(indexWrites()[before]).toBe(indices);
+    }
+    expect(geometry(gpu, { buffers: [positions()], indices: [0, 1, 2] }).indexFormat).toBe("uint32");
+  } finally {
+    gpu.dispose();
+  }
+});
+
+test("padding an initial index upload never mutates, detaches, or reads past the caller's view", async () => {
+  const gpu = await init();
+  try {
+    const plain = new Uint16Array([3, 4, 5]);
+    geometry(gpu, { buffers: [positions()], indices: plain });
+    expect([...plain]).toEqual([3, 4, 5]);
+    expect(plain.byteLength).toBe(6);
+    expect(plain.buffer.byteLength).toBe(6);
+
+    const backing = Uint16Array.of(9, 0, 1, 2, 8);
+    const view = backing.subarray(1, 4);
+    const backingBytes = bytesOf(backing);
+    geometry(gpu, { buffers: [positions()], indices: view });
+    expect([...view]).toEqual([0, 1, 2]);
+    expect(view.length).toBe(3);
+    expect(view.byteOffset).toBe(2);
+    expect(view.byteLength).toBe(6);
+    expect(bytesOf(backing)).toEqual(backingBytes);
+    expect(backing.buffer.byteLength).toBe(10);
+  } finally {
+    gpu.dispose();
+  }
+});
+
+test.each([["aligned", new Uint16Array([0, 1])], ["padded", new Uint16Array([0, 1, 2])]])("a failed %s initial index upload destroys the index buffer and rethrows", async (_, indices) => {
+  const gpu = await init();
+  try {
+    const created: { usage: readonly string[] | undefined; destroy: ReturnType<typeof vi.fn> }[] = [];
+    const createBuffer = gpu.device.createBuffer.bind(gpu.device);
+    vi.spyOn(gpu.device, "createBuffer").mockImplementation((opts) => {
+      const buffer = createBuffer(opts);
+      created.push({ usage: opts.usage as readonly string[] | undefined, destroy: vi.spyOn(buffer, "destroy") as unknown as ReturnType<typeof vi.fn> });
+      return buffer;
+    });
+    const failure = new Error("index upload failed");
+    const writeBuffer = gpu.device.gpu.queue.writeBuffer.bind(gpu.device.gpu.queue);
+    vi.spyOn(gpu.device.gpu.queue, "writeBuffer").mockImplementation((buffer, ...rest) => {
+      if ((buffer.usage & INDEX_USAGE) !== 0) throw failure;
+      writeBuffer(buffer, ...rest);
+    });
+
+    let thrown: unknown;
+    try { geometry(gpu, { buffers: [positions()], indices }); } catch (error) { thrown = error; }
+    expect(thrown).toBe(failure);
+    const index = created.filter((buffer) => buffer.usage?.includes("index"));
+    expect(index).toHaveLength(1);
+    expect(index[0]!.destroy).toHaveBeenCalledTimes(1);
+  } finally {
+    gpu.dispose();
+  }
+});
+
+test("odd vertex data and strides keep their named rejections without allocating", async () => {
+  const gpu = await init();
+  try {
+    const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
+    const before = mock.calls.createBuffer;
+    const misaligned = meshErrorOf(() => geometry(gpu, { buffers: [{ data: new Uint16Array(3), attributes: { uv: { format: "float16x2", location: 0 } } }] }));
+    expect(misaligned.code).toBe("VGPU-MESH-DATA-MISALIGNED");
+    expect(misaligned.fix).toBeTruthy();
+    const stride = meshErrorOf(() => geometry(gpu, { buffers: [{ data: new Uint16Array(3), stride: 6, attributes: { uv: { format: "float16x2", location: 0 } } }] }));
+    expect(stride.code).toBe("VGPU-MESH-LAYOUT-INVALID");
+    expect(stride.fix).toBeTruthy();
+    expect(mock.calls.createBuffer).toBe(before);
   } finally {
     gpu.dispose();
   }
