@@ -25,6 +25,7 @@
     "frame-async-callbacks",
     "gpu-device-loss",
     "optional-scene-math-skill",
+    "pad-odd-index-uploads",
     "preferred-canvas-format-docs",
     "prepared-shader-metadata",
     "reuse-managed-uniform-bind-groups",
@@ -37,6 +38,7 @@
     "surface-binding-rejection",
     "surface-depth-msaa",
     "surface-signature-compile",
+    "unchanged-draw-encode-cost",
     "wgsl-loader-cache-safety"
   ]
 }
