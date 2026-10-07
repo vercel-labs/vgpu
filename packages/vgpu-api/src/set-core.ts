@@ -80,15 +80,6 @@ interface ActiveGroup {
   readonly bindings: readonly BindingInfo[];
 }
 
-/** A static group's bind group inputs, valid until the next binding mutation; the cache owns the bind group. */
-interface GroupPlan {
-  readonly layout: GPUBindGroupLayout;
-  readonly keys: readonly BindGroupKeyPart[];
-  readonly dependencies: readonly BindGroupIdentityPart[];
-  readonly key: string;
-  readonly factory: () => GPUBindGroup;
-}
-
 const EMPTY: readonly number[] = Object.freeze([]);
 const setCoreTestStates = new WeakMap<SetCore, SetCoreTestState | { readonly disposedError: (operation: string) => Error }>();
 const noCleanupFailure = Symbol("no cleanup failure");
@@ -131,17 +122,15 @@ export function createSetCore(options: SetCoreOptions): SetCore {
   const activeByGroup = new Map<number, ActiveGroup>();
   const stats = { fullVerifications: 0, groupPlanBuilds: 0 };
   // Unchanged encodes skip the full binding scan while nothing was mutated since it last passed
-  // (`revision` moves at every mutation site) and no tracked resource was destroyed (the lifetime
-  // service's destroy epoch). Static groups reuse their plan until the next mutation.
-  let revision = 0;
-  let verifiedRevision = -1;
-  let verifiedEpoch = -1;
+  // (`changed()` voids `verified`) and no tracked resource was destroyed (the lifetime service's
+  // destroy epoch). A static group's plan looks its bind group up in the cache, valid until the next mutation.
+  let verified = -1;
   let followed: MutableBindingState[] = [];
-  const plans = new Map<number, GroupPlan>();
+  const plans = new Map<number, () => { readonly group: number; readonly bindGroup: GPUBindGroup; readonly offsets: readonly number[] }>();
   refreshLayouts();
 
   function changed(): void {
-    revision++;
+    verified = -1;
     plans.clear();
   }
 
@@ -283,29 +272,30 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     commitNormalized(state, followed.target, normalizeResource(state.info, followed.target, resourceContext(state.info)));
   }
 
-  function assertUsable(): void {
+  function assertUsable(): MutableBindingState[] {
     current("bindingState");
+    const followedStates: MutableBindingState[] = [];
     for (const state of bindings.values()) {
       if (!bindingIsActive(state) || claimedGroups.has(state.info.group) || !state.resource) continue;
       refreshFollowedTarget(state);
+      if (state.followedTarget) followedStates.push(state);
       if (state.markers?.some((marker) => marker.destroyed)) throw destroyedBindingError(label, state.info, state.resourceLabel);
     }
+    return followedStates;
   }
 
   function preflight(): void {
     const epoch = current("preflight").cache.lifetime.destroyEpoch;
-    if (verifiedRevision === revision && verifiedEpoch === epoch) {
-      // A followed Target can swap attachments without destroying them yet; a refresh recommits and moves the revision.
+    if (verified === epoch) {
+      // A followed Target can swap attachments without destroying them yet; a refresh recommits and voids the stamp.
       for (const state of followed) refreshFollowedTarget(state);
-      if (verifiedRevision === revision) return;
+      if (verified === epoch) return;
     }
     stats.fullVerifications++;
-    assertUsable();
+    followed = assertUsable();
     for (const state of bindings.values()) if (bindingIsActive(state) && !claimedGroups.has(state.info.group)) requiredState(state.info);
-    // Stamps move only after a passing scan, so a failing binding keeps failing every encode until fixed.
-    followed = [...bindings.values()].filter((state) => state.followedTarget && state.resource && bindingIsActive(state) && !claimedGroups.has(state.info.group));
-    verifiedRevision = revision;
-    verifiedEpoch = epoch;
+    // The stamp moves only after a passing scan, so a failing binding keeps failing every encode until fixed.
+    verified = epoch;
   }
 
   function captureResources(): readonly BindingResourceSnapshot[] {
@@ -348,8 +338,8 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     const options = current("bindGroups");
     const claimed = claimedGroups.get(group);
     if (claimed) return { group, bindGroup: claimed, offsets: EMPTY, claimValidation: rawClaimValidation(claimed, group) };
-    const plan = plans.get(group);
-    if (plan) return { group, bindGroup: options.cache.getOrCreate(cacheOwner, group, plan.layout, plan.keys, plan.dependencies, plan.factory, plan.key), offsets: EMPTY };
+    const cached = plans.get(group);
+    if (cached) return cached();
     stats.groupPlanBuilds++;
     const groupBindings = activeByGroup.get(group)?.bindings ?? [];
     const resources: GPUBindingResource[] = [];
@@ -360,7 +350,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     for (const binding of groupBindings) {
       const state = requiredState(binding);
       const value = state.uniformValue?.() ?? (state.bytes && binding.addressSpace === "uniform" ? ownedUniformValue(state) : undefined);
-      if (value || state.uniformValue || state.prepareUniform) fixed = false;
+      fixed &&= !value && !state.uniformValue && !state.prepareUniform;
       const captured = capture && value ? capture.capture(value, options.cache) : undefined;
       if (!captured) prepareUniform(state, false);
       if (!captured && state.buffer) state.mayHaveNativeConsumers = true;
@@ -376,8 +366,9 @@ export function createSetCore(options: SetCoreOptions): SetCore {
       entries: groupBindings.map((binding, index) => ({ binding: binding.binding, resource: resources[index]! })),
     });
     const key = bindGroupKeyOf(keys);
-    if (fixed) plans.set(group, { layout: bindGroupLayout, keys, dependencies, key, factory });
-    return { group, bindGroup: options.cache.getOrCreate(cacheOwner, group, bindGroupLayout, keys, dependencies, factory, key), offsets: EMPTY };
+    const plan = () => ({ group, bindGroup: options.cache.getOrCreate(cacheOwner, group, bindGroupLayout, keys, dependencies, factory, key), offsets: EMPTY });
+    if (fixed) plans.set(group, plan);
+    return plan();
   }
 
   function rawClaimValidation(bindGroup: GPUBindGroup, group: number): { readonly label: string; readonly group: number } | undefined {

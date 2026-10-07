@@ -275,9 +275,8 @@ type PipelineKeyMemo = {
   readonly pipelineLayout: GPUPipelineLayout;
   readonly topology?: GPUPrimitiveTopology;
   readonly stripIndexFormat?: GPUIndexFormat;
-  create?: () => GPURenderPipeline;
-  ctx?: ErrorCtx;
-  resolved?: true;
+  readonly create: () => GPURenderPipeline;
+  readonly ctx: ErrorCtx;
 };
 
 const drawStates = new WeakMap<Draw, DrawState | DrawTombstone>();
@@ -535,77 +534,59 @@ export class InternalDraw implements Draw {
     if (result) claimValidation(result);
   }
 
-  compile(target?: CompileTarget): Promise<this> {
-    const state = drawState(this, "compile");
-    assertDeviceUsable(state.device, `${this.label}.compile`);
-    const { key, signature, signatureKey } = this.#compileKey(state, target, "compile");
-    const { device, pipelineStore } = state;
-    const promise = pipelineStore.getAsync(key, () => device.gpu.createRenderPipelineAsync(this.#pipelineDescriptor(state, signature)), { where: `${this.label}.compile`, signature: signatureKey, dependencies: pipelineDependencies(state) });
+  compile(target?: CompileTarget): Promise<this> { return this.#pipelineAsync("compile", target, () => this); }
+
+  #pipelineAsync<T>(method: string, target: CompileTarget | undefined, done: (pipeline: GPURenderPipeline) => T): Promise<T> {
+    const state = drawState(this, method);
+    assertDeviceUsable(state.device, `${this.label}.${method}`);
+    const { key, signature, signatureKey } = this.#compileKey(state, target, method);
+    const promise = state.pipelineStore.getAsync(key, () => state.device.gpu.createRenderPipelineAsync(this.#pipelineDescriptor(state, signature)), { where: `${this.label}.${method}`, signature: signatureKey, dependencies: pipelineDependencies(state) });
     return promise.then(
-      () => {
-        const current = drawState(this, "compile");
-        assertDeviceUsable(current.device, `${this.label}.compile`);
+      pipeline => {
+        const current = drawState(this, method);
+        assertDeviceUsable(current.device, `${this.label}.${method}`);
         current.resolvedPipelineKeys.add(key);
-        return this;
+        return done(pipeline);
       },
       error => {
-        drawState(this, "compile");
+        drawState(this, method);
         throw error;
       },
     );
   }
 
   compileSync(target?: CompileTarget): this {
-    const state = drawState(this, "compileSync");
-    assertDeviceUsable(state.device, `${this.label}.compileSync`);
-    const { key, signature, signatureKey } = this.#compileKey(state, target, "compileSync");
-    const pipeline = state.pipelineStore.getSync(key, () => state.device.gpu.createRenderPipeline(this.#pipelineDescriptor(state, signature)), { where: `${this.label}.compileSync`, retry: true, signature: signatureKey, dependencies: pipelineDependencies(state) });
-    if (pipeline) state.resolvedPipelineKeys.add(key);
+    this.#pipelineSync("compileSync", target, true);
     return this;
   }
 
-  pipelineFor(target: Target | TargetSignature): GPURenderPipeline | undefined {
-    const state = drawState(this, "pipelineFor");
-    assertDeviceUsable(state.device, `${this.label}.pipelineFor`);
-    const memo = this.#compileKey(state, target, "pipelineFor");
+  pipelineFor(target: Target | TargetSignature): GPURenderPipeline | undefined { return this.#pipelineSync("pipelineFor", target); }
+
+  #pipelineSync(method: string, target: CompileTarget | undefined, retry?: true): GPURenderPipeline | undefined {
+    const state = drawState(this, method);
+    assertDeviceUsable(state.device, `${this.label}.${method}`);
+    const { key, create, ctx } = this.#compileKey(state, target, method);
     // The store is still asked every encode, so delayed validation failures, retries and disposal surface here.
-    memo.create ??= () => state.device.gpu.createRenderPipeline(this.#pipelineDescriptor(state, memo.signature));
-    memo.ctx ??= { where: `${this.label}.pipelineFor`, signature: memo.signatureKey, dependencies: pipelineDependencies(state) };
-    const pipeline = state.pipelineStore.getSync(memo.key, memo.create, memo.ctx);
-    if (pipeline && !memo.resolved) {
-      state.resolvedPipelineKeys.add(memo.key);
-      memo.resolved = true;
-    }
+    const pipeline = state.pipelineStore.getSync(key, create, retry ? { ...ctx, where: `${this.label}.${method}`, retry } : ctx);
+    if (pipeline) state.resolvedPipelineKeys.add(key);
     return pipeline;
   }
 
-  pipelineForAsync(target: Target | TargetSignature): Promise<GPURenderPipeline> {
-    const state = drawState(this, "pipelineForAsync");
-    assertDeviceUsable(state.device, `${this.label}.pipelineForAsync`);
-    const { key, signature, signatureKey } = this.#compileKey(state, target, "pipelineForAsync");
-    const promise = state.pipelineStore.getAsync(key, () => state.device.gpu.createRenderPipelineAsync(this.#pipelineDescriptor(state, signature)), { where: `${this.label}.pipelineForAsync`, signature: signatureKey, dependencies: pipelineDependencies(state) });
-    return promise.then(
-      pipeline => {
-        const current = drawState(this, "pipelineForAsync");
-        assertDeviceUsable(current.device, `${this.label}.pipelineForAsync`);
-        current.resolvedPipelineKeys.add(key);
-        return pipeline;
-      },
-      error => {
-        drawState(this, "pipelineForAsync");
-        throw error;
-      },
-    );
-  }
+  pipelineForAsync(target: Target | TargetSignature): Promise<GPURenderPipeline> { return this.#pipelineAsync("pipelineForAsync", target, (pipeline) => pipeline); }
 
   #compileKey(state: DrawState, target: CompileTarget | undefined, method: string): PipelineKeyMemo {
     const resolved = target ?? state.defaultTarget;
     const geometry = state.opts.geometry;
     const memo = resolved && state.pipelineKeys?.get(resolved);
-    if (memo && memo.pipelineLayout === state.pipelineLayout && memo.topology === geometry?.topology && memo.stripIndexFormat === stripIndexFormatFor(geometry) && sameSignature(resolved!, memo.signature)) return memo;
+    if (memo && memo.pipelineLayout === state.pipelineLayout && memo.topology === geometry?.topology && memo.stripIndexFormat === stripIndexFormatFor(geometry) && sameSignature(resolved, memo.signature)) return memo;
     state.pipelineKeyDerivations++;
     const signature = this.#signatureForKeyTarget(state, target, `${this.label}.${method}`);
-    const next: PipelineKeyMemo = { signature, signatureKey: signatureKeyOf(signature), key: this.#pipelineKey(state, signature), pipelineLayout: state.pipelineLayout, topology: geometry?.topology, stripIndexFormat: stripIndexFormatFor(geometry) };
+    const signatureKey = signatureKeyOf(signature);
+    const next: PipelineKeyMemo = {
+      signature, signatureKey, key: this.#pipelineKey(state, signature), pipelineLayout: state.pipelineLayout, topology: geometry?.topology, stripIndexFormat: stripIndexFormatFor(geometry),
+      create: () => state.device.gpu.createRenderPipeline(this.#pipelineDescriptor(state, signature)),
+      ctx: { where: `${this.label}.pipelineFor`, signature: signatureKey, dependencies: pipelineDependencies(state) },
+    };
     state.pipelineKeys?.set(resolved!, next);
     return next;
   }
@@ -756,19 +737,15 @@ function resolveDrawCounts(label: string, geometry: GeometryLike | undefined, dr
   };
 }
 
-/** Whether `target` normalizes to `signature` now; reads what normalizeSignature reads, without allocating. */
+/** Whether `target` normalizes to `signature` now; reads what normalizeSignature reads, index by index and without allocating. */
 function sameSignature(target: CompileTarget, signature: TargetSignature): boolean {
   const configured = targetSignatureOf(target);
-  if (configured) return sameFormats(configured.colors, signature) && configured.depth === signature.depth && (configured.sampleCount ?? 1) === signature.sampleCount;
-  if (isTarget(target)) return sameFormats(target.colors, signature, true) && target.depth?.format === signature.depth && target.sampleCount === signature.sampleCount;
-  const plain = target as TargetSignature;
-  return sameFormats(plain.colors, signature) && plain.depth === signature.depth && (plain.sampleCount ?? 1) === signature.sampleCount;
-}
-
-function sameFormats(colors: readonly unknown[], signature: TargetSignature, textures?: boolean): boolean {
+  const source = (configured ?? target) as { readonly colors?: readonly unknown[]; readonly depth?: unknown; readonly sampleCount?: unknown };
+  const textures = !configured && isTarget(target);
+  const colors = source.colors;
   if (!Array.isArray(colors) || colors.length !== signature.colors.length) return false;
   for (let index = 0; index < colors.length; index++) if ((textures ? (colors[index] as { format?: unknown } | undefined)?.format : colors[index]) !== signature.colors[index]) return false;
-  return true;
+  return (textures ? (source.depth as { format?: unknown } | undefined)?.format : source.depth) === signature.depth && (textures ? source.sampleCount : source.sampleCount ?? 1) === signature.sampleCount;
 }
 
 /** Single source of truth for the descriptor's stripIndexFormat, shared with the pipeline cache key. */

@@ -203,6 +203,23 @@ describe("unchanged encode pipeline keys", () => {
       fullscreen.pipelineFor(custom);
       expect(created()).toBe(base + 2);
 
+      // A hole in a custom target's attachment list is not the format it held: the warmed draw must
+      // derive the key the baseline derives, never reuse the old pipeline.
+      const sparse = { colors: [{ format: "rgba8unorm" as GPUTextureFormat }], sampleCount: 1, renderPassDescriptor: () => ({ colorAttachments: [] }) } as unknown as Target & { colors: unknown[] };
+      const warmed = internal(draw(gpu, { shader: prepareShader(FULLSCREEN), label: "sparse-warmed" }));
+      const fresh = internal(draw(gpu, { shader: prepareShader(FULLSCREEN), label: "sparse-fresh" }));
+      warmed.pipelineFor(sparse);
+      warmed.pipelineFor(sparse);
+      delete sparse.colors[0];
+      const outcome = (item: InternalDraw) => {
+        const before = created();
+        try { item.pipelineFor(sparse); } catch (error) { return `threw ${(error as { code?: string }).code}`; }
+        return `created ${created() - before}`;
+      };
+      // The warmed draw derives the hole's key itself (a new pipeline); the fresh draw then shares that very pipeline.
+      expect(outcome(warmed)).toBe("created 1");
+      expect(outcome(fresh)).toBe("created 0");
+
       const signature: { colors: GPUTextureFormat[]; sampleCount: 1 } = { colors: ["rgba8unorm"], sampleCount: 1 };
       fullscreen.pipelineFor(signature);
       fullscreen.pipelineFor(signature);
