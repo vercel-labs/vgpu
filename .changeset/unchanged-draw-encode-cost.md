@@ -4,7 +4,13 @@
 
 ## Summary
 
-Restore inexpensive encoding of unchanged draws, effects, and computes with identity-bound resources. In 0.6.0-rc.1 every encode of an unchanged consumer ran lifetime maintenance on each bind group cache hit, repeated its full binding verification up to three times, and rebuilt its compound bind group keys and its pipeline key, including a JSON hash of the vertex layouts. An unchanged consumer now reuses its last passing binding verification until a binding changes, a layout is replaced, a group is claimed, or any tracked resource is destroyed; static bind groups reuse their precomputed keys, cache hits only record recency, and pipeline keys are reused per target while its signature, the pipeline layout, and the geometry's primitive state still match, with the pipeline cache still consulted on every encode. Destroying a bound resource still fails the next encode with `VGPU-R1-BINDING-DESTROYED`; managed, shared, and JS-owned uniform values are still captured on every encode; delayed pipeline validation failures, disposal errors, bundle staleness, the per-consumer bind group bounds, and weak consumer lifetimes behave as before. On the issue workload (2000 draws × 3 passes), local interleaved runs measured encoding about 3 to 4 times faster than 0.6.0-rc.1, for example a median of 2.12 µs versus 7.09 µs per draw on a loaded machine.
+Reduce CPU work when encoding unchanged draws, effects, and computes with identity-bound resources. In 0.6.0-rc.1 every encode repeated work whose result could not have changed: lifetime maintenance on each bind group cache hit, up to three full binding verifications, and rebuilt bind group keys.
+
+Draws, effects, and computes now share three improvements. A cache hit only records recency instead of running lifetime maintenance, and abandoned consumers are still reclaimed. An unchanged consumer reuses its last passing binding verification until a binding changes, a layout is replaced, a group is claimed, or a tracked resource is destroyed. Static bind groups reuse their precomputed keys.
+
+Draws and effects also reuse their pipeline key for each target while the target signature, pipeline layout, and geometry primitive state still match. The pipeline cache is still consulted on every encode, so delayed pipeline validation failures and disposal errors surface as before.
+
+Behavior is unchanged: destroying a bound resource still fails the next encode with `VGPU-R1-BINDING-DESTROYED`, managed, shared, and JS-owned uniform values continue to update and capture as before, and bundle staleness, per-consumer bind group bounds, and weak consumer lifetimes are preserved.
 
 ## Migration
 
