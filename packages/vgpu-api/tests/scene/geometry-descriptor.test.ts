@@ -366,7 +366,9 @@ test.each([["aligned", new Uint16Array([0, 1])], ["padded", new Uint16Array([0, 
       writeBuffer(buffer, ...rest);
     });
 
-    expect(() => geometry(gpu, { buffers: [positions()], indices })).toThrow(failure);
+    let thrown: unknown;
+    try { geometry(gpu, { buffers: [positions()], indices }); } catch (error) { thrown = error; }
+    expect(thrown).toBe(failure);
     const index = created.filter((buffer) => buffer.usage?.includes("index"));
     expect(index).toHaveLength(1);
     expect(index[0]!.destroy).toHaveBeenCalledTimes(1);
