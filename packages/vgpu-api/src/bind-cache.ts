@@ -98,12 +98,11 @@ export function createBindGroupCache(): BindGroupCache {
       let entries = layouts.get(layout);
       if (!entries) layouts.set(layout, entries = new Map());
       const existing = entries.get(key);
-      // Hits do no lifetime maintenance: misses (registration), invalidation and clearOwner sweep,
-      // and each record's FinalizationRegistry reclaims dependents that were dropped meanwhile.
+      // A hit only records its use: recency is the use clock, read when a bound evicts. Hits do no
+      // lifetime maintenance; misses (registration), invalidation and clearOwner sweep, and each
+      // record's FinalizationRegistry reclaims dependents dropped meanwhile.
       if (existing) {
         existing.used = ++clock;
-        touch(shard.lru, existing);
-        if (existing.capture) touch(shard.captures.get(group)!, existing);
         return existing.bindGroup;
       }
       const capture = bindings.some(({ key }) => isCapturedRange(key));
@@ -115,9 +114,9 @@ export function createBindGroupCache(): BindGroupCache {
         let variants = shard.captures.get(group);
         if (!variants) shard.captures.set(group, variants = new Map());
         variants.set(entry, true);
-        if (variants.size > MAX_CAPTURE_VARIANTS) removeEntry(state, variants.keys().next().value!);
+        if (variants.size > MAX_CAPTURE_VARIANTS) removeEntry(state, leastRecent(variants));
       }
-      if (shard.lru.size > MAX_OWNER_ENTRIES) removeEntry(state, shard.lru.keys().next().value!);
+      if (shard.lru.size > MAX_OWNER_ENTRIES) removeEntry(state, leastRecent(shard.lru));
       return entry.bindGroup;
     },
     marker(resource, identity, subscribe) {
@@ -183,9 +182,10 @@ export function bindGroupCacheTestState(cache: BindGroupCache) {
   };
 }
 
-function touch(lru: Map<CacheEntry, true>, entry: CacheEntry): void {
-  lru.delete(entry);
-  lru.set(entry, true);
+function leastRecent(entries: Map<CacheEntry, true>): CacheEntry {
+  let oldest: CacheEntry | undefined;
+  for (const entry of entries.keys()) if (!oldest || entry.used < oldest.used) oldest = entry;
+  return oldest!;
 }
 
 /** Compound key of a bind group's binding identities, in binding order. */
