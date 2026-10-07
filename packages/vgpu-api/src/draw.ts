@@ -237,6 +237,7 @@ type DrawState = {
   readonly errorSink?: ValidationErrorSink;
   readonly trackSettled?: (promise: Promise<unknown>) => void;
   readonly resolvedPipelineKeys: Set<string>;
+  pipelineKeyDerivations: number;
   readonly lifecycle: DrawLifecycleToken;
   readonly blendState?: GPUBlendState;
   readonly blendConstant?: GPUColorDict;
@@ -339,7 +340,7 @@ export class InternalDraw implements Draw {
       disposedError: (operation) => drawDisposedError(disposedLabel, operation),
     });
     const { set: initialSet, ...retainedOpts } = opts;
-    drawStates.set(this, { id, device, opts: retainedOpts, vertexBufferLayouts, cache, defaultTarget, reflection, visibility, vertexEntry: vertexEntry?.name ?? "vs_main", fragmentEntry: fragmentEntry?.name ?? "fs_main", entryKey, setCore, bindGroupLayouts, pipelineLayout, vertexShaderModule, fragmentShaderModule, pipelineStore, pipelineLayouts, errorSink, trackSettled, resolvedPipelineKeys: new Set(), lifecycle, ...fragmentState, ...blendConstantOptions, ...primitiveOptions, ...depthOptions, ...stencilOptions, ...multisampleOptions, ...constantsOptions });
+    drawStates.set(this, { id, device, opts: retainedOpts, vertexBufferLayouts, cache, defaultTarget, reflection, visibility, vertexEntry: vertexEntry?.name ?? "vs_main", fragmentEntry: fragmentEntry?.name ?? "fs_main", entryKey, setCore, bindGroupLayouts, pipelineLayout, vertexShaderModule, fragmentShaderModule, pipelineStore, pipelineLayouts, errorSink, trackSettled, resolvedPipelineKeys: new Set(), pipelineKeyDerivations: 0, lifecycle, ...fragmentState, ...blendConstantOptions, ...primitiveOptions, ...depthOptions, ...stencilOptions, ...multisampleOptions, ...constantsOptions });
     if (initialSet) this.set(initialSet);
     for (const target of opts.targets ?? []) this.compileSync(target);
   }
@@ -574,6 +575,7 @@ export class InternalDraw implements Draw {
   }
 
   #compileKey(state: DrawState, target: CompileTarget | undefined, where: string): { readonly signature: TargetSignature; readonly signatureKey: string; readonly key: string } {
+    state.pipelineKeyDerivations++;
     const signature = this.#signatureForKeyTarget(state, target, where);
     const signatureKey = signatureKeyOf(signature);
     return { signature, signatureKey, key: this.#pipelineKey(state, signature) };
@@ -1116,6 +1118,12 @@ export function drawLifecycleToken(draw: InternalDraw): DrawLifecycleToken { ret
 export function drawGeometrySnapshot(draw: InternalDraw): GeometryLive | undefined { return geometryLivenessOf(drawState(draw, "geometry").opts.geometry); }
 
 export function drawCacheOwnerTestState(draw: InternalDraw): SetCoreTestState { return setCoreTestState(drawState(draw, "cacheOwner").setCore); }
+
+/** Test-only: target signature normalization + validation + pipeline key derivations of this draw. */
+export function drawEncodeTestState(draw: InternalDraw): { readonly pipelineKeyDerivations: number } {
+  const state = drawState(draw, "encodeTestState");
+  return { get pipelineKeyDerivations() { return state.pipelineKeyDerivations; } };
+}
 
 export function assertDrawUsable(draw: Draw, operation: string): void { drawState(draw, operation); }
 

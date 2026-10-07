@@ -95,7 +95,7 @@ export function createBindGroupCache(): BindGroupCache {
       if (!layouts) shard.groups.set(group, layouts = new Map());
       let entries = layouts.get(layout);
       if (!entries) layouts.set(layout, entries = new Map());
-      const key = bindingKey(bindings);
+      const key = bindGroupKeyOf(bindings);
       const existing = entries.get(key);
       if (existing) {
         state.lifetime.maintain();
@@ -146,6 +146,7 @@ export function createBindGroupCache(): BindGroupCache {
 }
 
 const keys = new WeakMap<object, string>();
+let keyBuilds = 0;
 
 /** Full identity: `kind:id`, plus `@offset+size` for a buffer range. Identity objects are immutable, so keys are memoized. */
 export function identityKey(identity: BindGroupIdentityPart): string {
@@ -173,6 +174,8 @@ export function bindGroupCacheTestState(cache: BindGroupCache) {
     lifetime,
     ownerEntries(owner: object): number { return state.shards.get(owner)?.lru.size ?? 0; },
     ownerShard(owner: object): object | undefined { return state.shards.get(owner); },
+    /** Binding keys built by any cache or caller, module-wide: compare deltas. */
+    get bindingKeyBuilds(): number { return keyBuilds; },
     /** Reachable entries that have dependencies; computed from the weak reverse records, test use only. */
     trackedEntries(): number { return lifetime.liveTargets().filter((target) => target instanceof CacheEntry).length; },
   };
@@ -183,7 +186,9 @@ function touch(lru: Map<CacheEntry, true>, entry: CacheEntry): void {
   lru.set(entry, true);
 }
 
-function bindingKey(bindings: readonly BindGroupKeyPart[]): string {
+/** Compound key of a bind group's binding identities, in binding order. */
+export function bindGroupKeyOf(bindings: readonly BindGroupKeyPart[]): string {
+  keyBuilds++;
   let sorted = true;
   for (let index = 1; index < bindings.length; index++) if (bindings[index - 1]!.binding > bindings[index]!.binding) sorted = false;
   const ordered = sorted ? bindings : [...bindings].sort((left, right) => left.binding - right.binding);

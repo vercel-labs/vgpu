@@ -70,6 +70,8 @@ export interface BindingState {
 export interface SetCoreTestState {
   readonly cache: BindGroupCache;
   readonly owner: object;
+  /** Full binding scans, and bind group constructions (arrays, required state) of unclaimed groups. */
+  readonly stats: { readonly fullVerifications: number; readonly groupPlanBuilds: number };
 }
 
 interface ActiveGroup {
@@ -117,6 +119,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
   const claimedGroups = new Map<number, GPUBindGroup>();
   const cacheOwner = {};
   const activeByGroup = new Map<number, ActiveGroup>();
+  const stats = { fullVerifications: 0, groupPlanBuilds: 0 };
   refreshLayouts();
 
   function current(operation: string): SetCoreOptions {
@@ -266,6 +269,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
 
   function preflight(): void {
     current("preflight");
+    stats.fullVerifications++;
     assertUsable();
     for (const state of bindings.values()) if (bindingIsActive(state) && !claimedGroups.has(state.info.group)) requiredState(state.info);
   }
@@ -310,6 +314,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
     const options = current("bindGroups");
     const claimed = claimedGroups.get(group);
     if (claimed) return { group, bindGroup: claimed, offsets: [], claimValidation: rawClaimValidation(claimed, group) };
+    stats.groupPlanBuilds++;
     const groupBindings = activeByGroup.get(group)?.bindings ?? [];
     const resources: GPUBindingResource[] = [];
     const keys: BindGroupKeyPart[] = [];
@@ -397,7 +402,7 @@ export function createSetCore(options: SetCoreOptions): SetCore {
       return { info: state.info, ownership: state.ownership, resource: state.resource, identity: state.identity, underlyingBuffer: state.underlyingBuffer };
     },
   };
-  setCoreTestStates.set(core, { cache: options.cache, owner: cacheOwner });
+  setCoreTestStates.set(core, { cache: options.cache, owner: cacheOwner, stats });
   return core;
 }
 
