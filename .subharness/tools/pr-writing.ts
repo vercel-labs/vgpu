@@ -19,13 +19,18 @@ Never invent measurements, review approvals, completed checks, source links or m
 
 Read .claude/skills/visual-explainer/SKILL.md and apply its PR-description mode. That skill is the
 source of truth for the problem-first narrative, explicit before/after boundary, native code
-blocks, small SVG chunks, accessibility and visual verification. Follow its linked example when
-useful. Keep the explanation in ordinary Markdown and reserve diagrams for individual mechanisms;
-the personal educational PDF mode never supplies PR attachments.
+blocks, Markdown-first presentation, diagram eligibility, accessibility and visual verification.
+Follow its linked example when useful. Use paragraphs, lists, tables and fenced code blocks for
+steps, before/after comparisons, measurements and snippets. Never turn that content into PNG/SVG
+cards or screenshots. Images are optional and only justified for complex diagrams whose drawn
+relationships cannot be explained as clearly in Markdown. The personal educational PDF mode
+never supplies PR attachments.
 
 Use the repository template's Summary for the human walkthrough, with clear problem/solution
-headings before the technical record. Reuse verified existing attachment URLs; describe new SVGs
-in assets.json for the lead to upload. Never publish scratch paths or fabricate attachment URLs.
+headings before the technical record. Apply the same eligibility rule to existing attachments;
+replace simple text figures with Markdown when revising a PR. Reuse verified existing attachment
+URLs only for figures still needed; describe justified new diagrams in assets.json for the lead
+to upload. Never publish scratch paths or fabricate attachment URLs.
 
 ## Then: the technical record for maintainers and AI reviewers
 
@@ -50,10 +55,13 @@ The title names the concrete final change, not the writing process or an exagger
 ## Deliverables and editorial verification
 
 Write title.txt, body.md, assets.json and checks.md under the assigned PR artifact directory.
-Put new SVGs in its assets/ subdirectory; rendered previews may live in previews/.
-assets.json is an array (empty when no figures), one object per figure with localPath or an
+Only when a complex diagram needs an image, put its SVG in assets/; rendered previews may live
+in previews/. A text-only PR is a complete deliverable; assets.json should normally be empty.
+assets.json is an array, one object per justified figure with localPath or an
 existing url, alt, purpose, and status (needs-upload or existing). State the base/head revisions
 and evidence paths in checks.md, not as inaccessible links in the public body.
+For each figure, purpose must identify the relationship that requires drawing and why prose,
+a list, a table or native Mermaid cannot convey it as clearly. Decoration is not a justification.
 
 Apply the visual-explainer skill's "Verify before delivery" section to the human walkthrough.
 Additionally, check the PR-specific declarations and validation/review coverage above. Preserve

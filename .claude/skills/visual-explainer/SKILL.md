@@ -4,8 +4,8 @@ description: >-
   Use when the user asks to explain a problem, issue, PR, or feature as an infographic.
   Create a step-by-step visual explanation starting from user code or actions, with
   a clear problem/solution boundary, syntax-highlighted snippets, and focused diagrams.
-  Support standalone educational PDFs and Markdown explanations with small SVG chunks
-  for PRs. Also apply when explicitly invoked by the repository PR writer.
+  Support standalone educational PDFs and Markdown-first PR explanations, with optional
+  images only for complex diagrams. Also apply when explicitly invoked by the repository PR writer.
 ---
 
 # Visual explainer
@@ -58,7 +58,8 @@ See [the example and counterexamples](references/walkthrough.md) for the intende
 - Each diagram explains one relationship: ownership, ranges, identity, order, dependencies or
   a measured comparison. Put it beside the paragraph that explains it. Keep prose outside the
   graphic; labels should be brief. Arrows must describe an actual flow, dependency or transition.
-- Prefer small, self-contained SVGs made from shapes, paths and text. Include viewBox, explicit
+- When an image is warranted (for PRs, apply the eligibility rules below first), prefer small,
+  self-contained SVGs made from shapes, paths and text. Include viewBox, explicit
   dimensions, title/description, and alt text when embedded. Use an explicit background and
   sufficient contrast. Avoid scripts, foreignObject, external fonts/resources and raster embeds.
 - For a PR, target compact or vertical diagrams around 320–480 viewBox units wide with labels
@@ -70,8 +71,8 @@ See [the example and counterexamples](references/walkthrough.md) for the intende
   the version they demonstrate. State omitted setup rather than making a partial example look
   executable by itself.
 - Keep essential meaning in prose, too: the explanation must work for readers and agents that
-  cannot see the diagrams. Prefer SVG for this style; Mermaid is an alternative when requested
-  or materially better for a simple native Markdown diagram.
+  cannot see the diagrams. For PRs, prefer native Mermaid when a necessary diagram can be
+  expressed clearly that way; custom images must meet the eligibility rules below.
 
 ## Choose the output mode
 
@@ -94,11 +95,27 @@ committed by default. Deliver a link to the PDF and any useful preview, with a b
 what it explains. An educational PDF stays personal: do not attach it to a PR or turn its pages
 into images in the PR body.
 
-### PR description: Markdown and SVG chunks
+### PR description: Markdown first, optional complex diagrams
 
-Use normal Markdown paragraphs and copyable code blocks, interleaved with individual SVGs. Do not
-embed a full infographic as a PNG or SVG. After the human walkthrough, the PR writer adds the
-repository's technical record, validation and required declarations. Its publication and output
+Default to native Markdown: paragraphs, headings, numbered steps, bullets, tables and copyable
+code fences. A before/after comparison belongs in a table or short sections; a linear sequence
+belongs in a numbered list. Measurements, checklists, key comparisons and snippets stay text.
+Do not render any of these as PNG/SVG cards, screenshots or text boxes joined by decorative arrows.
+Color, rounded boxes and a before/after layout do not make a complex diagram.
+
+Add an image only when drawing communicates a complex relationship that Markdown cannot explain
+as clearly: for example, a branching dependency graph with shared ownership, overlapping buffer
+ranges and lifetimes, or a spatial mapping. Complexity must come from the mechanism, not the number
+of words. Use native Mermaid if it can express the necessary diagram clearly; otherwise a focused
+SVG may be appropriate. For each proposed image, explain what relationship needs drawing and why
+prose, a list, a table or Mermaid would be insufficient. If there is no concrete answer, use
+Markdown. There is no image quota; a PR with no images is the normal, complete outcome.
+
+Apply this rule when reusing existing attachments, too. Replace text-only figures with Markdown
+instead of preserving them because they are already uploaded. Do not embed a full infographic as
+a PNG or SVG. These restrictions concern PR descriptions; personal PDFs remain visual documents.
+After the human walkthrough, the PR writer adds the repository's technical record, validation
+and required declarations. Its publication and output
 contract is in [the PR-writing guide](../../../.subharness/tools/pr-writing.ts).
 
 Keep new assets in the assigned scratch directory, with meaningful alt text and a list of files
@@ -114,8 +131,11 @@ or invent URLs. Published descriptions must have accessible asset URLs, never lo
   a heading claiming nothing changes.
 - Compare each step, diagram and snippet with the evidence. Mark uncertainty; never invent
   measurements or silently substitute a proposed mechanism for implemented behavior.
-- Render and visually inspect the artifact at its intended reading sizes. XML parsing alone is
-  not visual verification. Report any rendering/inspection limitation rather than claiming it
+- For a PR, check every proposed image against the eligibility rule before rendering. If a list,
+  table or prose preserves its meaning just as clearly, replace the image with Markdown. Check
+  that the asset list contains only figures still used; an empty list is valid.
+- Render and visually inspect any PDF or justified image at its intended reading sizes. XML
+  parsing alone is not visual verification. Report any rendering/inspection limitation rather than claiming it
   passed. Save rendered previews as scratch evidence, not as replacement PR attachments.
 - Return the artifact paths, the relevant source revisions and any limitations. Do not rerun
   expensive product suites merely to illustrate existing evidence.

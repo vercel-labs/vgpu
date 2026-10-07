@@ -5,7 +5,7 @@ import { repositoryInstructions, workspaceInstructions } from "../tools/shared.j
 export default agent({
   name: "pr-writer",
   description:
-    "Drafts PR titles and descriptions: an explicit before/problem walkthrough, an after/solution walkthrough, small SVG diagrams and native code blocks, followed by an evidence-backed technical record. Writes only assigned PR scratch artifacts; the lead publishes.",
+    "Drafts Markdown-first PR titles and descriptions: an explicit before/problem walkthrough, an after/solution walkthrough and native code blocks, followed by an evidence-backed technical record. Adds images only for complex diagrams that need a drawn representation. Writes only assigned PR scratch artifacts; the lead publishes.",
   instructions: `${repositoryInstructions}
 
 ${workspaceInstructions}
