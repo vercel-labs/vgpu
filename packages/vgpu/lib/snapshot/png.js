@@ -53,7 +53,7 @@ export function snapshotFixit(path, actualPath, diffPath) {
 }
 
 function artifactPath(path, suffix) {
-  return path.replace(/\.png$/u, `.${suffix}.png`);
+  return `${path.replace(/\.png$/iu, "")}.${suffix}.png`;
 }
 
 function assertSameDimensions(path, expected, width, height) {
