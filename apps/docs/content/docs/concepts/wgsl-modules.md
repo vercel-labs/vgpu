@@ -116,13 +116,13 @@ For an entry shader, vgpu:
 
 This means two modules can export a helper with the same name without colliding, and importing one function from a large library does not ship every unused declaration. Entry-point names such as `fs_main` remain unchanged for pipeline creation.
 
-Module resolution happens during build or setup, never inside the render loop. Bundler integrations return a `ShaderSource`; direct `resolveShader()` calls return a `ResolvedShader` whose `.wgsl` field is the finished string.
+Module resolution happens during build or setup, never inside the render loop. Bundler integrations return a prepared `ShaderSource` — the finished WGSL plus its reflection — that `effect`, `draw`, and `compute` take directly; direct `resolveShader()` calls return a `ResolvedShader` whose `.wgsl` field is the finished string; pass that result to `prepareShader()` from `@vgpu/wgsl/prepare` once before rendering.
 
 ## Configure module resolution
 
 WGSL itself has no standard module system. vgpu adds `import` and `export` while you author a shader, resolves the complete module graph during build or setup, and emits ordinary WGSL before WebGPU sees it.
 
-With the webpack, Turbopack, or Vite integration configured, import only the entry file from TypeScript. The loader follows its WGSL imports and returns one `ShaderSource` object for vgpu.
+With the webpack, Turbopack, or Vite integration configured, import only the entry file from TypeScript. The loader follows its WGSL imports and returns one prepared `ShaderSource` object for vgpu.
 
 | Environment | Use | Read next |
 | --- | --- | --- |

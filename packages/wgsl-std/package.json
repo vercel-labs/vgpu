@@ -1,6 +1,6 @@
 {
   "name": "@vgpu/wgsl-std",
-  "version": "0.5.0",
+  "version": "0.6.0-rc.2",
   "description": "Pure WGSL utility snippets for vgpu shaders.",
   "keywords": [
     "webgpu",
@@ -37,7 +37,8 @@
     "./noise/perlin": "./src/noise/perlin/index.wgsl",
     "./noise/simplex": "./src/noise/simplex/index.wgsl",
     "./fullscreen": "./src/fullscreen/index.wgsl",
-    "./light": "./src/light/index.wgsl"
+    "./light": "./src/light/index.wgsl",
+    "./scene": "./src/scene/index.wgsl"
   },
   "files": [
     "src/**/*.wgsl",

@@ -2,19 +2,25 @@
 
 Start with the public `vgpu` package. A program has one `Gpu` context, explicit WGSL bindings, and explicit frames. There are no global uniforms: time comes from the frame clock (`clock(gpu).time`, `.deltaTime`, `.frameCount`) and resolution comes from targets (`target.size`, `target.texelSize`).
 
-```ts
-import { clock, init, effect, frameLoop, surface } from "vgpu";
-
-const gpu = await init();
-const canvas = document.querySelector("canvas")!;
-const canvasSurface = surface(gpu, canvas, { dpr: [1, 2] });
-const gradient = effect(gpu, `
+```wgsl
+// gradient.wgsl
 struct Params { time: f32, texel: vec2f }
 @group(0) @binding(0) var<uniform> params: Params;
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
   return vec4f(uv, sin(params.time) * 0.5 + 0.5, 1.0);
 }
-`, { set: { params: { time: 0, texel: canvasSurface.texelSize } } });
+```
+
+```ts
+import { clock, init, effect, frameLoop, surface } from "vgpu";
+import gradientShader from "./gradient.wgsl";
+
+const gpu = await init();
+const canvas = document.querySelector("canvas")!;
+const canvasSurface = surface(gpu, canvas, { dpr: [1, 2] });
+const gradient = effect(gpu, gradientShader, {
+  set: { params: { time: 0, texel: canvasSurface.texelSize } },
+});
 
 canvasSurface.onResize(() => {
   gradient.set({ params: { texel: canvasSurface.texelSize } });
@@ -26,6 +32,8 @@ frameLoop(gpu, (frame) => {
   frame.pass(canvasSurface, gradient);
 });
 ```
+
+`effect(gpu)`, `draw(gpu)`, and `compute(gpu)` take a prepared `ShaderSource` — the WGSL plus the reflection vgpu reads bindings from — not a WGSL string. The `@vgpu/wgsl` bundler loader turns `import gradientShader from "./gradient.wgsl"` into one at build time, so the browser never loads the WGSL parser; wire it up with [Using vgpu with Next.js and other bundlers](nextjs.docs.md). With no bundler, wrap the WGSL string in `prepareShader()` from `@vgpu/wgsl/prepare` once, before creating the effect, as the headless example below does. Passing a raw string throws `VGPU-SHADER-SOURCE-UNPREPARED`.
 
 Two habits keep this correct as it grows: bindings are set by their WGSL
 names — `params` is a struct, so its members nest inside it — and `set()`
@@ -50,12 +58,13 @@ evidence instead of guesswork:
 import { writeFileSync } from "node:fs";
 import { PNG } from "pngjs";
 import { init, effect, target } from "vgpu/node";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
-const SHADER = `
+const SHADER = prepareShader(`
   @fragment fn main() -> @location(0) vec4f {
     return vec4f(0.25, 0.5, 0.75, 1.0);
   }
-`;
+`); // no loader in Node: reflect the WGSL once, up front
 const width = 160;
 const height = 90;
 const gpu = await init();
@@ -75,7 +84,8 @@ composition. PNG encoding is project-owned: `pngjs` is one option, any encoder
 works.
 
 If the shader lives in its own `.wgsl` file instead of a template string — even
-without a bundler — resolve it first with `resolveShader()`:
+without a bundler — resolve it first with `resolveShader()`, then pass the
+resolved WGSL to `prepareShader()`:
 [Using vgpu without a bundler](no-bundler.docs.md).
 
 The full step-by-step playbook — from `vgpu docs` to browser validation — is

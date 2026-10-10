@@ -276,6 +276,11 @@ test("routes the dogfood queries to the page that answers them", () => {
     ["depth buffer canvas", "/guides/two-pass-rendering.docs.md"],
     ["composite scene to canvas", "/guides/two-pass-rendering.docs.md"],
     ["render to texture", "/guides/two-pass-rendering.docs.md"],
+    ["scene composition", "/guides/scene-composition.docs.md"],
+    ["external ECS", "/guides/scene-composition.docs.md"],
+    ["camera uniform", "/guides/scene-composition.docs.md"],
+    ["instanceGeometry", "/vgpu/scene/gpu/instance-geometry.docs.md"],
+    ["orbitRig", "/vgpu/scene/camera-state.docs.md"],
   ];
 
   for (const [query, expected] of cases) {

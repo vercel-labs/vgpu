@@ -1,0 +1,1135 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-09-30",
+  "task": "scene-quaternion-keyframes",
+  "taskRevision": "scene-quaternion-keyframes-v1",
+  "claimScope": "Two-session descriptive pilot with the optional public skill available; no comparison arm or causal effect estimate.",
+  "model": "anthropic/claude-sonnet-5",
+  "auth": "Vercel AI Gateway project OIDC for prj_NACCgOdgkPJHSeDzk15gDKtOF0MP",
+  "eveVersion": "0.29.5",
+  "dockerImage": "ghcr.io/vercel/eve@sha256:de79f9a495add7cd1691e3496afc1c3227b0846f9ae0b26126f120c91af3445c",
+  "pilotRevision": "scene-math-discovery-pilot-v2",
+  "planSha256": "837783554ff0f89665a5cd257a8242135d1d8f3f4e1d181d7bec8e7d4e16b771",
+  "runtimeGitSha": "b6ec97a379e238cb37f492e30a73cdcad03e908d",
+  "sourceKey": "6122d243c06747f2",
+  "skill": {
+    "commit": "b6ec97a379e238cb37f492e30a73cdcad03e908d",
+    "fullMarkdownSha256": "31011aa5d7e62408cc21619de2af0dee2062b75646df398dc3bbf3bdae22b51c",
+    "loadedBodySha256": "285789ace4fd0f82333c5a6d471a76f73d7ccbc907e00bb7f5d2448e48ec50e3",
+    "generatorSha256": "e25d11e296281b037ae74787da920337bece033a7385520dd5e2ff2678e59c45"
+  },
+  "harnessFiles": [
+    {
+      "path": "apps/agent-evals/.work/tarballs/tarballs.json",
+      "sha256": "2544e26f670115268533bd06bf81ad5777b52cf80b0f3890c48785e0c2548498"
+    },
+    {
+      "path": "skills/vgpu/blender/index.md",
+      "sha256": "c157abd2692f0ba9446de1a66f3b5f4115de686c72e15cffc5bac2f2a9e52c35"
+    },
+    {
+      "path": "skills/vgpu/blender/references/baking-and-diagnostics.md",
+      "sha256": "2888c9f4aeae52e9a1318f70c5f4b4b2102c268183771c182b710de815772ed7"
+    },
+    {
+      "path": "skills/vgpu/blender/references/preflight-and-recovery.md",
+      "sha256": "aec122cfa090372b162244ecfd0d64a39f1bcee7296a303f2164f57a2d42cc5b"
+    },
+    {
+      "path": "skills/vgpu/blender/references/shape-and-assembly.md",
+      "sha256": "757bfacf961acfb9afcf72b7091b11707a40127cf60b4010745d13f35fcb46f5"
+    },
+    {
+      "path": "skills/vgpu/SKILL.md",
+      "sha256": "31011aa5d7e62408cc21619de2af0dee2062b75646df398dc3bbf3bdae22b51c"
+    },
+    {
+      "path": "packages/vgpu/lib/docs/generate/skill.js",
+      "sha256": "e25d11e296281b037ae74787da920337bece033a7385520dd5e2ff2678e59c45"
+    },
+    {
+      "path": "apps/agent-evals/agent/agent.ts",
+      "sha256": "62c830c8fb75a763a2490c8901f4cf596591fffaade35fa968ffca71ae888825"
+    },
+    {
+      "path": "apps/agent-evals/agent/hooks/finalize-turn.ts",
+      "sha256": "ab077382a9074eeacf4d4259cca901d40d35296cf9ae7e7149f788a29fdba0bc"
+    },
+    {
+      "path": "apps/agent-evals/agent/instructions.md",
+      "sha256": "191750580351f3a5a30c694c75311662412ae946309c6717f304e79f61802a9c"
+    },
+    {
+      "path": "apps/agent-evals/agent/lib/extract-json.ts",
+      "sha256": "dc0d883008c5fda15bf181ef7156872a72b7c5ef088fd0d16a1c55ecf24b377a"
+    },
+    {
+      "path": "apps/agent-evals/agent/lib/paths.ts",
+      "sha256": "1fce3d26ae25a15ea4b93f9892367e2ee875428dfea62af74da1269ea15293e1"
+    },
+    {
+      "path": "apps/agent-evals/agent/lib/scene-auth.mjs",
+      "sha256": "7e6046cd5466beeffe14a90430df3bda70f7feec5395c0f982c92ca877229987"
+    },
+    {
+      "path": "apps/agent-evals/agent/lib/scene-guidance.ts",
+      "sha256": "4be1940a787ac215861bb043e4cf6ee55d0e2dbd780ae444dfcef76e5c7baf17"
+    },
+    {
+      "path": "apps/agent-evals/agent/lib/scene-keyframe-dependencies.ts",
+      "sha256": "c3fc82d3f99437192768938d889b4c1ed45fb9bd9040c01ce656aecd7f96d3cb"
+    },
+    {
+      "path": "apps/agent-evals/agent/lib/task.ts",
+      "sha256": "001b20f6236449e351bf646c93944ec50ec384a6656941d966e04b8cf45e214e"
+    },
+    {
+      "path": "apps/agent-evals/agent/lib/verify/n1-hero-shader.mjs",
+      "sha256": "071ef6b0bc8276d7ac7c28ff797a493e090f94d62af3b9cb86d85642285f65ff"
+    },
+    {
+      "path": "apps/agent-evals/agent/lib/verify/next-build.mjs",
+      "sha256": "fb2bdca42e635734503ff4a1d21c6d8a8bfbd9f6e06c82b67eb0fd000a8c0e2f"
+    },
+    {
+      "path": "apps/agent-evals/agent/lib/verify/scene.mjs",
+      "sha256": "0d89cf5ac76ccf73156e33144e10032e467cb5373f5144ed8ee995003a55544c"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/backend.ts",
+      "sha256": "a32c76cb7f5fe8217a1f3f3e331697b255a4059fb07a4a3c04b2ea995ec1ebec"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/sandbox.ts",
+      "sha256": "dc2d4f46a116f5fe996c2c0b464826b3f9ff0dbe08f028023849ec522af52268"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n1-hero-shader/app/globals.css",
+      "sha256": "2238baa839dd430b5b7339f7eec0b1934984abba78318b061f608956254a0b5a"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n1-hero-shader/app/layout.tsx",
+      "sha256": "5341089d8316fe801f20f43b82d72092c77c9279986c20097b2bab35ef417122"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n1-hero-shader/app/page.tsx",
+      "sha256": "ff78dafad70bc99c12ee71fe14f3538c07a54d7d25115e86ba04ddd578562f58"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n1-hero-shader/next-env.d.ts",
+      "sha256": "879741880b6ab48da99dcc06dcc674d381c9826137b0496bf7bb368f302de9fc"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n1-hero-shader/package.json",
+      "sha256": "74f02e47a89f617148ed37fae24ac155c46c3a6c1dcf2fca9396a1b5f0f62ea5"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n1-hero-shader/tsconfig.json",
+      "sha256": "bbd80ae370519b1c841614191fe972109117095b318e410ab7059a5af269a2d2"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/app/globals.css",
+      "sha256": "e82557c61891b01edc02ee1dfa64ad5a1208e34efd135d7e10b1b61cfcc8d7cb"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/app/hero-renderer.ts",
+      "sha256": "e070be604687f1c5eaf5732e29cb5ed4cbe9d27cbf9ec51df62c662de6b0e29b"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/app/hero.tsx",
+      "sha256": "463e133edbe6091a7b4354b39adf56cb77c095938ebb5bb68a413fe9d47a9861"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/app/layout.tsx",
+      "sha256": "5341089d8316fe801f20f43b82d72092c77c9279986c20097b2bab35ef417122"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/app/page.tsx",
+      "sha256": "bd23944fb002f2c6b7a34fdafd5e0d8234b8393e4e6c19e2bd760177b9e505c6"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/app/shaders/blur.wgsl",
+      "sha256": "edf4eebfe1402f1e931fd1411a6117dfa920895926abde0a69eb555253af7ea6"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/app/shaders/composite.wgsl",
+      "sha256": "09118722f606e2baaa08425908aae77916c227678dc4c04758b82a9e98ddb7db"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/app/shaders/field.wgsl",
+      "sha256": "56506720cb58cac71ca12820922712e0cc6164329329737dc47417525b2a60cd"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/next-env.d.ts",
+      "sha256": "879741880b6ab48da99dcc06dcc674d381c9826137b0496bf7bb368f302de9fc"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/next.config.ts",
+      "sha256": "ed5c5d313d86f0145edceae7103b504e6b3eac661e02b3ad3638cd54c2caffe1"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/package.json",
+      "sha256": "3a29f764dda1e27ab8ccb1d1207981bfb4ef97cbbe04152fd62ca0c43038d86a"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/tsconfig.json",
+      "sha256": "bbd80ae370519b1c841614191fe972109117095b318e410ab7059a5af269a2d2"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/wgsl-env.d.ts",
+      "sha256": "e8979d54687df8fe371a1e7f13d63cb397ef834ef1512360513755a1839e5c7e"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/app/globals.css",
+      "sha256": "e82557c61891b01edc02ee1dfa64ad5a1208e34efd135d7e10b1b61cfcc8d7cb"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/app/hero-renderer.ts",
+      "sha256": "e070be604687f1c5eaf5732e29cb5ed4cbe9d27cbf9ec51df62c662de6b0e29b"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/app/hero.tsx",
+      "sha256": "463e133edbe6091a7b4354b39adf56cb77c095938ebb5bb68a413fe9d47a9861"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/app/layout.tsx",
+      "sha256": "5341089d8316fe801f20f43b82d72092c77c9279986c20097b2bab35ef417122"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/app/page.tsx",
+      "sha256": "bd23944fb002f2c6b7a34fdafd5e0d8234b8393e4e6c19e2bd760177b9e505c6"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/app/shaders/blur.wgsl",
+      "sha256": "edf4eebfe1402f1e931fd1411a6117dfa920895926abde0a69eb555253af7ea6"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/app/shaders/composite.wgsl",
+      "sha256": "09118722f606e2baaa08425908aae77916c227678dc4c04758b82a9e98ddb7db"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/app/shaders/field.wgsl",
+      "sha256": "56506720cb58cac71ca12820922712e0cc6164329329737dc47417525b2a60cd"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/next-env.d.ts",
+      "sha256": "879741880b6ab48da99dcc06dcc674d381c9826137b0496bf7bb368f302de9fc"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/next.config.ts",
+      "sha256": "ed5c5d313d86f0145edceae7103b504e6b3eac661e02b3ad3638cd54c2caffe1"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/package.json",
+      "sha256": "3a29f764dda1e27ab8ccb1d1207981bfb4ef97cbbe04152fd62ca0c43038d86a"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/tsconfig.json",
+      "sha256": "bbd80ae370519b1c841614191fe972109117095b318e410ab7059a5af269a2d2"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/wgsl-env.d.ts",
+      "sha256": "e8979d54687df8fe371a1e7f13d63cb397ef834ef1512360513755a1839e5c7e"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/s2-gradient/package.json",
+      "sha256": "609158e6c5fbc237939fa3ddf7faab80ab690bdc0c8d584414a885130103c4e8"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-math-interop/contract.md",
+      "sha256": "19b9423a84ddd72a1f1f91c78c4d15606694fd8e7ba7760bca4a9baa8e4ee8e4"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-math-interop/ecs/README.md",
+      "sha256": "b5d6be4e6df0ef5ffb0132d3f875bc6f140405dfb056451dc4a2b08fe76a5474"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-math-interop/ecs/world.mjs",
+      "sha256": "08014763fb2266f8eb38c41c825638868a9799f87b7c5a0a83702c01af0d32f0"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-math-interop/package.json",
+      "sha256": "6a1966cabdbab3ba762b7696c4b32ec1cecc514a80a9f7e371b5288a04e7cec0"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-quaternion-keyframes/contract.md",
+      "sha256": "8051ee6a46943390d14190868eab88fb4633ffe340913fc94283b581d3983db8"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-quaternion-keyframes/example-input.json",
+      "sha256": "3f65e3b4dac0087bd4c11d46f72314a55fbc256185690a4f26d9a24da5db135b"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-quaternion-keyframes/package.json",
+      "sha256": "a90fc33418afa2b9cbf4768524b021135b965ecdf993457505bfae3ac44a8428"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-robot-arm/contract.md",
+      "sha256": "8c2ae9d83e5690a71844b8b534881869ffff91ef54154d7671a20f51c5c0084d"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-robot-arm/package.json",
+      "sha256": "609158e6c5fbc237939fa3ddf7faab80ab690bdc0c8d584414a885130103c4e8"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-shader-bindings/contract.md",
+      "sha256": "39bf8e5b295bfb947dfc275880470e8f57ccd6a523c93a2561fe6e331977d70b"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-shader-bindings/integration.wgsl",
+      "sha256": "ddb213c4a16258e299e79087b79fdd8eceb41d21ab16a53b95fc91d8eefa8083"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-shader-bindings/package.json",
+      "sha256": "609158e6c5fbc237939fa3ddf7faab80ab690bdc0c8d584414a885130103c4e8"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-warehouse/contract.md",
+      "sha256": "f9a17c3c2b2b54bda6769ccc32e7e9519ca7d80c2be9f2dcacfaeb327d452bb0"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-warehouse/package.json",
+      "sha256": "609158e6c5fbc237939fa3ddf7faab80ab690bdc0c8d584414a885130103c4e8"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/view-image-smoke/package.json",
+      "sha256": "609158e6c5fbc237939fa3ddf7faab80ab690bdc0c8d584414a885130103c4e8"
+    },
+    {
+      "path": "apps/agent-evals/agent/skills/vgpu.ts",
+      "sha256": "0de484aea6fa52b23ca643ff633fbac822c78b7ed224faf1a1fcb3a5aead7963"
+    },
+    {
+      "path": "apps/agent-evals/agent/tools/view-image.ts",
+      "sha256": "2b78d507e8d651c93482f854066da198f3683c77448e597bd1c47bd29b60ddea"
+    },
+    {
+      "path": "apps/agent-evals/evals/evals.config.ts",
+      "sha256": "a2e2ddbf4570b0ac5ca9d533942cb3c3ec4b2fdee3fb7c91660f3afeb97b7abc"
+    },
+    {
+      "path": "apps/agent-evals/evals/lib/grade-gradient.mjs",
+      "sha256": "2add1c3fef699cbba4cfb5e6d442f1bd847862890eae0f084643986a7d193ba8"
+    },
+    {
+      "path": "apps/agent-evals/evals/lib/grade-scene.mjs",
+      "sha256": "98955c0f69453c65f141b1a06fd0faf6b55cf1c04b498e23472a51e15a0ee918"
+    },
+    {
+      "path": "apps/agent-evals/evals/lib/hero-signals.ts",
+      "sha256": "b644cf097e8389697cf6b7b742ef6b26d27c2b6a35ea648b5f8b40a0da0dfd19"
+    },
+    {
+      "path": "apps/agent-evals/evals/lib/judge-code.mjs",
+      "sha256": "d41c154145507099a21d1bb2844f09ec9f4a8d5a6e10cdd4647549ee0ed63c17"
+    },
+    {
+      "path": "apps/agent-evals/evals/lib/judge-trail.mjs",
+      "sha256": "fdb98ca827ab420b2de6f5cbba9894a47aa6fb0ff14c50b007193d0cb09ff009"
+    },
+    {
+      "path": "apps/agent-evals/evals/lib/scene-contracts.mjs",
+      "sha256": "5a5b6ae26f8a6f33c89bd5abb5ab0f21cbe9a93a4769db14606c5b2299257966"
+    },
+    {
+      "path": "apps/agent-evals/evals/lib/scene-eval.ts",
+      "sha256": "e48eeef771022689d6304d225e580b2fc9d07ebae320922eb6e9fba6667f5987"
+    },
+    {
+      "path": "apps/agent-evals/evals/lib/scene-interop.mjs",
+      "sha256": "a2693fbeed262fe2521f5c2e5227e85fd8f2e7788eff3fe7a2fdfb387b0d0147"
+    },
+    {
+      "path": "apps/agent-evals/evals/lib/scene-keyframes.mjs",
+      "sha256": "86ef6f4fda38767c632f816c5b2461ef424f1941e266db7461b7f74f7b8d41d4"
+    },
+    {
+      "path": "apps/agent-evals/evals/lib/scene-math.mjs",
+      "sha256": "9c3ca28be2943a14c592fb5e8efa67a650c6a3588607c5995155fdd45f5d2e6c"
+    },
+    {
+      "path": "apps/agent-evals/evals/lib/transcript.ts",
+      "sha256": "0dd54a487d7c4a14c2574d13f26090aee288404d599b4911ee02d8d593ace9d7"
+    },
+    {
+      "path": "apps/agent-evals/evals/lib/turn-failure.mjs",
+      "sha256": "390caea829391e8384edddffdb799b40cbd8111f683c3e94306b8b8fb2d7382a"
+    },
+    {
+      "path": "apps/agent-evals/evals/n1-hero-shader.eval.ts",
+      "sha256": "73d9b6bc0cbc16cf4da1bb7dced94538bcc33c382f7a642cbe0b7238d3701c71"
+    },
+    {
+      "path": "apps/agent-evals/evals/n2-ship-hero.eval.ts",
+      "sha256": "9902b05206ba9d9e5f49f54fc89ea2114497082afc333eb78977ca616fde9b4d"
+    },
+    {
+      "path": "apps/agent-evals/evals/n3-explore-hero.eval.ts",
+      "sha256": "574e79a024bdd9d529719d887e2ae58f30832243e46f5a60a0fee8a5a3a4a252"
+    },
+    {
+      "path": "apps/agent-evals/evals/s2-gradient.eval.ts",
+      "sha256": "3beec329af11168689c61b5203abfe19afadeef4886009a59dc7ed6caf0b196b"
+    },
+    {
+      "path": "apps/agent-evals/evals/scene-math-interop.eval.ts",
+      "sha256": "9cec792bd6c4c728ac2e24758715d81e0c1b3b23df0d85c7f56a0f5e3f6bc0bb"
+    },
+    {
+      "path": "apps/agent-evals/evals/scene-quaternion-keyframes.eval.ts",
+      "sha256": "bd46c0eec3f2fc5428d1235ccad9ec330d4424d858c7393248834e3a2ff4d1de"
+    },
+    {
+      "path": "apps/agent-evals/evals/scene-robot-arm.eval.ts",
+      "sha256": "fd86b8de51412733836def387a699372a533a10548366e24d9f3306e55c0f5b1"
+    },
+    {
+      "path": "apps/agent-evals/evals/scene-shader-bindings.eval.ts",
+      "sha256": "ab85b3c40c0f9654fd7131fbd6d779c1e2686923adc5a0cfbc8cad218fef3978"
+    },
+    {
+      "path": "apps/agent-evals/evals/scene-warehouse.eval.ts",
+      "sha256": "bfe27af4099f0d10d32cc5c5891e4ac256327b9a93325cce2c33d1ccfec09d0d"
+    },
+    {
+      "path": "apps/agent-evals/evals/view-image-smoke.eval.ts",
+      "sha256": "5165d5ccfd19ae47c2c8c177ad63a5a1109484f2a191f089386294354cdbf4e6"
+    },
+    {
+      "path": "apps/agent-evals/scripts/analyze-scene-guidance.mjs",
+      "sha256": "83557582fade489a4285647b31c7c5ee63be7761cefa7f418512cae37bfd5867"
+    },
+    {
+      "path": "apps/agent-evals/scripts/pack-vgpu.mjs",
+      "sha256": "880f3bb90074204738878633c893e7219ca242879a6188bcd88bbc9f6ee04cf8"
+    },
+    {
+      "path": "apps/agent-evals/scripts/scene-controls.mjs",
+      "sha256": "6a1c42aabf254cf6dcccfee1d2af38389f45075b2c087aa0467cf9902ddc6d86"
+    },
+    {
+      "path": "apps/agent-evals/scripts/scene-guidance.mjs",
+      "sha256": "1189cf735a90a139ed66c14a5641c04a1093f5830a64033e41949e9ae72bda44"
+    },
+    {
+      "path": "apps/agent-evals/scripts/scene-skill-isolation.mjs",
+      "sha256": "168c8a0f66f634fd77151dc3d112830854b996e48a54680fec003c4e5893ecf2"
+    },
+    {
+      "path": "apps/agent-evals/scripts/tarballs-fingerprint.mjs",
+      "sha256": "3d2908930c19d321ff927e54b064a56a8c35f32e088126fcfbabddf8e98f01f2"
+    },
+    {
+      "path": "apps/agent-evals/package.json",
+      "sha256": "ba8fc1e852f0ff3919a3a76e9133e4a4aca81fac044964b912fcb6c76de89892"
+    },
+    {
+      "path": "apps/agent-evals/tsconfig.json",
+      "sha256": "c6919c81e36cff562b984166f95ae7b8e6aac45d772070e786eea94cbfd8c8e2"
+    },
+    {
+      "path": "scripts/agent-evals.mjs",
+      "sha256": "1be14f35b8a7fa9a12fcfb93701ff8a139ff6b1e94fe483afc2c6503a77c8746"
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "sha256": "8bd2bffecd2d331858943998cfa0490739d84e8a38e751c0d7a3937d860d56c0"
+    },
+    {
+      "path": ".context/work/scene-math-discovery-r2/run-pilot.mjs",
+      "sha256": "699884434f9d278178b6848d9846003da06ecef92f9a7f4d9361dc633c3b3ee2"
+    },
+    {
+      "path": ".context/work/scene-math-discovery-r2/runner-lib.mjs",
+      "sha256": "5b6f2830060a4ac89726030b923b4a8d8a1faa08a634a28fc3746c9f63a09cbd"
+    },
+    {
+      "path": ".context/work/scene-math-discovery-r2/observations.mjs",
+      "sha256": "2ff06fd8ca853ecbdc2114aa28510a4f9f85c8f00eadc94a3ea74a7ae61ab889"
+    },
+    {
+      "path": ".context/work/scene-math-discovery-r2/collect-results.mjs",
+      "sha256": "85a575f41e900b799c5fe1f4c8f38a5e9d58f1952073ff4e81ae4a5f448aebe5"
+    },
+    {
+      "path": ".context/work/scene-math-evals/run-comparison-lib.mjs",
+      "sha256": "3e426145365f7be83b988652ed740c780987b1a8c6d44cd9fd10f1126ab282eb"
+    }
+  ],
+  "tarballs": [
+    {
+      "name": "@vgpu/wgsl-std",
+      "version": "0.5.0",
+      "file": "vgpu-wgsl-std-0.5.0.tgz",
+      "sha256": "79b1f234709401ee321be98a740b7e5d10129499682917e17c3a4a7a312dd73e"
+    },
+    {
+      "name": "@vgpu/wgsl",
+      "version": "0.5.0",
+      "file": "vgpu-wgsl-0.5.0.tgz",
+      "sha256": "37fddc5e403f38961bad193d42b00da1c4c1ea5e4edac991eba2e2c0209b8f1b"
+    },
+    {
+      "name": "@vgpu/core",
+      "version": "0.5.0",
+      "file": "vgpu-core-0.5.0.tgz",
+      "sha256": "7909bef2df9b6a99a2ce67eed81952a24739b9090f76c1b702125915c59a8ff5"
+    },
+    {
+      "name": "@vgpu/adapter-mock",
+      "version": "0.5.0",
+      "file": "vgpu-adapter-mock-0.5.0.tgz",
+      "sha256": "8ea54f07083676ffd5b07a3fc3441d6b20d44c1af726f30d986c355df5474dcd"
+    },
+    {
+      "name": "@vgpu/adapter-node",
+      "version": "0.5.0",
+      "file": "vgpu-adapter-node-0.5.0.tgz",
+      "sha256": "7f75cb9a099ad2409accb5244499ddcc040c113b0e30e6dfaed40f4b76fabe3b"
+    },
+    {
+      "name": "vgpu",
+      "version": "0.5.0",
+      "file": "vgpu-0.5.0.tgz",
+      "sha256": "fd3db6f904b46289ea09476aa19cd232f0f3d448a922026746c15a9b9e819087"
+    }
+  ],
+  "validation": {
+    "appTestsPassed": 68,
+    "appTypeScript": "pass",
+    "runnerTestsPassed": 10,
+    "nativeControlAssessmentsPassed": 28,
+    "nativeControlEvidence": "apps/agent-evals/.work/scene-controls/2026-09-30T18-32-49.955Z-fd59a30c/scene-quaternion-keyframes/summary.json",
+    "skillIsolation": "pass",
+    "skillIsolationEvidence": "apps/agent-evals/.work/skill-isolation/2026-09-30T18-34-36-088Z-c95ef7d0-e928-4cd6-bf37-939e76d6c61e/summary.json"
+  },
+  "summary": {
+    "eligibleSessions": 2,
+    "passingSessions": 2,
+    "passingTurns": 4,
+    "passingGateAssertions": 16,
+    "evaluatedFrames": 40,
+    "skillMaterializedSessions": 2,
+    "skillLoadedSessions": 0,
+    "mathInstalledSessions": 0,
+    "authoredMathUseSessions": 0,
+    "authoredWgpuMatrixUseSessions": 0,
+    "handwrittenInterpolationSessions": 2,
+    "cohortGenerationCostUsd": 3.2896227,
+    "allAttemptGenerationCostUsd": 5.3422533
+  },
+  "cohort": [
+    {
+      "slot": 1,
+      "sessionId": "wrun_01M3SV7FPJ2MZGFMHWZ68MBB63",
+      "codeId": "code-99110379",
+      "classification": "pass",
+      "startedAt": "2026-09-30T19:03:51.863Z",
+      "endedAt": "2026-09-30T19:09:47.397Z",
+      "costUsd": 1.6014286,
+      "steps": 51,
+      "docsCommands": 16,
+      "mathGuideExposure": {
+        "tier": "none",
+        "sections": [],
+        "firstContent": null,
+        "perTurn": [
+          {
+            "turnId": "turn_0",
+            "tier": "none",
+            "sections": [],
+            "firstContent": null
+          },
+          {
+            "turnId": "turn_1",
+            "tier": "none",
+            "sections": [],
+            "firstContent": null
+          }
+        ],
+        "deliveries": []
+      },
+      "skillLoadState": "not-loaded",
+      "installCommands": [],
+      "clarificationRequests": 0,
+      "initialAbsenceEvidence": {
+        "scope": "template build; reused by fresh sandbox sessions",
+        "templateKey": "vgpu-6122d243c06747f2-default-corpus-scene-quaternion-keyframes-25e2ac71c73c3e9c",
+        "recordedAt": "2026-09-30T18:52:49.410Z",
+        "snapshot": {
+          "schemaVersion": 1,
+          "observedAt": "2026-09-30T18:52:49.323Z",
+          "packageJson": {
+            "sha256": "88d225ccb7efc2ded49992481bc2c991bbe435fb35bb7e15a96fb1335e92463d",
+            "parseError": null,
+            "dependencyFields": {
+              "dependencies": {
+                "@vgpu/adapter-mock": "file:.vgpu-tarballs/vgpu-adapter-mock-0.5.0.tgz",
+                "@vgpu/adapter-node": "file:.vgpu-tarballs/vgpu-adapter-node-0.5.0.tgz",
+                "@vgpu/core": "file:.vgpu-tarballs/vgpu-core-0.5.0.tgz",
+                "@vgpu/wgsl": "file:.vgpu-tarballs/vgpu-wgsl-0.5.0.tgz",
+                "@vgpu/wgsl-std": "file:.vgpu-tarballs/vgpu-wgsl-std-0.5.0.tgz",
+                "pngjs": "^7.0.0",
+                "vgpu": "file:.vgpu-tarballs/vgpu-0.5.0.tgz"
+              }
+            },
+            "mathFields": []
+          },
+          "packageLock": {
+            "sha256": "9c612b8655d0bb38bda9d7e26e3449785bb6deeb08a58973f45215cfcbf237d1",
+            "parseError": null,
+            "mathPaths": []
+          },
+          "dependencyTree": {
+            "sha256": "b974ce3855c1e03bd641294ffbbf099fdd6fa74b819ea33357ef4c0516f821a3",
+            "mathVersions": [],
+            "parseError": null
+          },
+          "packages": {
+            "math": {
+              "present": false,
+              "version": null
+            },
+            "wgpuMatrix": {
+              "present": true,
+              "version": "3.4.2"
+            },
+            "three": {
+              "present": false,
+              "version": null
+            }
+          }
+        }
+      },
+      "sourceIdentity": {
+        "packedGitSha": "b6ec97a379e238cb37f492e30a73cdcad03e908d",
+        "sourceKey": "6122d243c06747f2",
+        "seedKey": "25e2ac71c73c3e9c",
+        "harnessAggregateSha256": "8e0a4599fe22dc3078ed6ad3af5b07d0c736352a7d338b336fac25f48b9296e4"
+      },
+      "evidence": {
+        "sceneRun": "apps/agent-evals/.work/snapshots/wrun_01M3SV7FPJ2MZGFMHWZ68MBB63/scene-run.json",
+        "events": "apps/agent-evals/.eve/evals/2026-09-30T19-09-46/evals/scene-quaternion-keyframes.events.ndjson"
+      },
+      "turns": [
+        {
+          "stage": 1,
+          "outcome": "pass",
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": true
+            },
+            {
+              "name": "artifacts",
+              "ok": true
+            },
+            {
+              "name": "state",
+              "ok": true
+            },
+            {
+              "name": "pixels",
+              "ok": true
+            }
+          ],
+          "inputSha256": "c24f904af6507ed6328da3e907ae1b88167b4588e9262c299722c7e329832dff",
+          "maximumMatrixError": 2.834612200519615e-08,
+          "maximumCentroidErrorPixels": 0.16918875952896664,
+          "skill": {
+            "advertised": true,
+            "advertisedFullMarkdownSha256": "31011aa5d7e62408cc21619de2af0dee2062b75646df398dc3bbf3bdae22b51c",
+            "observedAdvertisedFullMarkdownSha256": "31011aa5d7e62408cc21619de2af0dee2062b75646df398dc3bbf3bdae22b51c",
+            "materializedPath": "/home/vercel-sandbox/.agents/skills/vgpu/SKILL.md",
+            "materializedPresent": true,
+            "materializedSha256": "31011aa5d7e62408cc21619de2af0dee2062b75646df398dc3bbf3bdae22b51c",
+            "materializedOutsideWorkspace": true,
+            "advertisementIntegrity": "pass",
+            "advertisementError": null,
+            "expectedAdvertisedFullMarkdownSha256": "31011aa5d7e62408cc21619de2af0dee2062b75646df398dc3bbf3bdae22b51c",
+            "expectedLoadedBodySha256": "285789ace4fd0f82333c5a6d471a76f73d7ccbc907e00bb7f5d2448e48ec50e3",
+            "loadCalls": [],
+            "loaded": false
+          },
+          "dependencySnapshot": {
+            "schemaVersion": 1,
+            "observedAt": "2026-09-30T19:08:36.934Z",
+            "packageJson": {
+              "sha256": "88d225ccb7efc2ded49992481bc2c991bbe435fb35bb7e15a96fb1335e92463d",
+              "parseError": null,
+              "dependencyFields": {
+                "dependencies": {
+                  "@vgpu/adapter-mock": "file:.vgpu-tarballs/vgpu-adapter-mock-0.5.0.tgz",
+                  "@vgpu/adapter-node": "file:.vgpu-tarballs/vgpu-adapter-node-0.5.0.tgz",
+                  "@vgpu/core": "file:.vgpu-tarballs/vgpu-core-0.5.0.tgz",
+                  "@vgpu/wgsl": "file:.vgpu-tarballs/vgpu-wgsl-0.5.0.tgz",
+                  "@vgpu/wgsl-std": "file:.vgpu-tarballs/vgpu-wgsl-std-0.5.0.tgz",
+                  "pngjs": "^7.0.0",
+                  "vgpu": "file:.vgpu-tarballs/vgpu-0.5.0.tgz"
+                }
+              },
+              "mathFields": []
+            },
+            "packageLock": {
+              "sha256": "9c612b8655d0bb38bda9d7e26e3449785bb6deeb08a58973f45215cfcbf237d1",
+              "parseError": null,
+              "mathPaths": []
+            },
+            "dependencyTree": {
+              "sha256": "b974ce3855c1e03bd641294ffbbf099fdd6fa74b819ea33357ef4c0516f821a3",
+              "mathVersions": [],
+              "parseError": null
+            },
+            "packages": {
+              "math": {
+                "present": false,
+                "version": null
+              },
+              "wgpuMatrix": {
+                "present": true,
+                "version": "3.4.2"
+              },
+              "three": {
+                "present": false,
+                "version": null
+              }
+            }
+          },
+          "installAttempts": [],
+          "eligibleForSourceReview": true,
+          "executedSourceIdentity": "matched",
+          "codeFiles": [
+            {
+              "path": "render.mjs",
+              "sha256": "499b287f3c6014bafb353d0443bcac11ec54afefc8e5cf4f18d894a1c24794dc"
+            }
+          ],
+          "numericalSource": "handwritten-slerp",
+          "sourceReview": ".context/work/scene-math-discovery-r2/source-review/code-99110379.md"
+        },
+        {
+          "stage": 2,
+          "outcome": "pass",
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": true
+            },
+            {
+              "name": "artifacts",
+              "ok": true
+            },
+            {
+              "name": "state",
+              "ok": true
+            },
+            {
+              "name": "pixels",
+              "ok": true
+            }
+          ],
+          "inputSha256": "8793962f513a4960bae89bbca21d225131c510eb3fefc432fd0f7ec6ac8d2244",
+          "maximumMatrixError": 2.809596832964445e-08,
+          "maximumCentroidErrorPixels": 0.16918875952896664,
+          "skill": {
+            "advertised": true,
+            "advertisedFullMarkdownSha256": "31011aa5d7e62408cc21619de2af0dee2062b75646df398dc3bbf3bdae22b51c",
+            "observedAdvertisedFullMarkdownSha256": "31011aa5d7e62408cc21619de2af0dee2062b75646df398dc3bbf3bdae22b51c",
+            "materializedPath": "/home/vercel-sandbox/.agents/skills/vgpu/SKILL.md",
+            "materializedPresent": true,
+            "materializedSha256": "31011aa5d7e62408cc21619de2af0dee2062b75646df398dc3bbf3bdae22b51c",
+            "materializedOutsideWorkspace": true,
+            "advertisementIntegrity": "pass",
+            "advertisementError": null,
+            "expectedAdvertisedFullMarkdownSha256": "31011aa5d7e62408cc21619de2af0dee2062b75646df398dc3bbf3bdae22b51c",
+            "expectedLoadedBodySha256": "285789ace4fd0f82333c5a6d471a76f73d7ccbc907e00bb7f5d2448e48ec50e3",
+            "loadCalls": [],
+            "loaded": false
+          },
+          "dependencySnapshot": {
+            "schemaVersion": 1,
+            "observedAt": "2026-09-30T19:09:39.597Z",
+            "packageJson": {
+              "sha256": "88d225ccb7efc2ded49992481bc2c991bbe435fb35bb7e15a96fb1335e92463d",
+              "parseError": null,
+              "dependencyFields": {
+                "dependencies": {
+                  "@vgpu/adapter-mock": "file:.vgpu-tarballs/vgpu-adapter-mock-0.5.0.tgz",
+                  "@vgpu/adapter-node": "file:.vgpu-tarballs/vgpu-adapter-node-0.5.0.tgz",
+                  "@vgpu/core": "file:.vgpu-tarballs/vgpu-core-0.5.0.tgz",
+                  "@vgpu/wgsl": "file:.vgpu-tarballs/vgpu-wgsl-0.5.0.tgz",
+                  "@vgpu/wgsl-std": "file:.vgpu-tarballs/vgpu-wgsl-std-0.5.0.tgz",
+                  "pngjs": "^7.0.0",
+                  "vgpu": "file:.vgpu-tarballs/vgpu-0.5.0.tgz"
+                }
+              },
+              "mathFields": []
+            },
+            "packageLock": {
+              "sha256": "9c612b8655d0bb38bda9d7e26e3449785bb6deeb08a58973f45215cfcbf237d1",
+              "parseError": null,
+              "mathPaths": []
+            },
+            "dependencyTree": {
+              "sha256": "b974ce3855c1e03bd641294ffbbf099fdd6fa74b819ea33357ef4c0516f821a3",
+              "mathVersions": [],
+              "parseError": null
+            },
+            "packages": {
+              "math": {
+                "present": false,
+                "version": null
+              },
+              "wgpuMatrix": {
+                "present": true,
+                "version": "3.4.2"
+              },
+              "three": {
+                "present": false,
+                "version": null
+              }
+            }
+          },
+          "installAttempts": [],
+          "eligibleForSourceReview": true,
+          "executedSourceIdentity": "matched",
+          "codeFiles": [
+            {
+              "path": "render.mjs",
+              "sha256": "c1ec532ffbbfb1ab6cc4335a48ef386e8d8e559ba56fd17468cd0aa96de08a50"
+            }
+          ],
+          "numericalSource": "handwritten-slerp",
+          "sourceReview": ".context/work/scene-math-discovery-r2/source-review/code-99110379.md"
+        }
+      ]
+    },
+    {
+      "slot": 2,
+      "sessionId": "wrun_01M3SVJMJY8E9N6Q7WC2X9PRAE",
+      "codeId": "code-14549360",
+      "classification": "pass",
+      "startedAt": "2026-09-30T19:09:47.979Z",
+      "endedAt": "2026-09-30T19:16:27.240Z",
+      "costUsd": 1.6881940999999996,
+      "steps": 56,
+      "docsCommands": 20,
+      "mathGuideExposure": {
+        "tier": "surfaced",
+        "sections": [],
+        "firstContent": null,
+        "perTurn": [
+          {
+            "turnId": "turn_0",
+            "tier": "surfaced",
+            "sections": [],
+            "firstContent": null
+          },
+          {
+            "turnId": "turn_1",
+            "tier": "none",
+            "sections": [],
+            "firstContent": null
+          }
+        ],
+        "deliveries": [
+          {
+            "turnId": "turn_0",
+            "stepIndex": 21,
+            "tool": "bash",
+            "callId": "toolu_015SNHa5AvP8JSRakvpuAHj5",
+            "command": "cd /workspace && npx vgpu docs find \"geometry attributes\" 2>&1 | head -30; echo ---; npx vgpu docs grep -i \"attribute\" --package vgpu 2>&1 | head -40",
+            "tier": "surfaced",
+            "sections": [],
+            "truncated": false
+          }
+        ]
+      },
+      "skillLoadState": "not-loaded",
+      "installCommands": [],
+      "clarificationRequests": 0,
+      "initialAbsenceEvidence": {
+        "scope": "template build; reused by fresh sandbox sessions",
+        "templateKey": "vgpu-6122d243c06747f2-default-corpus-scene-quaternion-keyframes-25e2ac71c73c3e9c",
+        "recordedAt": "2026-09-30T18:52:49.410Z",
+        "snapshot": {
+          "schemaVersion": 1,
+          "observedAt": "2026-09-30T18:52:49.323Z",
+          "packageJson": {
+            "sha256": "88d225ccb7efc2ded49992481bc2c991bbe435fb35bb7e15a96fb1335e92463d",
+            "parseError": null,
+            "dependencyFields": {
+              "dependencies": {
+                "@vgpu/adapter-mock": "file:.vgpu-tarballs/vgpu-adapter-mock-0.5.0.tgz",
+                "@vgpu/adapter-node": "file:.vgpu-tarballs/vgpu-adapter-node-0.5.0.tgz",
+                "@vgpu/core": "file:.vgpu-tarballs/vgpu-core-0.5.0.tgz",
+                "@vgpu/wgsl": "file:.vgpu-tarballs/vgpu-wgsl-0.5.0.tgz",
+                "@vgpu/wgsl-std": "file:.vgpu-tarballs/vgpu-wgsl-std-0.5.0.tgz",
+                "pngjs": "^7.0.0",
+                "vgpu": "file:.vgpu-tarballs/vgpu-0.5.0.tgz"
+              }
+            },
+            "mathFields": []
+          },
+          "packageLock": {
+            "sha256": "9c612b8655d0bb38bda9d7e26e3449785bb6deeb08a58973f45215cfcbf237d1",
+            "parseError": null,
+            "mathPaths": []
+          },
+          "dependencyTree": {
+            "sha256": "b974ce3855c1e03bd641294ffbbf099fdd6fa74b819ea33357ef4c0516f821a3",
+            "mathVersions": [],
+            "parseError": null
+          },
+          "packages": {
+            "math": {
+              "present": false,
+              "version": null
+            },
+            "wgpuMatrix": {
+              "present": true,
+              "version": "3.4.2"
+            },
+            "three": {
+              "present": false,
+              "version": null
+            }
+          }
+        }
+      },
+      "sourceIdentity": {
+        "packedGitSha": "b6ec97a379e238cb37f492e30a73cdcad03e908d",
+        "sourceKey": "6122d243c06747f2",
+        "seedKey": "25e2ac71c73c3e9c",
+        "harnessAggregateSha256": "8e0a4599fe22dc3078ed6ad3af5b07d0c736352a7d338b336fac25f48b9296e4"
+      },
+      "evidence": {
+        "sceneRun": "apps/agent-evals/.work/snapshots/wrun_01M3SVJMJY8E9N6Q7WC2X9PRAE/scene-run.json",
+        "events": "apps/agent-evals/.eve/evals/2026-09-30T19-16-26/evals/scene-quaternion-keyframes.events.ndjson"
+      },
+      "turns": [
+        {
+          "stage": 1,
+          "outcome": "pass",
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": true
+            },
+            {
+              "name": "artifacts",
+              "ok": true
+            },
+            {
+              "name": "state",
+              "ok": true
+            },
+            {
+              "name": "pixels",
+              "ok": true
+            }
+          ],
+          "inputSha256": "c24f904af6507ed6328da3e907ae1b88167b4588e9262c299722c7e329832dff",
+          "maximumMatrixError": 2.834612200519615e-08,
+          "maximumCentroidErrorPixels": 0.16918875952896664,
+          "skill": {
+            "advertised": true,
+            "advertisedFullMarkdownSha256": "31011aa5d7e62408cc21619de2af0dee2062b75646df398dc3bbf3bdae22b51c",
+            "observedAdvertisedFullMarkdownSha256": "31011aa5d7e62408cc21619de2af0dee2062b75646df398dc3bbf3bdae22b51c",
+            "materializedPath": "/home/vercel-sandbox/.agents/skills/vgpu/SKILL.md",
+            "materializedPresent": true,
+            "materializedSha256": "31011aa5d7e62408cc21619de2af0dee2062b75646df398dc3bbf3bdae22b51c",
+            "materializedOutsideWorkspace": true,
+            "advertisementIntegrity": "pass",
+            "advertisementError": null,
+            "expectedAdvertisedFullMarkdownSha256": "31011aa5d7e62408cc21619de2af0dee2062b75646df398dc3bbf3bdae22b51c",
+            "expectedLoadedBodySha256": "285789ace4fd0f82333c5a6d471a76f73d7ccbc907e00bb7f5d2448e48ec50e3",
+            "loadCalls": [],
+            "loaded": false
+          },
+          "dependencySnapshot": {
+            "schemaVersion": 1,
+            "observedAt": "2026-09-30T19:15:17.080Z",
+            "packageJson": {
+              "sha256": "88d225ccb7efc2ded49992481bc2c991bbe435fb35bb7e15a96fb1335e92463d",
+              "parseError": null,
+              "dependencyFields": {
+                "dependencies": {
+                  "@vgpu/adapter-mock": "file:.vgpu-tarballs/vgpu-adapter-mock-0.5.0.tgz",
+                  "@vgpu/adapter-node": "file:.vgpu-tarballs/vgpu-adapter-node-0.5.0.tgz",
+                  "@vgpu/core": "file:.vgpu-tarballs/vgpu-core-0.5.0.tgz",
+                  "@vgpu/wgsl": "file:.vgpu-tarballs/vgpu-wgsl-0.5.0.tgz",
+                  "@vgpu/wgsl-std": "file:.vgpu-tarballs/vgpu-wgsl-std-0.5.0.tgz",
+                  "pngjs": "^7.0.0",
+                  "vgpu": "file:.vgpu-tarballs/vgpu-0.5.0.tgz"
+                }
+              },
+              "mathFields": []
+            },
+            "packageLock": {
+              "sha256": "9c612b8655d0bb38bda9d7e26e3449785bb6deeb08a58973f45215cfcbf237d1",
+              "parseError": null,
+              "mathPaths": []
+            },
+            "dependencyTree": {
+              "sha256": "b974ce3855c1e03bd641294ffbbf099fdd6fa74b819ea33357ef4c0516f821a3",
+              "mathVersions": [],
+              "parseError": null
+            },
+            "packages": {
+              "math": {
+                "present": false,
+                "version": null
+              },
+              "wgpuMatrix": {
+                "present": true,
+                "version": "3.4.2"
+              },
+              "three": {
+                "present": false,
+                "version": null
+              }
+            }
+          },
+          "installAttempts": [],
+          "eligibleForSourceReview": true,
+          "executedSourceIdentity": "matched",
+          "codeFiles": [
+            {
+              "path": "render.mjs",
+              "sha256": "bf61a59e4c10fe5c23e827e24a70db082f86b52b32bc9c6bb69c50903306c143"
+            }
+          ],
+          "numericalSource": "handwritten-slerp",
+          "sourceReview": ".context/work/scene-math-discovery-r2/source-review/code-14549360.md"
+        },
+        {
+          "stage": 2,
+          "outcome": "pass",
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": true
+            },
+            {
+              "name": "artifacts",
+              "ok": true
+            },
+            {
+              "name": "state",
+              "ok": true
+            },
+            {
+              "name": "pixels",
+              "ok": true
+            }
+          ],
+          "inputSha256": "8793962f513a4960bae89bbca21d225131c510eb3fefc432fd0f7ec6ac8d2244",
+          "maximumMatrixError": 2.809596832964445e-08,
+          "maximumCentroidErrorPixels": 0.16918875952896664,
+          "skill": {
+            "advertised": true,
+            "advertisedFullMarkdownSha256": "31011aa5d7e62408cc21619de2af0dee2062b75646df398dc3bbf3bdae22b51c",
+            "observedAdvertisedFullMarkdownSha256": "31011aa5d7e62408cc21619de2af0dee2062b75646df398dc3bbf3bdae22b51c",
+            "materializedPath": "/home/vercel-sandbox/.agents/skills/vgpu/SKILL.md",
+            "materializedPresent": true,
+            "materializedSha256": "31011aa5d7e62408cc21619de2af0dee2062b75646df398dc3bbf3bdae22b51c",
+            "materializedOutsideWorkspace": true,
+            "advertisementIntegrity": "pass",
+            "advertisementError": null,
+            "expectedAdvertisedFullMarkdownSha256": "31011aa5d7e62408cc21619de2af0dee2062b75646df398dc3bbf3bdae22b51c",
+            "expectedLoadedBodySha256": "285789ace4fd0f82333c5a6d471a76f73d7ccbc907e00bb7f5d2448e48ec50e3",
+            "loadCalls": [],
+            "loaded": false
+          },
+          "dependencySnapshot": {
+            "schemaVersion": 1,
+            "observedAt": "2026-09-30T19:16:24.234Z",
+            "packageJson": {
+              "sha256": "88d225ccb7efc2ded49992481bc2c991bbe435fb35bb7e15a96fb1335e92463d",
+              "parseError": null,
+              "dependencyFields": {
+                "dependencies": {
+                  "@vgpu/adapter-mock": "file:.vgpu-tarballs/vgpu-adapter-mock-0.5.0.tgz",
+                  "@vgpu/adapter-node": "file:.vgpu-tarballs/vgpu-adapter-node-0.5.0.tgz",
+                  "@vgpu/core": "file:.vgpu-tarballs/vgpu-core-0.5.0.tgz",
+                  "@vgpu/wgsl": "file:.vgpu-tarballs/vgpu-wgsl-0.5.0.tgz",
+                  "@vgpu/wgsl-std": "file:.vgpu-tarballs/vgpu-wgsl-std-0.5.0.tgz",
+                  "pngjs": "^7.0.0",
+                  "vgpu": "file:.vgpu-tarballs/vgpu-0.5.0.tgz"
+                }
+              },
+              "mathFields": []
+            },
+            "packageLock": {
+              "sha256": "9c612b8655d0bb38bda9d7e26e3449785bb6deeb08a58973f45215cfcbf237d1",
+              "parseError": null,
+              "mathPaths": []
+            },
+            "dependencyTree": {
+              "sha256": "b974ce3855c1e03bd641294ffbbf099fdd6fa74b819ea33357ef4c0516f821a3",
+              "mathVersions": [],
+              "parseError": null
+            },
+            "packages": {
+              "math": {
+                "present": false,
+                "version": null
+              },
+              "wgpuMatrix": {
+                "present": true,
+                "version": "3.4.2"
+              },
+              "three": {
+                "present": false,
+                "version": null
+              }
+            }
+          },
+          "installAttempts": [],
+          "eligibleForSourceReview": true,
+          "executedSourceIdentity": "matched",
+          "codeFiles": [
+            {
+              "path": "render.mjs",
+              "sha256": "09094072f3fcd9b5f85f76c52ef386b0c3cd96c0374716456c0ecbd045e69edd"
+            }
+          ],
+          "numericalSource": "handwritten-slerp",
+          "sourceReview": ".context/work/scene-math-discovery-r2/source-review/code-14549360.md"
+        }
+      ]
+    }
+  ],
+  "excludedAttempts": [
+    {
+      "sessionId": "wrun_01M3STJX2MVBJ4RFVJTZEDH6KZ",
+      "pilotRevision": "scene-math-discovery-pilot-v1",
+      "classification": "unclassified-error",
+      "exclusionReason": "Harness captured initialDependencySnapshot before lazy cold-template bootstrap. Raw correlated template receipt exists; top-level field was null. Preserved and excluded, not an agent failure.",
+      "rawEveVerdict": "passed",
+      "rawTurnOutcomes": [
+        "pass",
+        "pass"
+      ],
+      "skillLoadedStages": [
+        1
+      ],
+      "generationCostUsd": 2.0526306,
+      "countedInCohort": false,
+      "sourceReviewed": false,
+      "ledger": ".context/work/scene-math-discovery/ledger.json",
+      "plan": ".context/work/scene-math-discovery/plan.json"
+    }
+  ],
+  "limitations": [
+    "Small single-model sample, no no-skill arm, no inference about skill or math effectiveness.",
+    "Recommendation was available but neither eligible agent loaded the skill; no observed reading of the math guide body.",
+    "wgpu-matrix@3.4.2 remained available; correct alternatives and handwritten code were accepted.",
+    "Bootstrap absence is a template-build receipt reused by both fresh sessions, not an independent per-session package scan.",
+    "Grading checks numerical matrices and projected marker output, not exact marker shape, GPU provenance attestation or hardware performance.",
+    "A passing follow-up does not by itself prove behavioral adaptation.",
+    "Raw transcripts/source artifacts and specialist reviews are local gitignored evidence; this JSON carries portable identities and summaries.",
+    "Cost includes Eve generation usage only, excluding implementation/review specialists and compute."
+  ]
+}

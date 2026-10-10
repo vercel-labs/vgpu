@@ -69,8 +69,13 @@ export const SECTION_ROOTS = [
   },
   {
     source: "/docs/reference/vgpu-scene",
-    destination: "/docs/reference/vgpu-scene/camera",
+    destination: "/docs/reference/vgpu-scene/transforms",
     dir: "reference/vgpu-scene",
+  },
+  {
+    source: "/docs/reference/vgpu-scene-gpu",
+    destination: "/docs/reference/vgpu-scene-gpu/instance-geometry",
+    dir: "reference/vgpu-scene-gpu",
   },
   { source: "/docs/reference/wgsl", destination: "/docs/reference/wgsl/compile", dir: "reference/wgsl" },
   { source: "/docs/reference/wgsl-std", destination: "/docs/reference/wgsl-std/color", dir: "reference/wgsl-std" },
@@ -95,6 +100,21 @@ export const SECTION_ROOTS = [
     dir: "reference/vgpu-mock",
   },
 ];
+
+/** Retired scene pages/symbols keep links to migration guidance after manifest removal. */
+export function legacySceneRedirects() {
+  const destination = "/docs/guides/scene-migration";
+  const topics = ["camera", "perspective-camera", "orthographic-camera", "orbit", "orbit-controls", "scene-tree", "material", "light"];
+  const symbols = ["Camera", "SceneCamera", "CameraVec3", "orthographicCamera", "OrthographicCameraOptions", "perspectiveCamera", "PerspectiveCameraOptions", "OrbitOptions", "PerspectiveCamera", "PerspectiveCameraValues", "OrthographicCamera", "OrthographicCameraValues", "scene", "mesh", "MeshNode", "unlitMaterial", "lambertMaterial", "normalMaterial", "shaderMaterial", "SceneMaterial", "UnlitMaterial", "LambertMaterial", "NormalMaterial", "ShaderMaterial", "ColorMaterialOptions", "ColorMaterialValues", "MaterialBlend", "SceneMaterialKind", "ShaderMaterialOptions", "directionalLight", "DirectionalLight", "DirectionalLightOptions", "DirectionalLightValues", "ambientLight", "AmbientLight", "AmbientLightOptions", "AmbientLightValues", "orbitControls", "OrbitControls", "OrbitControlsElement", "OrbitControlsOptions", "OrbitControlsValues"];
+  return [
+    ...topics.map((topic) => ({ source: `/docs/reference/vgpu-scene/${topic}`, destination, permanent: false })),
+    ...symbols.map((symbol) => ({
+      source: `/packages/vgpu-scene/${symbol}`,
+      destination: `${destination}#${symbol.toLowerCase()}`,
+      permanent: false,
+    })),
+  ];
+}
 
 /**
  * `apps/docs/next.config.mjs`'s hand-written redirect list, ported verbatim
@@ -239,6 +259,7 @@ export function buildDocsRedirects(records) {
   return remapDestinationAnchors([
     ...conceptGuides,
     ...sectionRoots,
+    ...legacySceneRedirects(),
     ...legacyTopLevelRedirects(),
     ...packageRedirects,
     ...symbolRedirects,

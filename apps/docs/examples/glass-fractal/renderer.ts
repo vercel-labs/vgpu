@@ -1,7 +1,7 @@
 import type GUI from "lil-gui";
 import type { Draw, Geometry, Gpu, Surface } from "vgpu";
 import { draw, frame, geometry, surface } from "vgpu";
-import { perspectiveCamera, sphere } from "vgpu/scene";
+import { sphere } from "vgpu/scene";
 import { loadHeroGlassAssets, type HeroGlassAssets } from "./hero-glass-assets";
 import {
   createCameraControls,
@@ -14,6 +14,7 @@ import {
   type HeroFloorAo,
   type HeroFractalScene,
 } from "./scene";
+import { cameraMatrices } from "./camera";
 import heroDebugAxesWgsl from "./hero-debug-axes.wgsl";
 import heroGlassEnvironmentDebugWgsl from "./hero-glass-environment-debug.wgsl";
 import heroGlassWireframeWgsl from "./hero-glass-wireframe.wgsl";
@@ -317,7 +318,7 @@ export function createRenderer(options: RendererOptions): Renderer {
         reflectionDebug: debug.view === "reflection",
       }
     );
-    const environmentCamera = perspectiveCamera({
+    const environmentCamera = cameraMatrices({
       fov: 45,
       aspect: canvasSurface.size[0] / Math.max(canvasSurface.size[1], 1),
       near: 0.05,
@@ -345,7 +346,7 @@ export function createRenderer(options: RendererOptions): Renderer {
     });
     draws.environmentSphere.set({
       params: {
-        viewProjection: environmentCamera.viewProjectionMatrix,
+        viewProjection: environmentCamera.viewProjection,
         model: ENVIRONMENT_SPHERE_MODEL,
         cameraPosition: ENVIRONMENT_DEBUG_CAMERA_POSITION,
         environmentRotation: state.environmentRotation,

@@ -1,8 +1,9 @@
 import { PNG } from "pngjs";
 import type { Device } from "@vgpu/core";
-import type { Camera, Mat4, Vec3 } from "vgpu/scene";
+import type { Mat4, Vec3 } from "vgpu/scene";
 import type { Mesh } from "../../src/mesh-like.ts";
 import type { InspectMaterial } from "@vgpu/render/inspect";
+import type { TestCamera } from "./camera.ts";
 
 export interface RenderInspectFrameSpec {
   readonly device: Device;
@@ -12,7 +13,7 @@ export interface RenderInspectFrameSpec {
   readonly indexBuffer?: GPUBuffer;
   readonly indexFormat?: GPUIndexFormat;
   readonly indexCount?: number;
-  readonly camera: Camera;
+  readonly camera: TestCamera;
   readonly modelMatrix?: Mat4;
   readonly targetFormat?: GPUTextureFormat;
   readonly clearValue?: GPUColor;
@@ -70,7 +71,7 @@ export async function renderInspectFrame(spec: RenderInspectFrameSpec): Promise<
       entries: [{ binding: 0, resource: { buffer: uniformBuffer.gpu } }],
     });
     spec.material.writeUniforms(uniformBuffer.gpu, 0, {
-      viewProjectionMatrix: spec.camera.viewProjectionMatrix,
+      viewProjectionMatrix: spec.camera.viewProjection,
       modelMatrix: spec.modelMatrix ?? IDENTITY,
     });
 

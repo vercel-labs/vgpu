@@ -54,17 +54,20 @@ Do not open a browser to see whether a shader draws. Render one frame headless, 
 import { writeFileSync } from "node:fs";
 import { PNG } from "pngjs";
 import { init, effect, target } from "vgpu/node";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const width = 320;
 const height = 180;
 const gpu = await init();
 const colorTarget = target(gpu, { size: [width, height] });
 
-effect(gpu, `
+const uvShader = prepareShader(`
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     return vec4f(uv, 0.5, 1.0);
   }
-`).draw(colorTarget);
+`); // no loader in Node: reflect the WGSL once, up front
+
+effect(gpu, uvShader).draw(colorTarget);
 
 const pixels = await colorTarget.color.read({ mipLevel: 0, region: "all" });          // RGBA bytes, row-major, no padding
 const png = new PNG({ width, height });
@@ -77,7 +80,7 @@ Keep the target small (a few hundred pixels wide) so the loop stays fast on a CP
 
 ## 7. Connect it to the browser when the shader ships to a browser
 
-Port the same code to `vgpu` (not `vgpu/node`) with `surface(gpu, canvas, ...)` and drive it from `frameLoop(gpu, ...)`. Test it the way users run it, with the public API and deterministic frame submission: [Browser testing with Playwright WebGPU](browser-testing.docs.md).
+Port the same code to `vgpu` (not `vgpu/node`) with `surface(gpu, canvas, ...)` and drive it from `frameLoop(gpu, ...)`. Move the WGSL into a `.wgsl` file imported through the `@vgpu/wgsl` loader ([Next.js and other bundlers](nextjs.docs.md)) so the browser bundle ships prepared data instead of calling `prepareShader()`. Test it the way users run it, with the public API and deterministic frame submission: [Browser testing with Playwright WebGPU](browser-testing.docs.md).
 
 ## 8. Validate visually with agent-browser
 

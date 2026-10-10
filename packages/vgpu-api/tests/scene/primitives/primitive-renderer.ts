@@ -1,13 +1,15 @@
 import { PNG } from "pngjs";
 import type { Device } from "@vgpu/core";
-import type { Camera, Mat4, MeshPrimitive, VertexLayoutKind } from "../../../src/scene/geometry-src/index.ts";
+import type { Mat4 } from "../../../src/scene.ts";
+import type { MeshPrimitive, VertexLayoutKind } from "../../../src/scene/geometry-src/index.ts";
+import type { PrimitiveCamera } from "./primitive-camera.ts";
 
 export type PrimitiveMaterialVariant = "pbr" | "normal-debug-32";
 
 export interface RenderPrimitiveFrameSpec {
   readonly device: Device;
   readonly mesh: MeshPrimitive;
-  readonly camera: Camera;
+  readonly camera: PrimitiveCamera;
   readonly material: PrimitiveMaterialVariant;
   readonly baseColor?: readonly [number, number, number];
   readonly modelMatrix?: Mat4;
@@ -65,7 +67,7 @@ export async function renderPrimitiveFrame(spec: RenderPrimitiveFrameSpec): Prom
 function uniformBytes(spec: RenderPrimitiveFrameSpec): ArrayBuffer {
   const bytes = new ArrayBuffer(160);
   const floats = new Float32Array(bytes);
-  floats.set(spec.camera.viewProjectionMatrix, 0);
+  floats.set(spec.camera.viewProjection, 0);
   floats.set(spec.modelMatrix ?? IDENTITY, 16);
   floats.set([...(spec.baseColor ?? [0.7, 0.55, 0.45]), 1], 32);
   new DataView(bytes).setUint32(144, spec.material === "normal-debug-32" ? 1 : 0, true);

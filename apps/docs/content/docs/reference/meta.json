@@ -4,6 +4,7 @@
     "vgpu",
     "vgpu-three",
     "vgpu-scene",
+    "vgpu-scene-gpu",
     "wgsl",
     "wgsl-std",
     "vgpu-core",

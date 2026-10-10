@@ -57,12 +57,13 @@ declare class Uniform {
 ```ts
 import { init, draw } from "vgpu/mock";
 import { Uniform } from "vgpu/core";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const camera = new Uniform(gpu.device, { size: 64, label: "camera" });
 camera.write(new Float32Array(16));
 
-const drawable = draw(gpu, { shader: `
+const drawable = draw(gpu, { shader: prepareShader(`
   struct Camera { viewProjection: mat4x4f }
   @group(0) @binding(0) var<uniform> camera: Camera;
   @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
@@ -70,21 +71,22 @@ const drawable = draw(gpu, { shader: `
     return camera.viewProjection * vec4f(p[vi], 0, 1);
   }
   @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }
-` });
+`) });
 drawable.set({ camera });
 ```
 
 ```ts
 import { init, draw } from "vgpu/mock";
 import { Uniform } from "vgpu/core";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
-const drawable = draw(gpu, { shader: `
+const drawable = draw(gpu, { shader: prepareShader(`
   struct Params { value: f32 }
   @group(0) @binding(0) var<uniform> params: Params;
   @vertex fn vs_main() -> @builtin(position) vec4f { return vec4f(0, 0, 0, 1); }
   @fragment fn fs_main() -> @location(0) vec4f { return vec4f(params.value); }
-` });
+`) });
 const params = new Uniform(gpu.device, { size: 16, bindGroupLayout: drawable.layout(0) });
 params.write(new Float32Array([1, 0, 0, 0]));
 drawable.set({ params });

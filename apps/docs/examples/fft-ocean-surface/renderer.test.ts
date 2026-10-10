@@ -2,16 +2,16 @@ import { afterEach, expect, test, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   cameras: [] as Array<{
-    set: ReturnType<typeof vi.fn>;
+    goal: { yaw: number };
+    pose: { position: Float32Array };
     viewProjection: Float32Array;
-    worldPosition: Float32Array;
   }>,
-  controls: [] as Array<{
+  inputs: [] as Array<{
     dispose: ReturnType<typeof vi.fn>;
-    set: ReturnType<typeof vi.fn>;
-    update: ReturnType<typeof vi.fn>;
-    yaw: number;
   }>,
+  orbit: vi.fn(),
+  resizeOceanCamera: vi.fn(),
+  updateOceanCamera: vi.fn(),
   guiAddError: undefined as unknown,
   guis: [] as Array<{
     destroy: ReturnType<typeof vi.fn>;
@@ -117,26 +117,28 @@ vi.mock("vgpu", () => ({
 
 vi.mock("vgpu/scene", () => ({
   sphere: (options: unknown) => ({ options }),
-  perspectiveCamera: vi.fn(() => {
+  orbit: mocks.orbit,
+}));
+
+vi.mock("./camera", () => ({
+  createOceanCamera: vi.fn(() => {
     const camera = {
-      set: vi.fn(),
+      goal: { yaw: 0.25 },
+      pose: { position: new Float32Array([0, 24, 128]) },
       viewProjection: new Float32Array(16),
-      worldPosition: new Float32Array([0, 24, 128]),
     };
     mocks.cameras.push(camera);
     return camera;
   }),
-  orbitControls: vi.fn(() => {
-    const controls = {
-      dispose: vi.fn(),
-      set: vi.fn((update: { yaw?: number }) => {
-        if (update.yaw !== undefined) controls.yaw = update.yaw;
-      }),
-      update: vi.fn(),
-      yaw: 0.25,
-    };
-    mocks.controls.push(controls);
-    return controls;
+  resizeOceanCamera: mocks.resizeOceanCamera,
+  updateOceanCamera: mocks.updateOceanCamera,
+}));
+
+vi.mock("./orbit-input", () => ({
+  installOrbitInput: vi.fn(() => {
+    const input = { dispose: vi.fn() };
+    mocks.inputs.push(input);
+    return input;
   }),
 }));
 
@@ -358,7 +360,7 @@ function control(folder: string, key: string) {
 
 afterEach(() => {
   mocks.cameras.length = 0;
-  mocks.controls.length = 0;
+  mocks.inputs.length = 0;
   mocks.guis.length = 0;
   mocks.guiAddError = undefined;
   mocks.init.mockReset();
@@ -443,9 +445,18 @@ test("propagates orbit and auto-rotate state through the live frame", async () =
   env.gpu.clock.deltaTime = 0.5;
   env.fireLoop();
 
-  const orbit = mocks.controls[0]!;
-  expect(orbit.update).toHaveBeenCalledWith(0.5);
-  expect(orbit.set).toHaveBeenCalledWith({ yaw: 0.55 });
+  expect(mocks.orbit).toHaveBeenCalledWith(
+    mocks.cameras[0]!.goal,
+    0.3,
+    0,
+    {
+      minPitch: -0.05,
+      maxPitch: 1.35,
+      minDistance: 20,
+      maxDistance: 700,
+    },
+  );
+  expect(mocks.updateOceanCamera).toHaveBeenCalledWith(mocks.cameras[0], 0.5);
   expect(
     env.computes.slice(1, 4).map(({ dispatch }) => dispatch.mock.calls[0])
   ).toEqual([
@@ -473,7 +484,7 @@ test("direct dispose is idempotent, attempts every browser cleanup, and reports 
   expect(() => renderer.dispose()).toThrow(first);
   expect(env.loopHandle.stop).toHaveBeenCalledTimes(1);
   expect(env.unsubscribeResize).toHaveBeenCalledTimes(1);
-  expect(mocks.controls[0]!.dispose).toHaveBeenCalledTimes(1);
+  expect(mocks.inputs[0]!.dispose).toHaveBeenCalledTimes(1);
   expect(mocks.guis[0]!.destroy).toHaveBeenCalledTimes(1);
   expect(env.gpu.dispose).toHaveBeenCalledTimes(1);
   expect(() => renderer.dispose()).not.toThrow();
@@ -509,7 +520,7 @@ test("partial GUI construction rolls back browser state and preserves the primar
   const renderer = createRenderer({ canvas: { parentElement: {} } as never });
 
   await expect(renderer.ready).rejects.toBe(primary);
-  expect(mocks.controls[0]!.dispose).toHaveBeenCalledTimes(1);
+  expect(mocks.inputs[0]!.dispose).toHaveBeenCalledTimes(1);
   expect(mocks.guis[0]!.destroy).toHaveBeenCalledTimes(1);
   expect(env.gpu.dispose).toHaveBeenCalledTimes(1);
   expect(env.gpu.fns.frameLoop).not.toHaveBeenCalled();

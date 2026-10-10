@@ -1,0 +1,1920 @@
+{
+  "experiment": "scene-math-guidance-v1",
+  "date": "2026-09-29",
+  "planSha256": "68a7d93b9c30f6a9cd071dc875acab0c226d7dc5fcff5b93dcfc45d5448964dd",
+  "runtimeGitSha": "929b97f5b13f3948c11d58e80464d402b77d64b2",
+  "baselineDocsGitSha": "a8a9bc8afcc620efb24b26ba57da1fa5cc7663df",
+  "guidanceDocsGitSha": "929b97f5b13f3948c11d58e80464d402b77d64b2",
+  "sourceKey": "cf382b34cfa86d2d",
+  "model": "anthropic/claude-sonnet-5",
+  "dockerImage": "ghcr.io/vercel/eve@sha256:de79f9a495add7cd1691e3496afc1c3227b0846f9ae0b26126f120c91af3445c",
+  "dependency": {
+    "name": "math",
+    "version": "0.1.0"
+  },
+  "docs": {
+    "baseline": {
+      "tarballsPath": "baseline/tarballs",
+      "docsSha256": "b359d755f081a7b9a4c6b5d7a8a93828b25c2fa198e0bbc3e308dbd8febba7a9",
+      "vgpuTarballSha256": "11fb0e523971c52e5a6cb7bb3f4ddde3b5ca515475b7e4b87fcd0459a0bb273b"
+    },
+    "math": {
+      "tarballsPath": "math/tarballs",
+      "docsSha256": "2b60f3741e05109edffe5094be6ad08d4ed8e06b194d5b037eae9160a4101794",
+      "vgpuTarballSha256": "320d262ef04430f19e339dad7c3010cc8d4ca9b6ffb17f3143b057e603648a86"
+    }
+  },
+  "tarballsByCondition": {
+    "baseline": [
+      {
+        "name": "@vgpu/wgsl-std",
+        "file": "vgpu-wgsl-std-0.5.0.tgz",
+        "sha256": "79b1f234709401ee321be98a740b7e5d10129499682917e17c3a4a7a312dd73e"
+      },
+      {
+        "name": "@vgpu/wgsl",
+        "file": "vgpu-wgsl-0.5.0.tgz",
+        "sha256": "37fddc5e403f38961bad193d42b00da1c4c1ea5e4edac991eba2e2c0209b8f1b"
+      },
+      {
+        "name": "@vgpu/core",
+        "file": "vgpu-core-0.5.0.tgz",
+        "sha256": "7909bef2df9b6a99a2ce67eed81952a24739b9090f76c1b702125915c59a8ff5"
+      },
+      {
+        "name": "@vgpu/adapter-mock",
+        "file": "vgpu-adapter-mock-0.5.0.tgz",
+        "sha256": "8ea54f07083676ffd5b07a3fc3441d6b20d44c1af726f30d986c355df5474dcd"
+      },
+      {
+        "name": "@vgpu/adapter-node",
+        "file": "vgpu-adapter-node-0.5.0.tgz",
+        "sha256": "7f75cb9a099ad2409accb5244499ddcc040c113b0e30e6dfaed40f4b76fabe3b"
+      },
+      {
+        "name": "vgpu",
+        "file": "vgpu-0.5.0.tgz",
+        "sha256": "11fb0e523971c52e5a6cb7bb3f4ddde3b5ca515475b7e4b87fcd0459a0bb273b"
+      }
+    ],
+    "math": [
+      {
+        "name": "@vgpu/wgsl-std",
+        "file": "vgpu-wgsl-std-0.5.0.tgz",
+        "sha256": "79b1f234709401ee321be98a740b7e5d10129499682917e17c3a4a7a312dd73e"
+      },
+      {
+        "name": "@vgpu/wgsl",
+        "file": "vgpu-wgsl-0.5.0.tgz",
+        "sha256": "37fddc5e403f38961bad193d42b00da1c4c1ea5e4edac991eba2e2c0209b8f1b"
+      },
+      {
+        "name": "@vgpu/core",
+        "file": "vgpu-core-0.5.0.tgz",
+        "sha256": "7909bef2df9b6a99a2ce67eed81952a24739b9090f76c1b702125915c59a8ff5"
+      },
+      {
+        "name": "@vgpu/adapter-mock",
+        "file": "vgpu-adapter-mock-0.5.0.tgz",
+        "sha256": "8ea54f07083676ffd5b07a3fc3441d6b20d44c1af726f30d986c355df5474dcd"
+      },
+      {
+        "name": "@vgpu/adapter-node",
+        "file": "vgpu-adapter-node-0.5.0.tgz",
+        "sha256": "7f75cb9a099ad2409accb5244499ddcc040c113b0e30e6dfaed40f4b76fabe3b"
+      },
+      {
+        "name": "vgpu",
+        "file": "vgpu-0.5.0.tgz",
+        "sha256": "320d262ef04430f19e339dad7c3010cc8d4ca9b6ffb17f3143b057e603648a86"
+      }
+    ]
+  },
+  "harnessFiles": [
+    {
+      "path": "apps/agent-evals/agent/agent.ts",
+      "sha256": "62c830c8fb75a763a2490c8901f4cf596591fffaade35fa968ffca71ae888825"
+    },
+    {
+      "path": "apps/agent-evals/agent/hooks/finalize-turn.ts",
+      "sha256": "0a7c4eb854e88f03c52b4b7254fbd0320c5fda69e505479e034742c1f89e62a6"
+    },
+    {
+      "path": "apps/agent-evals/agent/instructions.md",
+      "sha256": "191750580351f3a5a30c694c75311662412ae946309c6717f304e79f61802a9c"
+    },
+    {
+      "path": "apps/agent-evals/agent/lib/extract-json.ts",
+      "sha256": "dc0d883008c5fda15bf181ef7156872a72b7c5ef088fd0d16a1c55ecf24b377a"
+    },
+    {
+      "path": "apps/agent-evals/agent/lib/paths.ts",
+      "sha256": "1fce3d26ae25a15ea4b93f9892367e2ee875428dfea62af74da1269ea15293e1"
+    },
+    {
+      "path": "apps/agent-evals/agent/lib/scene-auth.mjs",
+      "sha256": "7e6046cd5466beeffe14a90430df3bda70f7feec5395c0f982c92ca877229987"
+    },
+    {
+      "path": "apps/agent-evals/agent/lib/scene-guidance.ts",
+      "sha256": "4be1940a787ac215861bb043e4cf6ee55d0e2dbd780ae444dfcef76e5c7baf17"
+    },
+    {
+      "path": "apps/agent-evals/agent/lib/task.ts",
+      "sha256": "001b20f6236449e351bf646c93944ec50ec384a6656941d966e04b8cf45e214e"
+    },
+    {
+      "path": "apps/agent-evals/agent/lib/verify/n1-hero-shader.mjs",
+      "sha256": "071ef6b0bc8276d7ac7c28ff797a493e090f94d62af3b9cb86d85642285f65ff"
+    },
+    {
+      "path": "apps/agent-evals/agent/lib/verify/next-build.mjs",
+      "sha256": "fb2bdca42e635734503ff4a1d21c6d8a8bfbd9f6e06c82b67eb0fd000a8c0e2f"
+    },
+    {
+      "path": "apps/agent-evals/agent/lib/verify/scene.mjs",
+      "sha256": "781bf4236b9e61b9459e4f73bb5c463fcb3c5342e067d62356a32a875f993927"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/backend.ts",
+      "sha256": "a32c76cb7f5fe8217a1f3f3e331697b255a4059fb07a4a3c04b2ea995ec1ebec"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/sandbox.ts",
+      "sha256": "3b388766ef984ae4fb642e4d141759f848d983756a2bbcf83bf4bf21878188df"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n1-hero-shader/app/globals.css",
+      "sha256": "2238baa839dd430b5b7339f7eec0b1934984abba78318b061f608956254a0b5a"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n1-hero-shader/app/layout.tsx",
+      "sha256": "5341089d8316fe801f20f43b82d72092c77c9279986c20097b2bab35ef417122"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n1-hero-shader/app/page.tsx",
+      "sha256": "ff78dafad70bc99c12ee71fe14f3538c07a54d7d25115e86ba04ddd578562f58"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n1-hero-shader/next-env.d.ts",
+      "sha256": "879741880b6ab48da99dcc06dcc674d381c9826137b0496bf7bb368f302de9fc"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n1-hero-shader/package.json",
+      "sha256": "74f02e47a89f617148ed37fae24ac155c46c3a6c1dcf2fca9396a1b5f0f62ea5"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n1-hero-shader/tsconfig.json",
+      "sha256": "bbd80ae370519b1c841614191fe972109117095b318e410ab7059a5af269a2d2"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/app/globals.css",
+      "sha256": "e82557c61891b01edc02ee1dfa64ad5a1208e34efd135d7e10b1b61cfcc8d7cb"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/app/hero-renderer.ts",
+      "sha256": "e070be604687f1c5eaf5732e29cb5ed4cbe9d27cbf9ec51df62c662de6b0e29b"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/app/hero.tsx",
+      "sha256": "463e133edbe6091a7b4354b39adf56cb77c095938ebb5bb68a413fe9d47a9861"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/app/layout.tsx",
+      "sha256": "5341089d8316fe801f20f43b82d72092c77c9279986c20097b2bab35ef417122"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/app/page.tsx",
+      "sha256": "bd23944fb002f2c6b7a34fdafd5e0d8234b8393e4e6c19e2bd760177b9e505c6"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/app/shaders/blur.wgsl",
+      "sha256": "edf4eebfe1402f1e931fd1411a6117dfa920895926abde0a69eb555253af7ea6"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/app/shaders/composite.wgsl",
+      "sha256": "09118722f606e2baaa08425908aae77916c227678dc4c04758b82a9e98ddb7db"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/app/shaders/field.wgsl",
+      "sha256": "56506720cb58cac71ca12820922712e0cc6164329329737dc47417525b2a60cd"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/next-env.d.ts",
+      "sha256": "879741880b6ab48da99dcc06dcc674d381c9826137b0496bf7bb368f302de9fc"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/next.config.ts",
+      "sha256": "ed5c5d313d86f0145edceae7103b504e6b3eac661e02b3ad3638cd54c2caffe1"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/package.json",
+      "sha256": "3a29f764dda1e27ab8ccb1d1207981bfb4ef97cbbe04152fd62ca0c43038d86a"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/tsconfig.json",
+      "sha256": "bbd80ae370519b1c841614191fe972109117095b318e410ab7059a5af269a2d2"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n2-ship-hero/wgsl-env.d.ts",
+      "sha256": "e8979d54687df8fe371a1e7f13d63cb397ef834ef1512360513755a1839e5c7e"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/app/globals.css",
+      "sha256": "e82557c61891b01edc02ee1dfa64ad5a1208e34efd135d7e10b1b61cfcc8d7cb"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/app/hero-renderer.ts",
+      "sha256": "e070be604687f1c5eaf5732e29cb5ed4cbe9d27cbf9ec51df62c662de6b0e29b"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/app/hero.tsx",
+      "sha256": "463e133edbe6091a7b4354b39adf56cb77c095938ebb5bb68a413fe9d47a9861"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/app/layout.tsx",
+      "sha256": "5341089d8316fe801f20f43b82d72092c77c9279986c20097b2bab35ef417122"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/app/page.tsx",
+      "sha256": "bd23944fb002f2c6b7a34fdafd5e0d8234b8393e4e6c19e2bd760177b9e505c6"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/app/shaders/blur.wgsl",
+      "sha256": "edf4eebfe1402f1e931fd1411a6117dfa920895926abde0a69eb555253af7ea6"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/app/shaders/composite.wgsl",
+      "sha256": "09118722f606e2baaa08425908aae77916c227678dc4c04758b82a9e98ddb7db"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/app/shaders/field.wgsl",
+      "sha256": "56506720cb58cac71ca12820922712e0cc6164329329737dc47417525b2a60cd"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/next-env.d.ts",
+      "sha256": "879741880b6ab48da99dcc06dcc674d381c9826137b0496bf7bb368f302de9fc"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/next.config.ts",
+      "sha256": "ed5c5d313d86f0145edceae7103b504e6b3eac661e02b3ad3638cd54c2caffe1"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/package.json",
+      "sha256": "3a29f764dda1e27ab8ccb1d1207981bfb4ef97cbbe04152fd62ca0c43038d86a"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/tsconfig.json",
+      "sha256": "bbd80ae370519b1c841614191fe972109117095b318e410ab7059a5af269a2d2"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/n3-explore-hero/wgsl-env.d.ts",
+      "sha256": "e8979d54687df8fe371a1e7f13d63cb397ef834ef1512360513755a1839e5c7e"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/s2-gradient/package.json",
+      "sha256": "609158e6c5fbc237939fa3ddf7faab80ab690bdc0c8d584414a885130103c4e8"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-robot-arm/contract.md",
+      "sha256": "8c2ae9d83e5690a71844b8b534881869ffff91ef54154d7671a20f51c5c0084d"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-robot-arm/package.json",
+      "sha256": "609158e6c5fbc237939fa3ddf7faab80ab690bdc0c8d584414a885130103c4e8"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-shader-bindings/contract.md",
+      "sha256": "39bf8e5b295bfb947dfc275880470e8f57ccd6a523c93a2561fe6e331977d70b"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-shader-bindings/integration.wgsl",
+      "sha256": "ddb213c4a16258e299e79087b79fdd8eceb41d21ab16a53b95fc91d8eefa8083"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-shader-bindings/package.json",
+      "sha256": "609158e6c5fbc237939fa3ddf7faab80ab690bdc0c8d584414a885130103c4e8"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-warehouse/contract.md",
+      "sha256": "f9a17c3c2b2b54bda6769ccc32e7e9519ca7d80c2be9f2dcacfaeb327d452bb0"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/scene-warehouse/package.json",
+      "sha256": "609158e6c5fbc237939fa3ddf7faab80ab690bdc0c8d584414a885130103c4e8"
+    },
+    {
+      "path": "apps/agent-evals/agent/sandbox/tasks/view-image-smoke/package.json",
+      "sha256": "609158e6c5fbc237939fa3ddf7faab80ab690bdc0c8d584414a885130103c4e8"
+    },
+    {
+      "path": "apps/agent-evals/agent/tools/view-image.ts",
+      "sha256": "2b78d507e8d651c93482f854066da198f3683c77448e597bd1c47bd29b60ddea"
+    },
+    {
+      "path": "apps/agent-evals/evals/evals.config.ts",
+      "sha256": "a2e2ddbf4570b0ac5ca9d533942cb3c3ec4b2fdee3fb7c91660f3afeb97b7abc"
+    },
+    {
+      "path": "apps/agent-evals/evals/lib/grade-gradient.mjs",
+      "sha256": "2add1c3fef699cbba4cfb5e6d442f1bd847862890eae0f084643986a7d193ba8"
+    },
+    {
+      "path": "apps/agent-evals/evals/lib/grade-scene.mjs",
+      "sha256": "f0df1cd91263d4941775377edbd9114b4659b4ee7571529db7e9d37591f7eb41"
+    },
+    {
+      "path": "apps/agent-evals/evals/lib/hero-signals.ts",
+      "sha256": "b644cf097e8389697cf6b7b742ef6b26d27c2b6a35ea648b5f8b40a0da0dfd19"
+    },
+    {
+      "path": "apps/agent-evals/evals/lib/judge-code.mjs",
+      "sha256": "d41c154145507099a21d1bb2844f09ec9f4a8d5a6e10cdd4647549ee0ed63c17"
+    },
+    {
+      "path": "apps/agent-evals/evals/lib/judge-trail.mjs",
+      "sha256": "fdb98ca827ab420b2de6f5cbba9894a47aa6fb0ff14c50b007193d0cb09ff009"
+    },
+    {
+      "path": "apps/agent-evals/evals/lib/scene-contracts.mjs",
+      "sha256": "3df28a3742f87ece4e0ef7e6809cbdcbd518db273054de164555626384b7c200"
+    },
+    {
+      "path": "apps/agent-evals/evals/lib/scene-eval.ts",
+      "sha256": "dbd039a1174d785e8d4cc37bb32683912fbf18d2790b49440470bdaa44ac9e07"
+    },
+    {
+      "path": "apps/agent-evals/evals/lib/scene-math.mjs",
+      "sha256": "9c3ca28be2943a14c592fb5e8efa67a650c6a3588607c5995155fdd45f5d2e6c"
+    },
+    {
+      "path": "apps/agent-evals/evals/lib/transcript.ts",
+      "sha256": "0dd54a487d7c4a14c2574d13f26090aee288404d599b4911ee02d8d593ace9d7"
+    },
+    {
+      "path": "apps/agent-evals/evals/lib/turn-failure.mjs",
+      "sha256": "390caea829391e8384edddffdb799b40cbd8111f683c3e94306b8b8fb2d7382a"
+    },
+    {
+      "path": "apps/agent-evals/evals/n1-hero-shader.eval.ts",
+      "sha256": "73d9b6bc0cbc16cf4da1bb7dced94538bcc33c382f7a642cbe0b7238d3701c71"
+    },
+    {
+      "path": "apps/agent-evals/evals/n2-ship-hero.eval.ts",
+      "sha256": "9902b05206ba9d9e5f49f54fc89ea2114497082afc333eb78977ca616fde9b4d"
+    },
+    {
+      "path": "apps/agent-evals/evals/n3-explore-hero.eval.ts",
+      "sha256": "574e79a024bdd9d529719d887e2ae58f30832243e46f5a60a0fee8a5a3a4a252"
+    },
+    {
+      "path": "apps/agent-evals/evals/s2-gradient.eval.ts",
+      "sha256": "3beec329af11168689c61b5203abfe19afadeef4886009a59dc7ed6caf0b196b"
+    },
+    {
+      "path": "apps/agent-evals/evals/scene-robot-arm.eval.ts",
+      "sha256": "fd86b8de51412733836def387a699372a533a10548366e24d9f3306e55c0f5b1"
+    },
+    {
+      "path": "apps/agent-evals/evals/scene-shader-bindings.eval.ts",
+      "sha256": "ab85b3c40c0f9654fd7131fbd6d779c1e2686923adc5a0cfbc8cad218fef3978"
+    },
+    {
+      "path": "apps/agent-evals/evals/scene-warehouse.eval.ts",
+      "sha256": "bfe27af4099f0d10d32cc5c5891e4ac256327b9a93325cce2c33d1ccfec09d0d"
+    },
+    {
+      "path": "apps/agent-evals/evals/view-image-smoke.eval.ts",
+      "sha256": "5165d5ccfd19ae47c2c8c177ad63a5a1109484f2a191f089386294354cdbf4e6"
+    },
+    {
+      "path": "apps/agent-evals/scripts/analyze-scene-guidance.mjs",
+      "sha256": "83557582fade489a4285647b31c7c5ee63be7761cefa7f418512cae37bfd5867"
+    },
+    {
+      "path": "apps/agent-evals/scripts/pack-vgpu.mjs",
+      "sha256": "880f3bb90074204738878633c893e7219ca242879a6188bcd88bbc9f6ee04cf8"
+    },
+    {
+      "path": "apps/agent-evals/scripts/scene-controls.mjs",
+      "sha256": "fd144fcc32afb9ef7af227d3ed01d7db8d9aecf07a03682345b339d81622456a"
+    },
+    {
+      "path": "apps/agent-evals/scripts/scene-guidance.mjs",
+      "sha256": "1189cf735a90a139ed66c14a5641c04a1093f5830a64033e41949e9ae72bda44"
+    },
+    {
+      "path": "apps/agent-evals/scripts/tarballs-fingerprint.mjs",
+      "sha256": "3d2908930c19d321ff927e54b064a56a8c35f32e088126fcfbabddf8e98f01f2"
+    },
+    {
+      "path": "apps/agent-evals/package.json",
+      "sha256": "ba8fc1e852f0ff3919a3a76e9133e4a4aca81fac044964b912fcb6c76de89892"
+    },
+    {
+      "path": "apps/agent-evals/tsconfig.json",
+      "sha256": "c6919c81e36cff562b984166f95ae7b8e6aac45d772070e786eea94cbfd8c8e2"
+    },
+    {
+      "path": "scripts/agent-evals.mjs",
+      "sha256": "fc5d947b074a7bd8b4b7fe7cb34fe9cddafa30357004ac8498006b9df3ad00f5"
+    }
+  ],
+  "schedule": [
+    {
+      "slot": 1,
+      "task": "scene-robot-arm",
+      "condition": "baseline",
+      "repetition": 1
+    },
+    {
+      "slot": 2,
+      "task": "scene-robot-arm",
+      "condition": "math",
+      "repetition": 1
+    },
+    {
+      "slot": 3,
+      "task": "scene-shader-bindings",
+      "condition": "math",
+      "repetition": 1
+    },
+    {
+      "slot": 4,
+      "task": "scene-shader-bindings",
+      "condition": "baseline",
+      "repetition": 1
+    },
+    {
+      "slot": 5,
+      "task": "scene-warehouse",
+      "condition": "baseline",
+      "repetition": 1
+    },
+    {
+      "slot": 6,
+      "task": "scene-warehouse",
+      "condition": "math",
+      "repetition": 1
+    },
+    {
+      "slot": 7,
+      "task": "scene-robot-arm",
+      "condition": "math",
+      "repetition": 2
+    },
+    {
+      "slot": 8,
+      "task": "scene-robot-arm",
+      "condition": "baseline",
+      "repetition": 2
+    },
+    {
+      "slot": 9,
+      "task": "scene-shader-bindings",
+      "condition": "baseline",
+      "repetition": 2
+    },
+    {
+      "slot": 10,
+      "task": "scene-shader-bindings",
+      "condition": "math",
+      "repetition": 2
+    },
+    {
+      "slot": 11,
+      "task": "scene-warehouse",
+      "condition": "math",
+      "repetition": 2
+    },
+    {
+      "slot": 12,
+      "task": "scene-warehouse",
+      "condition": "baseline",
+      "repetition": 2
+    }
+  ],
+  "method": "Twelve serial fresh sessions, two repetitions per task/arm, two turns each. Same runtime and math@0.1.0; only docs corpus differs. All attempts retained. Source coding blinded to arm and transcripts.",
+  "limitations": [
+    "Small descriptive comparison, no significance or causal benefit claim.",
+    "Costs are reported model generation costUsd, excluding preflight, specialists, and infrastructure.",
+    "Guide markers establish delivered text, not comprehension; scope paragraph is distinct from dedicated guide body.",
+    "Protocol gates short-circuit later numeric/pixel gates; failed cases have fewer emitted assertions.",
+    "Wall time includes template setup and must not be interpreted as model efficiency.",
+    "Clarification requests are separate from executable tool actions.",
+    "Repeated input/output index confusion coincided with unchanged contract wording; the wording is a plausible contributor, not an isolated experimental cause."
+  ],
+  "runs": [
+    {
+      "slot": 1,
+      "condition": "baseline",
+      "task": "scene-robot-arm",
+      "repetition": 1,
+      "attempt": 1,
+      "classification": "pass",
+      "verdict": "passed",
+      "exitCode": 0,
+      "sessionId": "wrun_01M3PS0A1EXZRFKZ76QA9B1PJB",
+      "codeId": "code-ddb59f0f",
+      "steps": 74,
+      "usage": {
+        "costUsd": 2.114337400000001,
+        "inputTokens": 6688785,
+        "outputTokens": 40261,
+        "cacheReadTokens": 6526157,
+        "cacheWriteTokens": 162480
+      },
+      "toolCounts": {
+        "bash": 63,
+        "read_file": 5,
+        "write_file": 1,
+        "view-image": 3
+      },
+      "docsBashCalls": 20,
+      "observedModel": "anthropic/claude-sonnet-5",
+      "exposure": {
+        "tier": "none",
+        "sections": [],
+        "firstContent": null,
+        "perTurn": [
+          {
+            "turnId": "turn_0",
+            "tier": "none",
+            "sections": [],
+            "firstContent": null
+          },
+          {
+            "turnId": "turn_1",
+            "tier": "none",
+            "sections": [],
+            "firstContent": null
+          }
+        ]
+      },
+      "exposureReview": "No intervention text detected",
+      "contamination": false,
+      "possibleContamination": false,
+      "clarificationRequests": 0,
+      "tarballHashesMatch": true,
+      "installedDocsSha256": "b359d755f081a7b9a4c6b5d7a8a93828b25c2fa198e0bbc3e308dbd8febba7a9",
+      "normalizedPackageLockSha256": "3565dfe87a2d5e2c539bcaf24ab1af8554ea91efaa4b48c4714d327491cb89cd",
+      "sandboxRuntime": {
+        "node": "v24.20.0"
+      },
+      "templateKey": "vgpu-cf382b34cfa86d2d-b359d755f081a7b9a4c6b5d7a8a93828b25c2fa198e0bbc3e308dbd8febba7a9-scene-robot-arm-e25e474165d59904",
+      "turns": [
+        {
+          "stage": 1,
+          "executionClassification": "pass",
+          "gradeOutcome": "pass",
+          "protocolDeviation": false,
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": true,
+              "errors": []
+            },
+            {
+              "name": "robot-matrices",
+              "ok": true
+            },
+            {
+              "name": "robot-pixels",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "stage": 2,
+          "executionClassification": "pass",
+          "gradeOutcome": "pass",
+          "protocolDeviation": false,
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": true,
+              "errors": []
+            },
+            {
+              "name": "robot-matrices",
+              "ok": true
+            },
+            {
+              "name": "robot-pixels",
+              "ok": true
+            }
+          ]
+        }
+      ],
+      "sourceFiles": [
+        {
+          "stage": 1,
+          "name": "render.mjs",
+          "sha256": "f6539c51974850f66e27973d08ffa3e0db4801ae6cf2dce480e72a70bc85fae2"
+        },
+        {
+          "stage": 2,
+          "name": "render.mjs",
+          "sha256": "4242a0b4d1d2a4d1258d92a118cfa3cfc1e3541a2bb1801fe4027e4060ff1bb4"
+        }
+      ]
+    },
+    {
+      "slot": 2,
+      "condition": "math",
+      "task": "scene-robot-arm",
+      "repetition": 1,
+      "attempt": 1,
+      "classification": "pass",
+      "verdict": "passed",
+      "exitCode": 0,
+      "sessionId": "wrun_01M3PSJP8GPT6B4D748RN72FSJ",
+      "codeId": "code-dfc93f80",
+      "steps": 59,
+      "usage": {
+        "costUsd": 1.5145427999999994,
+        "inputTokens": 4588313,
+        "outputTokens": 31840,
+        "cacheReadTokens": 4467209,
+        "cacheWriteTokens": 120986
+      },
+      "toolCounts": {
+        "bash": 47,
+        "read_file": 4,
+        "write_file": 1,
+        "view-image": 5
+      },
+      "docsBashCalls": 26,
+      "observedModel": "anthropic/claude-sonnet-5",
+      "exposure": {
+        "tier": "none",
+        "sections": [],
+        "firstContent": null,
+        "perTurn": [
+          {
+            "turnId": "turn_0",
+            "tier": "none",
+            "sections": [],
+            "firstContent": null
+          },
+          {
+            "turnId": "turn_1",
+            "tier": "none",
+            "sections": [],
+            "firstContent": null
+          }
+        ]
+      },
+      "exposureReview": "No intervention text detected",
+      "contamination": false,
+      "possibleContamination": false,
+      "clarificationRequests": 0,
+      "tarballHashesMatch": true,
+      "installedDocsSha256": "2b60f3741e05109edffe5094be6ad08d4ed8e06b194d5b037eae9160a4101794",
+      "normalizedPackageLockSha256": "3565dfe87a2d5e2c539bcaf24ab1af8554ea91efaa4b48c4714d327491cb89cd",
+      "sandboxRuntime": {
+        "node": "v24.20.0"
+      },
+      "templateKey": "vgpu-cf382b34cfa86d2d-2b60f3741e05109edffe5094be6ad08d4ed8e06b194d5b037eae9160a4101794-scene-robot-arm-e25e474165d59904",
+      "turns": [
+        {
+          "stage": 1,
+          "executionClassification": "pass",
+          "gradeOutcome": "pass",
+          "protocolDeviation": false,
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": true,
+              "errors": []
+            },
+            {
+              "name": "robot-matrices",
+              "ok": true
+            },
+            {
+              "name": "robot-pixels",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "stage": 2,
+          "executionClassification": "pass",
+          "gradeOutcome": "pass",
+          "protocolDeviation": false,
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": true,
+              "errors": []
+            },
+            {
+              "name": "robot-matrices",
+              "ok": true
+            },
+            {
+              "name": "robot-pixels",
+              "ok": true
+            }
+          ]
+        }
+      ],
+      "sourceFiles": [
+        {
+          "stage": 1,
+          "name": "render.mjs",
+          "sha256": "b4eaf4053572e5315d31b8ffa2991f8ce68d478740786364152c68e14107a340"
+        },
+        {
+          "stage": 2,
+          "name": "render.mjs",
+          "sha256": "c62821619f1e46e65d3c34ee939a7c10aeb9a5b428e4c23bc5511fc8b1ee0c37"
+        }
+      ]
+    },
+    {
+      "slot": 3,
+      "condition": "math",
+      "task": "scene-shader-bindings",
+      "repetition": 1,
+      "attempt": 1,
+      "classification": "pass",
+      "verdict": "passed",
+      "exitCode": 0,
+      "sessionId": "wrun_01M3PT38863G1DH3E4GZB7S2AG",
+      "codeId": "code-5c128891",
+      "steps": 57,
+      "usage": {
+        "costUsd": 1.6403022000000003,
+        "inputTokens": 5254698,
+        "outputTokens": 28593,
+        "cacheReadTokens": 5122746,
+        "cacheWriteTokens": 131838
+      },
+      "toolCounts": {
+        "bash": 47,
+        "read_file": 5,
+        "write_file": 2,
+        "view-image": 3
+      },
+      "docsBashCalls": 25,
+      "observedModel": "anthropic/claude-sonnet-5",
+      "exposure": {
+        "tier": "surfaced",
+        "sections": [],
+        "firstContent": null,
+        "perTurn": [
+          {
+            "turnId": "turn_0",
+            "tier": "surfaced",
+            "sections": [],
+            "firstContent": null
+          },
+          {
+            "turnId": "turn_1",
+            "tier": "none",
+            "sections": [],
+            "firstContent": null
+          }
+        ]
+      },
+      "exposureReview": "Title/search result only",
+      "contamination": false,
+      "possibleContamination": false,
+      "clarificationRequests": 0,
+      "tarballHashesMatch": true,
+      "installedDocsSha256": "2b60f3741e05109edffe5094be6ad08d4ed8e06b194d5b037eae9160a4101794",
+      "normalizedPackageLockSha256": "3565dfe87a2d5e2c539bcaf24ab1af8554ea91efaa4b48c4714d327491cb89cd",
+      "sandboxRuntime": {
+        "node": "v24.20.0"
+      },
+      "templateKey": "vgpu-cf382b34cfa86d2d-2b60f3741e05109edffe5094be6ad08d4ed8e06b194d5b037eae9160a4101794-scene-shader-bindings-b87e0e66911e4522",
+      "turns": [
+        {
+          "stage": 1,
+          "executionClassification": "pass",
+          "gradeOutcome": "pass",
+          "protocolDeviation": false,
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": true,
+              "errors": []
+            },
+            {
+              "name": "fixture-file-unmodified",
+              "ok": true
+            },
+            {
+              "name": "shader-state",
+              "ok": true
+            },
+            {
+              "name": "shader-pixels",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "stage": 2,
+          "executionClassification": "pass",
+          "gradeOutcome": "pass",
+          "protocolDeviation": false,
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": true,
+              "errors": []
+            },
+            {
+              "name": "fixture-file-unmodified",
+              "ok": true
+            },
+            {
+              "name": "shader-state",
+              "ok": true
+            },
+            {
+              "name": "shader-pixels",
+              "ok": true
+            }
+          ]
+        }
+      ],
+      "sourceFiles": [
+        {
+          "stage": 1,
+          "name": "integration.wgsl",
+          "sha256": "ddb213c4a16258e299e79087b79fdd8eceb41d21ab16a53b95fc91d8eefa8083"
+        },
+        {
+          "stage": 1,
+          "name": "render.mjs",
+          "sha256": "9806c339a3a2cc4bc19d15151f212c7882dbc6345ecf5f7dc88e44bbe2305217"
+        },
+        {
+          "stage": 2,
+          "name": "integration.wgsl",
+          "sha256": "ddb213c4a16258e299e79087b79fdd8eceb41d21ab16a53b95fc91d8eefa8083"
+        },
+        {
+          "stage": 2,
+          "name": "render.mjs",
+          "sha256": "b938a215d1454a078a2487b951c4bd4b8f874660345fdf330bb36eefdef0db5a"
+        }
+      ]
+    },
+    {
+      "slot": 4,
+      "condition": "baseline",
+      "task": "scene-shader-bindings",
+      "repetition": 1,
+      "attempt": 1,
+      "classification": "pass",
+      "verdict": "passed",
+      "exitCode": 0,
+      "sessionId": "wrun_01M3PTH4WT6NG5S7Y27WFEK8FK",
+      "codeId": "code-c412c42d",
+      "steps": 50,
+      "usage": {
+        "costUsd": 1.3898279999999996,
+        "inputTokens": 4217820,
+        "outputTokens": 24230,
+        "cacheReadTokens": 4085640,
+        "cacheWriteTokens": 132080
+      },
+      "toolCounts": {
+        "bash": 41,
+        "read_file": 4,
+        "write_file": 1,
+        "view-image": 4
+      },
+      "docsBashCalls": 19,
+      "observedModel": "anthropic/claude-sonnet-5",
+      "exposure": {
+        "tier": "none",
+        "sections": [],
+        "firstContent": null,
+        "perTurn": [
+          {
+            "turnId": "turn_0",
+            "tier": "none",
+            "sections": [],
+            "firstContent": null
+          },
+          {
+            "turnId": "turn_1",
+            "tier": "none",
+            "sections": [],
+            "firstContent": null
+          }
+        ]
+      },
+      "exposureReview": "No intervention text detected",
+      "contamination": false,
+      "possibleContamination": false,
+      "clarificationRequests": 0,
+      "tarballHashesMatch": true,
+      "installedDocsSha256": "b359d755f081a7b9a4c6b5d7a8a93828b25c2fa198e0bbc3e308dbd8febba7a9",
+      "normalizedPackageLockSha256": "3565dfe87a2d5e2c539bcaf24ab1af8554ea91efaa4b48c4714d327491cb89cd",
+      "sandboxRuntime": {
+        "node": "v24.20.0"
+      },
+      "templateKey": "vgpu-cf382b34cfa86d2d-b359d755f081a7b9a4c6b5d7a8a93828b25c2fa198e0bbc3e308dbd8febba7a9-scene-shader-bindings-b87e0e66911e4522",
+      "turns": [
+        {
+          "stage": 1,
+          "executionClassification": "pass",
+          "gradeOutcome": "pass",
+          "protocolDeviation": false,
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": true,
+              "errors": []
+            },
+            {
+              "name": "fixture-file-unmodified",
+              "ok": true
+            },
+            {
+              "name": "shader-state",
+              "ok": true
+            },
+            {
+              "name": "shader-pixels",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "stage": 2,
+          "executionClassification": "pass",
+          "gradeOutcome": "pass",
+          "protocolDeviation": false,
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": true,
+              "errors": []
+            },
+            {
+              "name": "fixture-file-unmodified",
+              "ok": true
+            },
+            {
+              "name": "shader-state",
+              "ok": true
+            },
+            {
+              "name": "shader-pixels",
+              "ok": true
+            }
+          ]
+        }
+      ],
+      "sourceFiles": [
+        {
+          "stage": 1,
+          "name": "integration.wgsl",
+          "sha256": "ddb213c4a16258e299e79087b79fdd8eceb41d21ab16a53b95fc91d8eefa8083"
+        },
+        {
+          "stage": 1,
+          "name": "render.mjs",
+          "sha256": "d1bf160d09e980067a960607d1692be0a424fe39f0f7806300a57d066afde396"
+        },
+        {
+          "stage": 2,
+          "name": "integration.wgsl",
+          "sha256": "ddb213c4a16258e299e79087b79fdd8eceb41d21ab16a53b95fc91d8eefa8083"
+        },
+        {
+          "stage": 2,
+          "name": "render.mjs",
+          "sha256": "d1bf160d09e980067a960607d1692be0a424fe39f0f7806300a57d066afde396"
+        }
+      ]
+    },
+    {
+      "slot": 5,
+      "condition": "baseline",
+      "task": "scene-warehouse",
+      "repetition": 1,
+      "attempt": 1,
+      "classification": "application-failure",
+      "verdict": "failed",
+      "exitCode": 1,
+      "sessionId": "wrun_01M3PTXH23TD6S5ZZ9WTCK16D3",
+      "codeId": "code-35767b54",
+      "steps": 56,
+      "usage": {
+        "costUsd": 1.6470745000000002,
+        "inputTokens": 4819014,
+        "outputTokens": 35466,
+        "cacheReadTokens": 4676115,
+        "cacheWriteTokens": 142787
+      },
+      "toolCounts": {
+        "bash": 49,
+        "write_file": 1,
+        "view-image": 1,
+        "read_file": 3
+      },
+      "docsBashCalls": 24,
+      "observedModel": "anthropic/claude-sonnet-5",
+      "exposure": {
+        "tier": "none",
+        "sections": [],
+        "firstContent": null,
+        "perTurn": [
+          {
+            "turnId": "turn_0",
+            "tier": "none",
+            "sections": [],
+            "firstContent": null
+          },
+          {
+            "turnId": "turn_1",
+            "tier": "none",
+            "sections": [],
+            "firstContent": null
+          }
+        ]
+      },
+      "exposureReview": "No intervention text detected",
+      "contamination": false,
+      "possibleContamination": false,
+      "clarificationRequests": 0,
+      "tarballHashesMatch": true,
+      "installedDocsSha256": "b359d755f081a7b9a4c6b5d7a8a93828b25c2fa198e0bbc3e308dbd8febba7a9",
+      "normalizedPackageLockSha256": "3565dfe87a2d5e2c539bcaf24ab1af8554ea91efaa4b48c4714d327491cb89cd",
+      "sandboxRuntime": {
+        "node": "v24.20.0"
+      },
+      "templateKey": "vgpu-cf382b34cfa86d2d-b359d755f081a7b9a4c6b5d7a8a93828b25c2fa198e0bbc3e308dbd8febba7a9-scene-warehouse-71d9fb6496ab05e4",
+      "turns": [
+        {
+          "stage": 1,
+          "executionClassification": "application-failure",
+          "gradeOutcome": "application-failure",
+          "protocolDeviation": false,
+          "checks": [
+            {
+              "name": "source-execution",
+              "ok": false
+            }
+          ]
+        },
+        {
+          "stage": 2,
+          "executionClassification": "application-failure",
+          "gradeOutcome": "application-failure",
+          "protocolDeviation": false,
+          "checks": [
+            {
+              "name": "source-execution",
+              "ok": false
+            }
+          ]
+        }
+      ],
+      "sourceFiles": [
+        {
+          "stage": 1,
+          "name": "render.mjs",
+          "sha256": "8c708e8046fd248873bc0e5e89cc143ed00fa7de6a30695d368b9166fd7aace8"
+        },
+        {
+          "stage": 2,
+          "name": "render.mjs",
+          "sha256": "2ca9ec93c33eb981eb0f3e348f9c23633cfad8396d0cfa6e12818fedb22acb42"
+        }
+      ]
+    },
+    {
+      "slot": 6,
+      "condition": "math",
+      "task": "scene-warehouse",
+      "repetition": 1,
+      "attempt": 1,
+      "classification": "application-failure",
+      "verdict": "failed",
+      "exitCode": 1,
+      "sessionId": "wrun_01M3PVEM4JRW9GMW4ZAK2QT6S6",
+      "codeId": "code-7f71849a",
+      "steps": 54,
+      "usage": {
+        "costUsd": 1.5781073999999997,
+        "inputTokens": 4552817,
+        "outputTokens": 35029,
+        "cacheReadTokens": 4414857,
+        "cacheWriteTokens": 137852
+      },
+      "toolCounts": {
+        "bash": 45,
+        "read_file": 3,
+        "write_file": 2,
+        "view-image": 2
+      },
+      "docsBashCalls": 19,
+      "observedModel": "anthropic/claude-sonnet-5",
+      "exposure": {
+        "tier": "content",
+        "sections": [
+          "### Scope and external math"
+        ],
+        "firstContent": {
+          "turnId": "turn_0",
+          "stepIndex": 9
+        },
+        "perTurn": [
+          {
+            "turnId": "turn_0",
+            "tier": "content",
+            "sections": [
+              "### Scope and external math"
+            ],
+            "firstContent": {
+              "turnId": "turn_0",
+              "stepIndex": 9
+            }
+          },
+          {
+            "turnId": "turn_1",
+            "tier": "none",
+            "sections": [],
+            "firstContent": null
+          }
+        ]
+      },
+      "exposureReview": "Scope paragraph in scene-composition; dedicated guide not opened",
+      "contamination": false,
+      "possibleContamination": false,
+      "clarificationRequests": 1,
+      "tarballHashesMatch": true,
+      "installedDocsSha256": "2b60f3741e05109edffe5094be6ad08d4ed8e06b194d5b037eae9160a4101794",
+      "normalizedPackageLockSha256": "3565dfe87a2d5e2c539bcaf24ab1af8554ea91efaa4b48c4714d327491cb89cd",
+      "sandboxRuntime": {
+        "node": "v24.20.0"
+      },
+      "templateKey": "vgpu-cf382b34cfa86d2d-2b60f3741e05109edffe5094be6ad08d4ed8e06b194d5b037eae9160a4101794-scene-warehouse-71d9fb6496ab05e4",
+      "turns": [
+        {
+          "stage": 1,
+          "executionClassification": "application-failure",
+          "gradeOutcome": "application-failure",
+          "protocolDeviation": false,
+          "checks": [
+            {
+              "name": "source-execution",
+              "ok": false
+            }
+          ]
+        },
+        {
+          "stage": 2,
+          "executionClassification": "pass",
+          "gradeOutcome": "application-failure",
+          "protocolDeviation": false,
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": false,
+              "errors": [
+                "frame 0: index must be 0",
+                "frame 1: index must be 1",
+                "frame 2: index must be 2",
+                "frame 3: index must be 3"
+              ]
+            }
+          ]
+        }
+      ],
+      "sourceFiles": [
+        {
+          "stage": 2,
+          "name": "render.mjs",
+          "sha256": "aa917890bc1004c68f80c6fb2be5e0f3603c9ab4d6d1c6e5adc0e5cd5631959d"
+        }
+      ]
+    },
+    {
+      "slot": 7,
+      "condition": "math",
+      "task": "scene-robot-arm",
+      "repetition": 2,
+      "attempt": 1,
+      "classification": "pass",
+      "verdict": "passed",
+      "exitCode": 0,
+      "sessionId": "wrun_01M3PVYMTZ8VVJ8EYP0PWN6TR5",
+      "codeId": "code-c17e21c4",
+      "steps": 66,
+      "usage": {
+        "costUsd": 1.9709410999999997,
+        "inputTokens": 5986630,
+        "outputTokens": 43752,
+        "cacheReadTokens": 5840473,
+        "cacheWriteTokens": 146025
+      },
+      "toolCounts": {
+        "bash": 53,
+        "read_file": 4,
+        "write_file": 3,
+        "view-image": 4
+      },
+      "docsBashCalls": 21,
+      "observedModel": "anthropic/claude-sonnet-5",
+      "exposure": {
+        "tier": "content",
+        "sections": [
+          "### Scope and external math"
+        ],
+        "firstContent": {
+          "turnId": "turn_0",
+          "stepIndex": 25
+        },
+        "perTurn": [
+          {
+            "turnId": "turn_0",
+            "tier": "content",
+            "sections": [
+              "### Scope and external math"
+            ],
+            "firstContent": {
+              "turnId": "turn_0",
+              "stepIndex": 25
+            }
+          },
+          {
+            "turnId": "turn_1",
+            "tier": "none",
+            "sections": [],
+            "firstContent": null
+          }
+        ]
+      },
+      "exposureReview": "Scope paragraph in scene-composition; dedicated guide not opened",
+      "contamination": false,
+      "possibleContamination": false,
+      "clarificationRequests": 0,
+      "tarballHashesMatch": true,
+      "installedDocsSha256": "2b60f3741e05109edffe5094be6ad08d4ed8e06b194d5b037eae9160a4101794",
+      "normalizedPackageLockSha256": "3565dfe87a2d5e2c539bcaf24ab1af8554ea91efaa4b48c4714d327491cb89cd",
+      "sandboxRuntime": {
+        "node": "v24.20.0"
+      },
+      "templateKey": "vgpu-cf382b34cfa86d2d-2b60f3741e05109edffe5094be6ad08d4ed8e06b194d5b037eae9160a4101794-scene-robot-arm-e25e474165d59904",
+      "turns": [
+        {
+          "stage": 1,
+          "executionClassification": "pass",
+          "gradeOutcome": "pass",
+          "protocolDeviation": false,
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": true,
+              "errors": []
+            },
+            {
+              "name": "robot-matrices",
+              "ok": true
+            },
+            {
+              "name": "robot-pixels",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "stage": 2,
+          "executionClassification": "pass",
+          "gradeOutcome": "pass",
+          "protocolDeviation": false,
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": true,
+              "errors": []
+            },
+            {
+              "name": "robot-matrices",
+              "ok": true
+            },
+            {
+              "name": "robot-pixels",
+              "ok": true
+            }
+          ]
+        }
+      ],
+      "sourceFiles": [
+        {
+          "stage": 1,
+          "name": "mat4.mjs",
+          "sha256": "48ec9f6e241220e753a2291111ee4fca327d897c4630d42eacfa0386194e36f2"
+        },
+        {
+          "stage": 1,
+          "name": "render.mjs",
+          "sha256": "d1b2eebc3d3c711e2cd84dbe1dcf60d3936cbc6a9b867c7dbc6cdd86173e7674"
+        },
+        {
+          "stage": 2,
+          "name": "mat4.mjs",
+          "sha256": "48ec9f6e241220e753a2291111ee4fca327d897c4630d42eacfa0386194e36f2"
+        },
+        {
+          "stage": 2,
+          "name": "render.mjs",
+          "sha256": "bfb74a185609936045becf1022cd1cdb6c12b68c320c072945c4af53c91f3835"
+        }
+      ]
+    },
+    {
+      "slot": 8,
+      "condition": "baseline",
+      "task": "scene-robot-arm",
+      "repetition": 2,
+      "attempt": 1,
+      "classification": "application-failure",
+      "verdict": "failed",
+      "exitCode": 1,
+      "sessionId": "wrun_01M3PWF1QDWQDET583B0VXK8AP",
+      "codeId": "code-3d0986b8",
+      "steps": 59,
+      "usage": {
+        "costUsd": 1.6316519999999997,
+        "inputTokens": 4979297,
+        "outputTokens": 32468,
+        "cacheReadTokens": 4844005,
+        "cacheWriteTokens": 135174
+      },
+      "toolCounts": {
+        "bash": 44,
+        "read_file": 3,
+        "view-image": 7,
+        "write_file": 3
+      },
+      "docsBashCalls": 16,
+      "observedModel": "anthropic/claude-sonnet-5",
+      "exposure": {
+        "tier": "none",
+        "sections": [],
+        "firstContent": null,
+        "perTurn": [
+          {
+            "turnId": "turn_0",
+            "tier": "none",
+            "sections": [],
+            "firstContent": null
+          },
+          {
+            "turnId": "turn_1",
+            "tier": "none",
+            "sections": [],
+            "firstContent": null
+          }
+        ]
+      },
+      "exposureReview": "No intervention text detected",
+      "contamination": false,
+      "possibleContamination": false,
+      "clarificationRequests": 0,
+      "tarballHashesMatch": true,
+      "installedDocsSha256": "b359d755f081a7b9a4c6b5d7a8a93828b25c2fa198e0bbc3e308dbd8febba7a9",
+      "normalizedPackageLockSha256": "3565dfe87a2d5e2c539bcaf24ab1af8554ea91efaa4b48c4714d327491cb89cd",
+      "sandboxRuntime": {
+        "node": "v24.20.0"
+      },
+      "templateKey": "vgpu-cf382b34cfa86d2d-b359d755f081a7b9a4c6b5d7a8a93828b25c2fa198e0bbc3e308dbd8febba7a9-scene-robot-arm-e25e474165d59904",
+      "turns": [
+        {
+          "stage": 1,
+          "executionClassification": "pass",
+          "gradeOutcome": "application-failure",
+          "protocolDeviation": false,
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": false,
+              "errors": [
+                "frame 0: index must be 0",
+                "frame 1: index must be 1"
+              ]
+            }
+          ]
+        },
+        {
+          "stage": 2,
+          "executionClassification": "pass",
+          "gradeOutcome": "application-failure",
+          "protocolDeviation": false,
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": false,
+              "errors": [
+                "frame 0: index must be 0",
+                "frame 1: index must be 1",
+                "frame 2: index must be 2",
+                "frame 3: index must be 3",
+                "frame 4: index must be 4"
+              ]
+            }
+          ]
+        }
+      ],
+      "sourceFiles": [
+        {
+          "stage": 1,
+          "name": "render.mjs",
+          "sha256": "5bb8c3fa606c553fff46d6bf57a1fe4dca1e40ce37f7481e63af8c74d18764c4"
+        },
+        {
+          "stage": 2,
+          "name": "render.mjs",
+          "sha256": "cb56605c35e456d4bc525bf57b6d3102e1c998157d2c16fdab98824089381088"
+        }
+      ]
+    },
+    {
+      "slot": 9,
+      "condition": "baseline",
+      "task": "scene-shader-bindings",
+      "repetition": 2,
+      "attempt": 1,
+      "classification": "pass",
+      "verdict": "passed",
+      "exitCode": 0,
+      "sessionId": "wrun_01M3PWVNSGW5VQG863Z6CTMSGA",
+      "codeId": "code-b012b0f0",
+      "steps": 45,
+      "usage": {
+        "costUsd": 1.0853591999999999,
+        "inputTokens": 3133828,
+        "outputTokens": 20982,
+        "cacheReadTokens": 3025646,
+        "cacheWriteTokens": 108092
+      },
+      "toolCounts": {
+        "bash": 40,
+        "write_file": 1,
+        "view-image": 2
+      },
+      "docsBashCalls": 16,
+      "observedModel": "anthropic/claude-sonnet-5",
+      "exposure": {
+        "tier": "none",
+        "sections": [],
+        "firstContent": null,
+        "perTurn": [
+          {
+            "turnId": "turn_0",
+            "tier": "none",
+            "sections": [],
+            "firstContent": null
+          },
+          {
+            "turnId": "turn_1",
+            "tier": "none",
+            "sections": [],
+            "firstContent": null
+          }
+        ]
+      },
+      "exposureReview": "No intervention text detected",
+      "contamination": false,
+      "possibleContamination": false,
+      "clarificationRequests": 0,
+      "tarballHashesMatch": true,
+      "installedDocsSha256": "b359d755f081a7b9a4c6b5d7a8a93828b25c2fa198e0bbc3e308dbd8febba7a9",
+      "normalizedPackageLockSha256": "3565dfe87a2d5e2c539bcaf24ab1af8554ea91efaa4b48c4714d327491cb89cd",
+      "sandboxRuntime": {
+        "node": "v24.20.0"
+      },
+      "templateKey": "vgpu-cf382b34cfa86d2d-b359d755f081a7b9a4c6b5d7a8a93828b25c2fa198e0bbc3e308dbd8febba7a9-scene-shader-bindings-b87e0e66911e4522",
+      "turns": [
+        {
+          "stage": 1,
+          "executionClassification": "pass",
+          "gradeOutcome": "pass",
+          "protocolDeviation": false,
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": true,
+              "errors": []
+            },
+            {
+              "name": "fixture-file-unmodified",
+              "ok": true
+            },
+            {
+              "name": "shader-state",
+              "ok": true
+            },
+            {
+              "name": "shader-pixels",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "stage": 2,
+          "executionClassification": "pass",
+          "gradeOutcome": "pass",
+          "protocolDeviation": false,
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": true,
+              "errors": []
+            },
+            {
+              "name": "fixture-file-unmodified",
+              "ok": true
+            },
+            {
+              "name": "shader-state",
+              "ok": true
+            },
+            {
+              "name": "shader-pixels",
+              "ok": true
+            }
+          ]
+        }
+      ],
+      "sourceFiles": [
+        {
+          "stage": 1,
+          "name": "integration.wgsl",
+          "sha256": "ddb213c4a16258e299e79087b79fdd8eceb41d21ab16a53b95fc91d8eefa8083"
+        },
+        {
+          "stage": 1,
+          "name": "render.mjs",
+          "sha256": "dad8a053712c98bc45ae5c601ced3648640465b30fecbe2f9d75ed19d0b99e33"
+        },
+        {
+          "stage": 2,
+          "name": "integration.wgsl",
+          "sha256": "ddb213c4a16258e299e79087b79fdd8eceb41d21ab16a53b95fc91d8eefa8083"
+        },
+        {
+          "stage": 2,
+          "name": "render.mjs",
+          "sha256": "dad8a053712c98bc45ae5c601ced3648640465b30fecbe2f9d75ed19d0b99e33"
+        }
+      ]
+    },
+    {
+      "slot": 10,
+      "condition": "math",
+      "task": "scene-shader-bindings",
+      "repetition": 2,
+      "attempt": 1,
+      "classification": "pass",
+      "verdict": "passed",
+      "exitCode": 0,
+      "sessionId": "wrun_01M3PX5V97PAMBMFHTEKBEAPH7",
+      "codeId": "code-c0a0c234",
+      "steps": 41,
+      "usage": {
+        "costUsd": 1.0997373,
+        "inputTokens": 3028152,
+        "outputTokens": 23983,
+        "cacheReadTokens": 2917579,
+        "cacheWriteTokens": 110491
+      },
+      "toolCounts": {
+        "bash": 32,
+        "read_file": 4,
+        "write_file": 2,
+        "view-image": 3
+      },
+      "docsBashCalls": 14,
+      "observedModel": "anthropic/claude-sonnet-5",
+      "exposure": {
+        "tier": "surfaced",
+        "sections": [],
+        "firstContent": null,
+        "perTurn": [
+          {
+            "turnId": "turn_0",
+            "tier": "surfaced",
+            "sections": [],
+            "firstContent": null
+          },
+          {
+            "turnId": "turn_1",
+            "tier": "none",
+            "sections": [],
+            "firstContent": null
+          }
+        ]
+      },
+      "exposureReview": "Title/search result only",
+      "contamination": false,
+      "possibleContamination": false,
+      "clarificationRequests": 0,
+      "tarballHashesMatch": true,
+      "installedDocsSha256": "2b60f3741e05109edffe5094be6ad08d4ed8e06b194d5b037eae9160a4101794",
+      "normalizedPackageLockSha256": "3565dfe87a2d5e2c539bcaf24ab1af8554ea91efaa4b48c4714d327491cb89cd",
+      "sandboxRuntime": {
+        "node": "v24.20.0"
+      },
+      "templateKey": "vgpu-cf382b34cfa86d2d-2b60f3741e05109edffe5094be6ad08d4ed8e06b194d5b037eae9160a4101794-scene-shader-bindings-b87e0e66911e4522",
+      "turns": [
+        {
+          "stage": 1,
+          "executionClassification": "pass",
+          "gradeOutcome": "pass",
+          "protocolDeviation": false,
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": true,
+              "errors": []
+            },
+            {
+              "name": "fixture-file-unmodified",
+              "ok": true
+            },
+            {
+              "name": "shader-state",
+              "ok": true
+            },
+            {
+              "name": "shader-pixels",
+              "ok": true
+            }
+          ]
+        },
+        {
+          "stage": 2,
+          "executionClassification": "pass",
+          "gradeOutcome": "pass",
+          "protocolDeviation": false,
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": true,
+              "errors": []
+            },
+            {
+              "name": "fixture-file-unmodified",
+              "ok": true
+            },
+            {
+              "name": "shader-state",
+              "ok": true
+            },
+            {
+              "name": "shader-pixels",
+              "ok": true
+            }
+          ]
+        }
+      ],
+      "sourceFiles": [
+        {
+          "stage": 1,
+          "name": "integration.wgsl",
+          "sha256": "ddb213c4a16258e299e79087b79fdd8eceb41d21ab16a53b95fc91d8eefa8083"
+        },
+        {
+          "stage": 1,
+          "name": "render.mjs",
+          "sha256": "92cfc9af80f23a8bd9f7db938a4fad75cce0c4d81cce8c897cc90707d4dddcf8"
+        },
+        {
+          "stage": 2,
+          "name": "integration.wgsl",
+          "sha256": "ddb213c4a16258e299e79087b79fdd8eceb41d21ab16a53b95fc91d8eefa8083"
+        },
+        {
+          "stage": 2,
+          "name": "render.mjs",
+          "sha256": "bbd711bafeaa7536895e42902f87351beaa1e17498df9d639f3bc1c4e638973b"
+        }
+      ]
+    },
+    {
+      "slot": 11,
+      "condition": "math",
+      "task": "scene-warehouse",
+      "repetition": 2,
+      "attempt": 1,
+      "classification": "application-failure",
+      "verdict": "failed",
+      "exitCode": 1,
+      "sessionId": "wrun_01M3PXG3FXKZWE41GSBY31ZZ6B",
+      "codeId": "code-8ce57233",
+      "steps": 75,
+      "usage": {
+        "costUsd": 2.9771372999999994,
+        "inputTokens": 9822578,
+        "outputTokens": 51884,
+        "cacheReadTokens": 9607124,
+        "cacheWriteTokens": 201929
+      },
+      "toolCounts": {
+        "bash": 68,
+        "read_file": 2,
+        "web_search": 1,
+        "write_file": 1,
+        "view-image": 2
+      },
+      "docsBashCalls": 22,
+      "observedModel": "anthropic/claude-sonnet-5",
+      "exposure": {
+        "tier": "content",
+        "sections": [
+          "## Choose who owns each operation"
+        ],
+        "firstContent": {
+          "turnId": "turn_0",
+          "stepIndex": 14
+        },
+        "perTurn": [
+          {
+            "turnId": "turn_0",
+            "tier": "content",
+            "sections": [
+              "## Choose who owns each operation"
+            ],
+            "firstContent": {
+              "turnId": "turn_0",
+              "stepIndex": 14
+            }
+          },
+          {
+            "turnId": "turn_1",
+            "tier": "none",
+            "sections": [],
+            "firstContent": null
+          }
+        ]
+      },
+      "exposureReview": "Scattered dedicated-guide lines and heading returned by docs grep; guide examples not opened",
+      "contamination": false,
+      "possibleContamination": false,
+      "clarificationRequests": 1,
+      "tarballHashesMatch": true,
+      "installedDocsSha256": "2b60f3741e05109edffe5094be6ad08d4ed8e06b194d5b037eae9160a4101794",
+      "normalizedPackageLockSha256": "3565dfe87a2d5e2c539bcaf24ab1af8554ea91efaa4b48c4714d327491cb89cd",
+      "sandboxRuntime": {
+        "node": "v24.20.0"
+      },
+      "templateKey": "vgpu-cf382b34cfa86d2d-2b60f3741e05109edffe5094be6ad08d4ed8e06b194d5b037eae9160a4101794-scene-warehouse-71d9fb6496ab05e4",
+      "turns": [
+        {
+          "stage": 1,
+          "executionClassification": "application-failure",
+          "gradeOutcome": "application-failure",
+          "protocolDeviation": false,
+          "checks": [
+            {
+              "name": "source-execution",
+              "ok": false
+            }
+          ]
+        },
+        {
+          "stage": 2,
+          "executionClassification": "pass",
+          "gradeOutcome": "pass",
+          "protocolDeviation": false,
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": true,
+              "errors": []
+            },
+            {
+              "name": "warehouse-state",
+              "ok": true
+            },
+            {
+              "name": "warehouse-pixels",
+              "ok": true
+            }
+          ]
+        }
+      ],
+      "sourceFiles": [
+        {
+          "stage": 2,
+          "name": "render.mjs",
+          "sha256": "f14076da48ff154277c69463a557890f475c71d0cbe07a16850a946ff1936fdf"
+        }
+      ]
+    },
+    {
+      "slot": 12,
+      "condition": "baseline",
+      "task": "scene-warehouse",
+      "repetition": 2,
+      "attempt": 1,
+      "classification": "application-failure",
+      "verdict": "failed",
+      "exitCode": 1,
+      "sessionId": "wrun_01M3PY60P7FC2BA4V6MQQX87YZ",
+      "codeId": "code-fe92632a",
+      "steps": 65,
+      "usage": {
+        "costUsd": 2.384727,
+        "inputTokens": 7326459,
+        "outputTokens": 49395,
+        "cacheReadTokens": 7140675,
+        "cacheWriteTokens": 172148
+      },
+      "toolCounts": {
+        "bash": 59,
+        "web_search": 1,
+        "write_file": 1,
+        "read_file": 2,
+        "view-image": 1
+      },
+      "docsBashCalls": 19,
+      "observedModel": "anthropic/claude-sonnet-5",
+      "exposure": {
+        "tier": "none",
+        "sections": [],
+        "firstContent": null,
+        "perTurn": [
+          {
+            "turnId": "turn_0",
+            "tier": "none",
+            "sections": [],
+            "firstContent": null
+          },
+          {
+            "turnId": "turn_1",
+            "tier": "none",
+            "sections": [],
+            "firstContent": null
+          }
+        ]
+      },
+      "exposureReview": "No intervention text detected",
+      "contamination": false,
+      "possibleContamination": false,
+      "clarificationRequests": 1,
+      "tarballHashesMatch": true,
+      "installedDocsSha256": "b359d755f081a7b9a4c6b5d7a8a93828b25c2fa198e0bbc3e308dbd8febba7a9",
+      "normalizedPackageLockSha256": "3565dfe87a2d5e2c539bcaf24ab1af8554ea91efaa4b48c4714d327491cb89cd",
+      "sandboxRuntime": {
+        "node": "v24.20.0"
+      },
+      "templateKey": "vgpu-cf382b34cfa86d2d-b359d755f081a7b9a4c6b5d7a8a93828b25c2fa198e0bbc3e308dbd8febba7a9-scene-warehouse-71d9fb6496ab05e4",
+      "turns": [
+        {
+          "stage": 1,
+          "executionClassification": "application-failure",
+          "gradeOutcome": "application-failure",
+          "protocolDeviation": false,
+          "checks": [
+            {
+              "name": "source-execution",
+              "ok": false
+            }
+          ]
+        },
+        {
+          "stage": 2,
+          "executionClassification": "pass",
+          "gradeOutcome": "pass",
+          "protocolDeviation": false,
+          "checks": [
+            {
+              "name": "protocol",
+              "ok": true,
+              "errors": []
+            },
+            {
+              "name": "warehouse-state",
+              "ok": true
+            },
+            {
+              "name": "warehouse-pixels",
+              "ok": true
+            }
+          ]
+        }
+      ],
+      "sourceFiles": [
+        {
+          "stage": 2,
+          "name": "render.mjs",
+          "sha256": "2292600533b320233f6b820dc603cde57c7ac968b86807b772605532ff26b1c0"
+        }
+      ]
+    }
+  ]
+}

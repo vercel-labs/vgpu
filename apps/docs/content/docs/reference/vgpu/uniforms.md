@@ -32,17 +32,18 @@ interface SharedUniforms<T extends Record<string, unknown> = Record<string, unkn
 
 ```ts
 import { init, clock, effect, frame, target, uniforms } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const colorTarget = target(gpu, { size: [64, 64] });
 const globals = uniforms(gpu, { time: 0, mouse: [0, 0] });
-const wave = effect(gpu, `
+const wave = effect(gpu, prepareShader(`
   struct Globals { time: f32, mouse: vec2f }
   @group(0) @binding(0) var<uniform> globals: Globals;
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     return vec4f(uv, sin(globals.time) * 0.5 + 0.5, 1);
   }
-`, { set: { globals } });
+`), { set: { globals } });
 
 globals.set({ time: clock(gpu).time });
 frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (pass) => pass.draw(wave)));
@@ -60,7 +61,15 @@ globals.set({ exposure: 1.25 });
 
 When used in the uniform address space, direct frame draws and compute dispatches capture the current values. Calling `set()` between operations changes only later operations. The same revision can share an upload slice across pipelines in a frame.
 
-When adopted as storage, this object keeps a live backing buffer so GPU-written state persists. Render bundles, raw/low-level resources and claimed bind groups also retain live contents; they do not acquire per-operation uniform snapshots.
+`set()` validates and packs the merged values on every call and always updates the stored CPU values, so partial updates merge over the latest call. Frame-only consumers upload through the frame's captured pages instead of also writing the stable backing buffer. One-shot draws and dispatches flush pending stable-buffer values when used; repeated calls without an update do not upload them again. Canceled frames leave CPU updates applied but do not upload their captured pages.
+
+When the newly packed bytes equal the previous ones, the update is not a new revision: later operations in the same frame reuse the snapshot already captured, and a pending upload stays pending (it is still flushed or retried on next use). Equality is bitwise on the packed bytes: re-setting an in-place-mutated typed array is detected, `+0` and `-0` differ, and values that round to the same `f32` are equal. You never need to compare values yourself; skipping a redundant `set()` saves only CPU work.
+
+When adopted as storage, this object keeps a live backing buffer so GPU-written state persists, and every `set()` writes it, even with equal bytes, because the GPU may have changed it. Render bundles, raw/low-level resources and claimed bind groups also retain live contents; they do not acquire per-operation uniform snapshots.
+
+Once a uniform is recorded in a render bundle, later updates keep its stable buffer live, including for raw WebGPU bundle replay. Accessing the implementation's `.buffer` or `.gpu` handle likewise flushes pending values and preserves immediate future writes for direct consumers; those handles are not part of the public `SharedUniforms` type. These live uniforms also write on every `set()`, even with equal bytes.
+
+Frame captures live in pooled uniform pages owned by one frame until its GPU work completes or it is canceled; frames that repeat the same draws in the same order reuse their bind groups (see `Draw`). Each frame still uploads its own captured pages.
 
 ## Notes
 

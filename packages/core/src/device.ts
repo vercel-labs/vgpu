@@ -17,6 +17,7 @@ export interface DeviceOptions {
 
 type DeviceOwnership = "owned" | "external";
 type DeviceState = "alive" | "disposed" | "lost";
+type DeviceLossObserver = (info: GPUDeviceLostInfo) => void;
 
 export class Device {
   readonly queue: Queue;
@@ -28,6 +29,7 @@ export class Device {
   private state: DeviceState = "alive";
   private lossInfo: GPUDeviceLostInfo | undefined;
   private observeLoss = true;
+  private readonly lossObservers = new Set<DeviceLossObserver>();
 
   constructor(gpu: GPUDevice, adapterInfo?: GPUAdapterInfo | null, options?: DeviceOptions);
   constructor(
@@ -37,6 +39,17 @@ export class Device {
     options: DeviceOptions = {},
   ) {
     Object.defineProperty(this, "assertUsable", { value: (where: string) => this.#assertUsable(where) });
+    Object.defineProperty(this, "onObservedLoss", {
+      value: (observer: DeviceLossObserver) => {
+        if (this.state === "lost" && this.lossInfo) {
+          observer(this.lossInfo);
+          return () => undefined;
+        }
+        if (!this.observeLoss || this.state !== "alive") return () => undefined;
+        this.lossObservers.add(observer);
+        return () => { this.lossObservers.delete(observer); };
+      },
+    });
     this.ownership = typeof ownershipOrOptions === "string" ? ownershipOrOptions : "owned";
     const opts = typeof ownershipOrOptions === "string" ? options : ownershipOrOptions;
     this.isCompatibilityMode = opts.isCompatibilityMode ?? false;
@@ -48,6 +61,12 @@ export class Device {
         if (!this.observeLoss || this.state !== "alive") return;
         this.lossInfo = info;
         this.state = "lost";
+        const observers = [...this.lossObservers];
+        this.lossObservers.clear();
+        for (const observer of observers) {
+          try { observer(info); }
+          catch { /* private lifecycle observers must not reject native device.lost */ }
+        }
       }, () => undefined);
     }
   }
@@ -133,6 +152,7 @@ export class Device {
       message: `The GPU device was lost${reason ? ` (${reason})` : ""}${nativeMessage ? `: ${nativeMessage}` : "."}`,
       where,
       cause: this.lossInfo,
+      fix: "Create a new Gpu with init(), then recreate its resources and restart the loop.",
     });
   }
 
@@ -141,6 +161,7 @@ export class Device {
     const wasLost = this.state === "lost";
     this.state = "disposed";
     this.observeLoss = false;
+    this.lossObservers.clear();
     this.scopes.length = 0;
     this.readback.destroy();
     if (this.ownership === "owned" && !wasLost) this.gpu.destroy();

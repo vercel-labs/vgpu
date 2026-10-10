@@ -20,6 +20,7 @@ export interface DispatchOptions {
   readonly indirect: StorageBuffer | { readonly buffer: StorageBuffer; readonly offset?: number };
 }
 export interface Compute {
+  dispose(): void;
   set(values: Record<string, unknown>): this;
   /** Asynchronously prepares and validates this pipeline. Rejections belong to this promise. */
   compile(): Promise<this>;

@@ -1,18 +1,31 @@
 ---
 title: "Frame"
-description: "`frame()` is both a callable one-frame submit helper and a `FrameRunner`. It creates one command encoder, lets you encode any number of explicit-target render passes and compute passes, then submits once."
+description: "`frame()` is both a callable one-frame submit helper and a `FrameRunner`. It creates one command encoder, lets you encode any number of explicit-target render passes and compute passes, then submits once. Frame callbacks are synchronous: await preparation first, then call `frame(gpu, cb)` or register `frameLoop(gpu, cb)`."
 ---
 
 ## Import
 
 ```ts
-import type { Frame, FramePass, FramePassOptions, FrameComputePass, FrameComputePassOptions, FrameLoopHandle, FrameRunner } from "vgpu";
+import { frame, frameLoop } from "vgpu";
+import type { Frame, FramePass, FramePassOptions, FrameComputePass, FrameComputePassOptions, FrameLoopCallback, FrameLoopHandle, FrameLoopOptions, FrameRunner } from "vgpu";
 ```
 
 ## Signature
 
 ```ts
-import type { Compute, DispatchOptions, Bundle, ClearColor, Draw, DrawCallOptions, Effect, Target, TimerSpan, Visibility, VisibilityQuery } from "vgpu";
+import type { Compute, DispatchOptions, Bundle, ClearColor, Draw, DrawCallOptions, Effect, Gpu, Target, TimerSpan, Visibility, VisibilityQuery } from "vgpu";
+
+// Private inference guards, shown only to explain the overloads — vgpu does not export them.
+// A known Promise/PromiseLike return collapses to `never`; erased `any` is checked at runtime.
+type IsAny<T> = 0 extends (1 & T) ? true : false;
+type SyncFrameCallback<R> = ((frame: Frame) => R)
+  & (IsAny<R> extends true
+    ? unknown
+    : [Extract<R, PromiseLike<unknown>>] extends [never] ? unknown : never);
+
+declare function frame(gpu: Gpu): Frame;
+declare function frame<R>(gpu: Gpu, cb: SyncFrameCallback<R> | undefined): Frame;
+declare function frameLoop<R>(gpu: Gpu, cb: SyncFrameCallback<R>, opts?: FrameLoopOptions): FrameLoopHandle;
 
 interface FramePassOptions {
   readonly target: Target;
@@ -61,8 +74,9 @@ declare class FramePass {
 }
 
 declare class FrameRunner {
-  frame(cb?: (frame: Frame) => void): Frame;
-  loop(cb: FrameLoopCallback, opts?: FrameLoopOptions): FrameLoopHandle;
+  frame(): Frame;
+  frame<R>(cb: SyncFrameCallback<R> | undefined): Frame;
+  loop<R>(cb: SyncFrameCallback<R>, opts?: FrameLoopOptions): FrameLoopHandle;
 }
 ```
 
@@ -70,14 +84,14 @@ declare class FrameRunner {
 
 | Param | Type | Required | Default | Notes |
 |---|---|---:|---|---|
-| frame.cb | `(frame: Frame) => void` | ✖ | `undefined` | If supplied, the frame submits when the callback returns and is canceled when it throws. If omitted, submit or cancel manually. |
+| frame.cb | `SyncFrameCallback<R> \| undefined` — a synchronous `(frame: Frame) => R` | ✖ | `undefined` | If supplied, the frame submits when the callback returns a non-thenable result (the value itself is ignored) and is canceled when it throws or returns a thenable. An inferred `Promise`/`PromiseLike` return, or a union containing one, fails to typecheck; a thenable that reaches runtime throws `VGPU-ASYNC-FRAME-CALLBACK`. If omitted — `frame(gpu)` or `frame(gpu, undefined)` — submit or cancel manually. |
 | target.clearColor | `ClearColor` | ✖ | `[0, 0, 0, 1]` | Writable default clear color of the pass target, used when pass `clear` is omitted or `true`. Set it at creation (`surface(gpu, canvas, { clearColor })`, `target(gpu, { size, clearColor })`) or assign it later. Assign a `GPUColor` object or `[r, g, b, a]`. |
 | frame.pass.target | `Target \| FramePassOptions` | ✔ | — | Pass a bare target for the allocation-free common case, or an options bag when customizing clear/preserve behavior. |
 | opts.target | `Target` | ✔ | — | Required inside `FramePassOptions`. Use a `Surface` from `surface(gpu, canvas)` or an offscreen `Target` from `target(gpu, { size })`. |
 | opts.clear | `boolean \| ClearColor` | ✖ | `true` | Omitted or `true` clears with `target.clearColor`; `false` preserves existing color and depth with load ops; a color clears this pass with that color. |
 | opts.clearDepth | `number` | ✖ | `1` | Depth clear value used when the pass clears, in `[0, 1]`. Clear to `0` and give draws `depth: { compare: "greater" }` for reversed-Z, which evens out float depth precision and cuts distant z-fighting. Invalid alongside `clear: false`, which preserves depth, and on a target without depth (the value would have nowhere to land). |
 | opts.clearStencil | `number` | ✖ | `0` | Stencil clear value used when the pass clears; integer in `[0, 0xFFFFFFFF]`, masked to the stencil aspect's bit width by taking the LSBs (values above `0xFF` are legal on 8-bit aspects). Clear to `0` before stencil-masking draws mark pixels via `DrawOptions.stencil` — portals, mirrors, UI cutouts. Requires a target depth format with a stencil aspect (e.g. `depth: "depth24plus-stencil8"`). Invalid alongside `clear: false`, which preserves stencil. |
-| opts.depthReadOnly | `boolean` | ✖ | `false` | Opens the pass with a read-only depth attachment: draws depth-test against it and may sample `target.depth` in the same pass — the soft-particles/SSAO setup. Every draw in the pass needs `depth: { write: false }` (or `depth: false`); the default depth state writes and throws `VGPU-PASS-DEPTH-READONLY` at encode. Effects always keep the writing default, so an `Effect` cannot run in a depthReadOnly pass on a depth target. Combined depth-stencil formats mark the stencil aspect read-only too. Requires a target with depth; invalid alongside `clearDepth`/`clearStencil` (color `clear` still applies), and invalid on MSAA targets, whose depth aspect is stored with `storeOp: "discard"` — there is no retained depth to read. |
+| opts.depthReadOnly | `boolean` | ✖ | `false` | Opens the pass with a read-only depth attachment: draws depth-test against it and may sample `target.depth` in the same pass — the soft-particles/SSAO setup. Every draw in the pass needs `depth: { write: false }` (or `depth: false`); the default depth state writes and throws `VGPU-PASS-DEPTH-READONLY` at encode. Effects always keep the writing default, so an `Effect` cannot run in a depthReadOnly pass on a depth target. Combined depth-stencil formats mark the stencil aspect read-only too. Requires a target with depth; invalid alongside `clearDepth`/`clearStencil` (color `clear` still applies), and invalid on MSAA targets and `msaa` surfaces, whose depth aspect is stored with `storeOp: "discard"` — there is no retained depth to read. |
 | opts.viewport | `{ x?, y?, width, height, minDepth?, maxDepth? }` | ✖ | full target | Restricts rasterization to a sub-rectangle for every draw in this pass. Use it for split-screen views, minimaps, and picture-in-picture insets. Floats (fractional values allowed); defaults `x`/`y` `0`, `minDepth` `0`, `maxDepth` `1`. May extend past the target — validated at pass open against device limits, not the attachment. |
 | opts.scissor | `readonly [number, number, number, number]` | ✖ | full target | Clips every draw in this pass to `[x, y, width, height]`. Use it for UI clipping and partial redraw of damaged regions. Non-negative integers; `x + width` and `y + height` must fit the target's **current** pixel size at pass open (targets are resizable). Never affects the clear — `loadOp: "clear"` fills the whole attachment; to clear a sub-rectangle, draw it inside a scissored pass. |
 | opts.timer | `TimerSpan` | ✖ | `undefined` | Times this pass on the GPU: pass `timer.span(name)` from a `timer(gpu)` (needs the `"timestamp-query"` device feature). See `Timer` for results, capacity, and feature gating. |
@@ -88,35 +102,37 @@ declare class FrameRunner {
 | pass.occlusion.query | `VisibilityQuery` | ✔ | — | Stable handle from `vis.query(label)` of the same visibility instance the pass was opened with. One use per handle per frame, across passes too. |
 | pass.occlusion.body | `Draw \| Effect \| (() => void)` | ✔ | — | Wrapped in `beginOcclusionQuery`/`endOcclusionQuery`. The body ALWAYS executes — it is the proxy the GPU measures; condition your real draws on `q.hidden` outside the scope. |
 | pass.bundles.bundles | `readonly Bundle[]` | ✔ | — | Bundles recorded by `bundle(gpu, { target }, cb)`. |
-| runner.loop.cb | `(frame: Frame) => void` | ✔ | — | Called on each scheduled frame with the `frame(gpu, cb)` rule: submit on return, cancel on throw; a throwing tick also stops the loop. Surface auto-resize runs before this callback. |
+| runner.loop.cb | `SyncFrameCallback<R>` — a synchronous `(frame: Frame) => R`; an exported `FrameLoopCallback` also fits | ✔ | — | Called on each scheduled frame with the `frame(gpu, cb)` rule: submit on a non-thenable return, cancel on throw or thenable result; a failing tick also stops the loop. Registration never calls the callback, so it cannot throw a future tick's error. Surface auto-resize runs before this callback. |
 | runner.loop.opts.fps | `number` | ✖ | `0` (uncapped) | Positive values cap by minimum frame interval `1000 / fps`; omitted or non-positive uses every rAF/timer tick. |
 
-**Returns:** `frame(gpu)` / `FrameRunner.frame()` return `Frame`; `Frame.pass()`, `Frame.submit()`, and `Frame.cancel()` return `void`; `FramePass.draw()`, `.occlusion()`, and `.bundles()` return `void`; `loop()` returns `FrameLoopHandle` with `stop()`.
+**Returns:** `frame(gpu)` / `frame(gpu, cb)` / `FrameRunner.frame()` return `Frame`; `Frame.pass()`, `Frame.submit()`, and `Frame.cancel()` return `void`; `FramePass.draw()`, `.occlusion()`, and `.bundles()` return `void`; `frameLoop(gpu, cb)` / `loop()` return `FrameLoopHandle` with `stop()`.
 
 **Throws:**
 
+- `VGPU-ASYNC-FRAME-CALLBACK` when a `frame(gpu, cb)` / `frameLoop(gpu, cb)` callback (or its `FrameRunner` equivalent) returns a thenable — any object or function with a callable `then`, such as the `Promise` of an `async` callback. It is thrown synchronously before the implicit submit, with `where` set to `"frame"` or `"frameLoop"`; a still-open frame is canceled first and a loop stops on that tick. Await preparation before `frame()`/`frameLoop()`; keep the frame callback synchronous. If reading the result's `then` property itself throws, that original error propagates instead, after the same cleanup.
 - `VGPU-TARGET-REQUIRED` — a runtime JS call omitted the frame pass target. Name a `Surface` or offscreen `Target` in every `frame.pass`.
 - `VGPU-CLEAR-COLOR-INVALID` — `target.clearColor` / `surface.clearColor` (at creation or on assignment) or a pass clear color is not four finite numbers. Assign `[r, g, b, a]` or a `GPUColor` object.
-- `VGPU-PASS-PRESERVE-MSAA` — `clear: false` on an MSAA target; multisample attachments use `storeOp: "discard"`, so there is nothing to preserve. Render accumulation/preserve passes into a non-MSAA target.
-- `VGPU-PASS-CLEARDEPTH-INVALID` — `clearDepth` is not a number in `[0, 1]`, or the target has no depth attachment (the option would have no effect). Create the target with `depth: true`, or drop `clearDepth`.
+- `VGPU-PASS-PRESERVE-MSAA` — `clear: false` on an MSAA target or `msaa` surface; multisample attachments use `storeOp: "discard"`, so there is nothing to preserve. Render accumulation/preserve passes into a non-MSAA target.
+- `VGPU-PASS-CLEARDEPTH-INVALID` — `clearDepth` is not a number in `[0, 1]`, or the target has no depth attachment (the option would have no effect). Create the target or surface with `depth: true`, or drop `clearDepth`.
 - `VGPU-PASS-PRESERVE-CLEARDEPTH` — `clearDepth` combined with `clear: false`; preserved depth is never cleared. Drop one of the two.
 - `VGPU-PASS-CLEARSTENCIL-INVALID` — `clearStencil` is not an integer in `[0, 0xFFFFFFFF]`, or the target's depth format has no stencil aspect (the option would have no effect). Create the target with `depth: "depth24plus-stencil8"`.
 - `VGPU-PASS-PRESERVE-CLEARSTENCIL` — `clearStencil` combined with `clear: false`; preserved stencil is never cleared. Drop one of the two.
 - `VGPU-PASS-DEPTH-READONLY` — `depthReadOnly` is not a boolean, is set on a target without depth, or is combined with `clearDepth`/`clearStencil` (read-only aspects omit their load/store ops and are never cleared). Also thrown at encode when a draw writes depth — add `depth: { write: false }` — or writes stencil (a draw writes stencil when any stencil op on an unculled face is not `"keep"` and its stencil `writeMask` is nonzero — use `"keep"` ops or `writeMask: 0`); and when `pass.bundles(...)` is called in such a pass — `bundle()` records writable depth/stencil, and WebGPU only executes read-only-recorded bundles there, so encode those draws with `pass.draw(...)` instead.
-- `VGPU-PASS-DEPTH-READONLY-MSAA` — `depthReadOnly` on an MSAA target; multisampled depth is stored with `storeOp: "discard"`, so a read-only pass would depth-test against discarded contents instead of failing loudly. Use a non-MSAA target for read-only depth.
+- `VGPU-PASS-DEPTH-READONLY-MSAA` — `depthReadOnly` on an MSAA target or `msaa` surface; multisampled depth is stored with `storeOp: "discard"`, so a read-only pass would depth-test against discarded contents instead of failing loudly. Use a single-sample target or surface for read-only depth.
 - `VGPU-PASS-VIEWPORT-INVALID` — `viewport` is malformed or outside device limits: `width`/`height` in `[0, maxTextureDimension2D]`, `x`/`y` at least `-2 × maxTextureDimension2D` with `x + width`/`y + height` at most `2 × maxTextureDimension2D − 1`, `minDepth`/`maxDepth` in `[0, 1]` with `minDepth <= maxDepth`. The message names the offending field.
 - `VGPU-PASS-SCISSOR-INVALID` — `scissor` is malformed or exceeds the target's current pixel size. Shrink the rectangle, or resize it from `surface.onResize(...)`.
 - `VGPU-TIMER-INVALID` — `timer` is not a `TimerSpan` from `timer.span(name)`, repeats a span name within one frame, or belongs to a different gpu's or disposed timer.
 - `VGPU-TIMER-CAPACITY` — one frame timed more spans than the per-frame limit (see `Timer`).
 - `VGPU-VIS-INVALID` — `visibility` is not a `Visibility` from this gpu's `visibility(gpu)`, or `occlusion()` received a non-`VisibilityQuery` value or a handle of a different visibility instance.
-- `VGPU-VIS-NO-DEPTH` — `visibility` on a pass whose target has no depth attachment; nothing is depth-tested, so every query would report visible. Create the target with `depth: true`.
+- `VGPU-VIS-NO-DEPTH` — `visibility` on a pass whose target has no depth attachment; nothing is depth-tested, so every query would report visible. Create the target or surface with `depth: true`.
 - `VGPU-VIS-DISPOSED` — the visibility instance or the handle is disposed.
 - `VGPU-VIS-CAPACITY` — the `occlusion()` call exceeded the declared capacity. Raise `VisibilityOptions.capacity`.
 - `VGPU-QUERY-NO-VISIBILITY` — `occlusion()` in a pass opened without `visibility`. Pass the instance in `FramePassOptions.visibility`.
 - `VGPU-QUERY-NESTED` — `occlusion()` inside an active `occlusion()` body; one scope at a time. Close the outer scope first.
 - `VGPU-QUERY-DUPLICATE` — a handle used twice within one frame, across passes too (see `Visibility`). Create one handle per queried object.
+- `VGPU-DEVICE-LOST` — work after loss, including an open manual frame's `submit()`. Recreate with `init()`; see `Gpu` ("Device loss").
 - `VGPU-FRAME-REENTRANT` — a frame started from another frame or from a surface resize callback. Encode everything in one frame callback.
-- `VGPU-FRAME-CANCELED` — a `frame.pass(...)`, or a retained `FramePass` operation, on a frame closed by `cancel()`; its command encoder was dropped, so the work would never run. Open a new `frame(gpu)`.
+- `VGPU-FRAME-CANCELED` — a `frame.pass(...)`, a `frame.computePass(...)`, or a retained `FramePass` operation, on a frame closed by `cancel()` — including a frame vgpu canceled for `VGPU-ASYNC-FRAME-CALLBACK`, reached from that callback's async continuation; its command encoder was dropped, so the work would never run. Open a new `frame(gpu)`.
 - `VGPU-FRAME-PASS-ACTIVE` — `frame.cancel()` from inside that frame's active pass callback. Return from `frame.pass(...)` first, then cancel, so resources referenced by the native pass descriptor stay alive until the pass closes.
 - `VGPU-FRAME-SUBMITTED` — `frame.cancel()` on a frame that was already submitted; queued GPU work cannot be taken back, and the frame needs no cleanup. Cancel only frames you decided not to submit.
 - `VGPU-R3-BUNDLE-STALE` / `VGPU-R3-BUNDLE-INVALID` — replaying a bundle whose recorded resources changed identity, or a value not created by `bundle()`. Re-record the bundle.
@@ -126,17 +142,18 @@ declare class FrameRunner {
 
 ```ts
 import { init, draw, frame, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const scene = target(gpu, { size: [64, 64], format: "rgba8unorm", clearColor: [0.02, 0.02, 0.04, 1] });
 scene.clearColor = [0.02, 0.02, 0.04, 1]; // and it stays writable at runtime
-const drawable = draw(gpu, { shader: `
+const drawable = draw(gpu, { shader: prepareShader(`
   @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
     var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
     return vec4f(p[vi], 0, 1);
   }
   @fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.2, 0.4, 1.0, 1.0); }
-` });
+`) });
 
 frame(gpu, (currentFrame) => {
   currentFrame.pass(scene, (pass) => pass.draw(drawable)); // clears with scene.clearColor
@@ -145,10 +162,11 @@ frame(gpu, (currentFrame) => {
 
 ```ts
 import { init, effect, frameLoop, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const colorTarget = target(gpu, { size: [16, 16] });
-const shader = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const shader = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`));
 const handle = frameLoop(gpu, (frame) => {
   frame.pass({ target: colorTarget, clear: false }, shader); // preserve color and depth
 }, { fps: 30 });
@@ -157,11 +175,12 @@ handle.stop();
 
 ```ts
 import { init, effect, frame, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const screen = target(gpu, { size: [640, 360] });
-const p1View = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.1, 0.3, 0.6, 1); }`);
-const p2View = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.6, 0.3, 0.1, 1); }`);
+const p1View = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.1, 0.3, 0.6, 1); }`));
+const p2View = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.6, 0.3, 0.1, 1); }`));
 
 frame(gpu, (currentFrame) => {
   currentFrame.pass({ target: screen, viewport: { width: 320, height: 360 } }, p1View); // player 1, left half
@@ -173,12 +192,13 @@ Split-screen: the first pass clears the whole target and rasterizes one camera i
 
 ```ts
 import { init, draw, effect, frame, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const scene = target(gpu, { size: [256, 256], depth: true });
-const opaque = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.2, 0.5, 0.2, 1); }`);
+const opaque = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.2, 0.5, 0.2, 1); }`));
 const particles = draw(gpu, {
-  shader: `
+  shader: prepareShader(`
     @group(0) @binding(0) var sceneDepth: texture_depth_2d;
     @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
       var p = array<vec2f, 3>(vec2f(-1, -1), vec2f(3, -1), vec2f(-1, 3));
@@ -189,7 +209,7 @@ const particles = draw(gpu, {
       let fade = clamp((d - pos.z) * 32.0, 0.0, 1.0); // fade out where the particle nears geometry
       return vec4f(0.9, 0.6, 0.3, 1.0) * fade;
     }
-  `,
+  `),
   depth: { write: false }, // required: the pass depth is read-only
   blend: "additive",
   set: { sceneDepth: scene.depth },
@@ -205,11 +225,12 @@ Soft particles: pass 2 depth-tests against the opaque depth while sampling the s
 
 ```ts
 import { init, effect, frame, target, visibility } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const scene = target(gpu, { size: [64, 64], depth: true });
 const vis = visibility(gpu);
-const proxy = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const proxy = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`));
 
 const currentFrame = frame(gpu); // manual frame: nothing submits it for you
 currentFrame.pass({ target: scene, visibility: vis }, (pass) => pass.occlusion(vis.query("statue"), proxy));
@@ -245,6 +266,47 @@ frame(gpu, (currentFrame) => {
 });
 ```
 
+Async preparation and teardown: await everything asynchronous before the frame and after it returns, and keep the callback itself synchronous.
+
+```ts
+import { init, compute, effect, frame, storage, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
+
+const gpu = await init();
+const scene = target(gpu, { size: [64, 64] });
+const particles = storage(gpu, 64 * 16);
+const simulation = compute(gpu, prepareShader(`
+  @group(0) @binding(0) var<storage, read_write> particles: array<vec4f>;
+  @compute @workgroup_size(64) fn main(@builtin(global_invocation_id) id: vec3u) {
+    particles[id.x] += vec4f(0.0, -0.01, 0.0, 0.0);
+  }
+`), { set: { particles } });
+const shade = effect(gpu, prepareShader(`@fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.1, 0.2, 0.4, 1); }`));
+
+await simulation.compile(); // async preparation happens before the frame
+
+const currentFrame = frame(gpu, (encoding) => {
+  encoding.computePass((pass) => pass.dispatch(simulation, 1)); // synchronous encoding only
+  encoding.pass(scene, shade);
+});
+
+await currentFrame.done; // async teardown happens after frame() returned
+gpu.dispose();
+```
+
+`frame(gpu, cb)` returns only after the callback finished and the frame submitted, so `await currentFrame.done` outside the callback waits for that work to complete.
+
+Async callbacks are rejected. This is the shape to avoid:
+
+```ts illustrative
+frame(gpu, async (currentFrame) => { // type error: the callback returns a Promise
+  await simulation.compile();         // at runtime: VGPU-ASYNC-FRAME-CALLBACK, frame canceled
+  currentFrame.computePass((pass) => pass.dispatch(simulation, 1)); // continuation: VGPU-FRAME-CANCELED
+});
+```
+
+The callback returns its `Promise` at the first `await`, so the frame would otherwise submit before the continuation encodes anything. vgpu throws `VGPU-ASYNC-FRAME-CALLBACK` before that implicit submit and cancels the frame; the continuation still runs later, and its `computePass(...)` throws `VGPU-FRAME-CANCELED`. vgpu consumes the rejection of the returned promise, so that later error reaches neither `gpu.onError` nor an unhandled-rejection handler.
+
 ## Notes
 
 - `Frame`, `FramePass`, and `FrameRunner` are type-only public exports. Create frames through `frame()`, not `new Frame(...)`.
@@ -252,10 +314,17 @@ frame(gpu, (currentFrame) => {
 - Omitted `clear` and `clear: true` clear with `target.clearColor`. Pass a color to clear one pass with that color without changing the target default: pass color > `target.clearColor` > the built-in `[0, 0, 0, 1]`.
 - Draws replayed via `pass.bundles(...)` inside an occlusion scope count toward the active query — render bundles have no query methods, but their draws execute inside the scope.
 - `viewport` and `scissor` are set once right after the pass opens and apply to every draw in the pass, including replayed bundles. Both are in physical pixels: surfaces size their textures by `devicePixelRatio`, so a CSS-pixel rectangle must be scaled by dpr.
-- `clear: false` preserves color and depth contents within the same target. On `Surface`, repeated passes in one frame layer onto the same current texture; the first preserved surface pass of a new browser frame reads the swapchain's fresh contents, not the previous frame's image.
+- `clear: false` loads color/depth. Surface passes share a frame's canvas image; clear the first pass because color is fresh but depth persists. See `Surface` for lifetimes.
 - **Hot loops:** options bags and pass callbacks are read synchronously, so you can hoist and reuse them. For zero-per-frame-JS-cost replay, record stable work with `bundle()` and replay the bundle.
 - `frame.cancel()` discards a frame you decided not to submit: its command encoder is dropped, so nothing it encoded ever runs, and every `timer(gpu)` / `visibility(gpu)` attached to it releases the query set it was holding for that frame — no result, no phantom timing, no phantom `"hidden"`. It is the explicit way out of the retain a manual `frame(gpu)` otherwise keeps until `gpu.dispose()`: a frame is never assumed abandoned, because an old frame can still be submitted.
-- Frames run by `frame(gpu, cb)` / `frameLoop(gpu, cb)` close themselves, atomically with respect to their command buffer: the frame submits once when the callback returns, and is canceled when the callback throws — no command buffer is submitted, the telemetry retains its passes took are released, and the callback's own error is rethrown as-is. A callback that already called `frame.submit()` keeps that work on the queue and its error is rethrown without a cancel attempt (never masked by `VGPU-FRAME-SUBMITTED`); one that already called `frame.cancel()` stays canceled. Only the command buffer is covered: the frame clock has already advanced, CPU-side mutations (`effect.set(...)`, buffer writes) stay applied, and one-shot draws or other frames submitted from inside the callback have already reached the queue. If a pass already targeted a `Surface`, the canvas still presents that browser frame — as an empty texture, since nothing was drawn into it. A `frameLoop` tick that throws also stops the loop, because the error escapes the animation-frame callback; start a new `frameLoop(gpu, cb)` once you have recovered.
+- Frames run by `frame(gpu, cb)` / `frameLoop(gpu, cb)` close themselves, atomically with respect to their command buffer: the frame submits once when the callback returns, and is canceled when the callback throws or returns a thenable (`VGPU-ASYNC-FRAME-CALLBACK`) — no command buffer is submitted, the telemetry retains its passes took are released, and a thrown error is rethrown as-is. A callback that already called `frame.submit()` keeps that work on the queue and its error is rethrown without a cancel attempt (never masked by `VGPU-FRAME-SUBMITTED`); one that already called `frame.cancel()` stays canceled. Only the command buffer is covered: the frame clock has already advanced, CPU-side mutations (`effect.set(...)`, buffer writes) stay applied, and one-shot draws or other frames submitted from inside the callback have already reached the queue. If a pass already targeted a `Surface`, the canvas still presents that browser frame — as an empty texture, since nothing was drawn into it. A `frameLoop` tick that throws or returns a thenable also stops the loop, because the error escapes the animation-frame callback; start a new `frameLoop(gpu, cb)` once you have recovered.
+- Implicit-submit errors propagate. `gpu.dispose()` cancels the frame; `gpu.device.dispose()` does not.
+- Loss stops loops before `gpu.lost` handlers; manual frames stay open. See `Gpu` ("Device loss").
+- **Callbacks are synchronous.** Synchronous callbacks are accepted — a block body, a `void` expression such as `(currentFrame) => currentFrame.pass(scene, shade)`, a helper with a concrete non-Promise return type (its value is ignored), or one that only throws. Helpers with those concrete return types need no rewrite. TypeScript rejects a single callback whose inferred return type is a `Promise`, a `PromiseLike`, or a return union containing one (`void | Promise<void>`): `frame` reports it as not assignable to a parameter of type `undefined`, `frameLoop` as not assignable to `never`.
+- The type check cannot see a return type that was already erased: a callback stored as `FrameLoopCallback`, `(frame: Frame) => unknown`, or `(frame: Frame) => any`, a cast, a return-type-erasing wrapper, or plain JavaScript still compiles. A union of callback function types with a void member may also erase its Promise-returning member during inference and compile. vgpu checks the actual result at runtime instead: an object or function with a callable `then` throws `VGPU-ASYNC-FRAME-CALLBACK` before the implicit submit, cancels a still-open frame, and stops a `frameLoop` on that tick under the same rule as a throw. vgpu attaches a handler to the result so its rejection is observed silently — no `gpu.onError` delivery, no unhandled rejection, nothing added to `gpu.settled()` — and never waits for it, so a promise that never settles does not delay the error. `Frame.done` of the canceled frame still resolves; it never rejects.
+- Forwarding helpers whose callback return remains an unresolved generic `R`, including `R extends void`, no longer typecheck: the frame API cannot prove that return synchronous. If a helper intentionally ignores callback returns, accept `FrameLoopCallback` or `(frame: Frame) => void` and pass that callback directly to the frame API, so the runtime can still inspect its actual result.
+- Do not hide async frame work behind `void`, a cast, or a return-type-erasing wrapper. The thenable check is a safety net, not a scheduling mechanism: cancellation does not undo a `frame.submit()` the callback already called (that work stays on the queue and the error is still thrown), one-shot `draw()` / `dispatch()` calls that already submitted on their own, CPU-side mutations, or the async continuation itself — it still runs, and any encoding it attempts on the canceled frame throws `VGPU-FRAME-CANCELED`. Await preparation before `frame()` / `frameLoop()` and teardown after it returns.
+- `VGPU-ASYNC-FRAME-CALLBACK` covers only the `frame` / `frameLoop` callback. Compute-pass callbacks keep their own `VGPU-COMPUTE-PASS-ASYNC` check (see below); render-pass bodies and `bundle()` record callbacks do not run this check.
 - Cancelling is idempotent, like submitting: a second `cancel()` does nothing, and `submit()` after `cancel()` is a no-op — so calling `cancel()` in a `frame(gpu, cb)` callback after its `frame.pass(...)` calls have returned is safe, the implicit submit simply finds a closed frame. `cancel()` from inside an active pass callback throws `VGPU-FRAME-PASS-ACTIVE`, because the native pass descriptor still references its telemetry resources; return from `frame.pass(...)` before canceling. The reverse is also an error: `cancel()` after `submit()` throws `VGPU-FRAME-SUBMITTED` (the work is already on the queue and cannot be taken back), and `pass()` or a retained `FramePass` operation after `cancel()` throws `VGPU-FRAME-CANCELED` (it would encode into a dropped encoder and silently never run).
 - `frame.done` is resolve-only. Await it as a completion/timing signal for readbacks, benchmarks, deterministic tests, or teardown; use `gpu.onError` plus `await gpu.settled()` for asynchronous errors.
 - Do not `await frame.done` inside a RAF/frame loop. Schedule the next frame as soon as `frame(gpu)` returns, or you serialize CPU and GPU work.

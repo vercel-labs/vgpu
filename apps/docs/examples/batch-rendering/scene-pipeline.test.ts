@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 
-const camera = vi.hoisted(() =>
+const cameraMatrices = vi.hoisted(() =>
   vi.fn(() => ({ viewProjection: new Float32Array(16) }))
 );
 const vgpuFns = vi.hoisted(() =>
@@ -13,7 +13,7 @@ const vgpuFns = vi.hoisted(() =>
 ) as Record<string, unknown>;
 
 vi.mock("vgpu", () => vgpuFns);
-vi.mock("vgpu/scene", () => ({ perspectiveCamera: camera }));
+vi.mock("./camera", () => ({ cameraMatrices }));
 
 import { createScene, renderScene } from "./scene-pipeline";
 

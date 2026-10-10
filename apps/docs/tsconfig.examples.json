@@ -1,0 +1,27 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "paths": {
+      "@/*": ["./*"]
+    },
+    "plugins": []
+  },
+  "include": [
+    "examples/**/*.ts",
+    "examples/**/*.tsx",
+    "examples/**/*.mts",
+    "test-support/**/*.ts",
+    "lib/example-components.ts",
+    "lib/examples-metadata.ts",
+    "wgsl.d.ts",
+    "webgpu-types.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next/**",
+    ".source/**",
+    "next-env.d.ts",
+    "app/**"
+  ]
+}

@@ -23,6 +23,7 @@ export const meta = {
   files: [
     "index.tsx",
     "renderer.ts",
+    "camera.ts",
     "scene.ts",
     "settings.ts",
     "hero-glass-assets.ts",

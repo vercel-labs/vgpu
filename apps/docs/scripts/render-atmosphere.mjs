@@ -10,7 +10,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 import { frame, init, target as createTarget } from 'vgpu/node';
 import { writePng } from '@vgpu/cli/lib/snapshot/png.js';
-import { transformWgsl } from '@vgpu/wgsl/loader-vite';
+import { docsWgslPlugin } from './esbuild-wgsl-plugin.mjs';
 
 const docsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = parseArgs(process.argv.slice(2));
@@ -21,7 +21,7 @@ const bundle = path.join(cacheDir, 'atmosphere.mjs');
 
 await mkdir(cacheDir, { recursive: true });
 await writeFile(entry, "export { renderStill, createGraph, applyState, bakeLuts, renderGraph } from '../examples/atmosphere/renderer.ts';\nexport { PRESETS } from '../examples/atmosphere/tuning.ts';\n");
-await build({ entryPoints: [entry], outfile: bundle, bundle: true, platform: 'node', format: 'esm', sourcemap: false, external: ['vgpu', 'vgpu/node'], plugins: [wgslPlugin()], logLevel: 'silent' });
+await build({ entryPoints: [entry], outfile: bundle, bundle: true, platform: 'node', format: 'esm', sourcemap: false, external: ['vgpu', 'vgpu/node'], plugins: [docsWgslPlugin()], logLevel: 'silent' });
 const { renderStill, createGraph, applyState, bakeLuts, renderGraph, PRESETS } = await import(pathToFileURL(bundle).href);
 await rm(cacheDir, { recursive: true, force: true });
 
@@ -238,17 +238,4 @@ function parseArgs(argv) {
     else throw new Error(`Unknown argument '${arg}'.`);
   }
   return parsed;
-}
-
-function wgslPlugin() {
-  return {
-    name: 'docs-wgsl',
-    setup(build) {
-      build.onLoad({ filter: /\.wgsl$/ }, async (file) => {
-        const source = await import('node:fs/promises').then(({ readFile }) => readFile(file.path, 'utf8'));
-        const result = await transformWgsl({ source, id: file.path });
-        return { contents: result.code, loader: 'js', resolveDir: path.dirname(file.path) };
-      });
-    },
-  };
 }

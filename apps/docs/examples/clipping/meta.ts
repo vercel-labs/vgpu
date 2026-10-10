@@ -6,5 +6,5 @@ export const meta = {
   tags: ["clipping", "3d", "shader"],
   capabilities: ["webgpu", "continuous-rendering", "responsive-canvas"],
   thumb: { time: 2.4 },
-  files: ["index.tsx", "renderer.ts", "scene.ts", "clipped.wgsl"],
+  files: ["index.tsx", "renderer.ts", "camera.ts", "scene.ts", "clipped.wgsl"],
 } as const;

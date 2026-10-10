@@ -1,8 +1,9 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { reflectSource } from "@vgpu/wgsl/reflect-source";
 import { expect, test } from "vitest";
 import { drawBindingState } from "../src/draw.ts";
 import { effectDraw } from "../src/effect.ts";
-import { effect, init } from "../src/mock.ts";
+import { effect, init, target } from "../src/mock.ts";
 import { writeLayoutValue } from "../src/set-packing.ts";
 
 test("f16 packing follows IEEE binary16 round-to-nearest, ties-to-even", () => {
@@ -80,7 +81,9 @@ test("a rejected set leaves both GPU bytes and the previous partial-update base 
     @group(0) @binding(0) var<uniform> params: Params;
     @fragment fn main() -> @location(0) vec4f { return vec4f(f32(params.head)); }
   `;
-  const fx = effect(gpu, shader, { set: { params: { head: 1, values: [2, 3] } } });
+  const fx = effect(gpu, prepareShader(shader), { set: { params: { head: 1, values: [2, 3] } } });
+  const color = target(gpu, { size: [1, 1] });
+  fx.draw(color);
   const buffer = (drawBindingState(effectDraw(fx), "params")?.resource as GPUBufferBinding).buffer;
   if (!("__vgpuMockBytes" in buffer)) throw new Error("fixture did not expose mock buffer bytes");
   const before = buffer.__vgpuMockBytes.slice();
@@ -89,6 +92,7 @@ test("a rejected set leaves both GPU bytes and the previous partial-update base 
   expect(buffer.__vgpuMockBytes).toEqual(before);
 
   fx.set({ params: { head: 4 } });
+  fx.draw(color);
   const view = new DataView(buffer.__vgpuMockBytes.buffer, buffer.__vgpuMockBytes.byteOffset, buffer.__vgpuMockBytes.byteLength);
   expect([view.getUint32(0, true), view.getUint32(8, true), view.getUint32(12, true)]).toEqual([4, 2, 3]);
   gpu.dispose();
@@ -96,10 +100,10 @@ test("a rejected set leaves both GPU bytes and the previous partial-update base 
 
 test("a rejected first JS value does not latch binding ownership", async () => {
   const gpu = await init();
-  const fx = effect(gpu, `
+  const fx = effect(gpu, prepareShader(`
     @group(0) @binding(0) var<uniform> params: vec2u;
     @fragment fn main() -> @location(0) vec4f { return vec4f(f32(params.x)); }
-  `);
+  `));
   const userBuffer = gpu.device.createBuffer({ size: 8, usage: ["uniform", "copy_dst"] });
 
   expectPackingError(() => fx.set({ params: [1] }), "shape", "$");
@@ -109,14 +113,15 @@ test("a rejected first JS value does not latch binding ownership", async () => {
 
 test("the first direct struct value is complete while member shorthand starts from reflected zero", async () => {
   const gpu = await init();
-  const fx = effect(gpu, `
+  const fx = effect(gpu, prepareShader(`
     struct Params { head: u32, values: vec2u }
     @group(0) @binding(0) var<uniform> params: Params;
     @fragment fn main() -> @location(0) vec4f { return vec4f(f32(params.head)); }
-  `);
+  `));
 
   expectPackingError(() => fx.set({ params: { head: 7 } }), "missing-field", "$.values");
   fx.set({ head: 7 });
+  fx.draw(target(gpu, { size: [1, 1] }));
 
   const buffer = (drawBindingState(effectDraw(fx), "params")?.resource as GPUBufferBinding).buffer;
   if (!("__vgpuMockBytes" in buffer)) throw new Error("fixture did not expose mock buffer bytes");

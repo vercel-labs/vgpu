@@ -1,5 +1,26 @@
 # @vgpu/native
 
+## 0.6.0-rc.2
+
+### Patch Changes
+
+- @vgpu/wgsl@0.6.0-rc.2
+
+## 0.6.0-rc.1
+
+### Patch Changes
+
+- Updated dependencies [d5ea651]
+- Updated dependencies [a5833da]
+  - @vgpu/wgsl@0.6.0-rc.1
+
+## 0.6.0-rc.0
+
+### Patch Changes
+
+- Updated dependencies [a617198]
+  - @vgpu/wgsl@0.6.0-rc.0
+
 ## 0.5.0
 
 ### Minor Changes

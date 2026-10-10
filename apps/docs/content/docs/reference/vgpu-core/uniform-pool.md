@@ -84,10 +84,11 @@ declare class UniformPool {
 ```ts
 import { init, clock, draw, frame, target } from "vgpu/mock";
 import { UniformPool, type UniformLayout } from "vgpu/core";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const colorTarget = target(gpu, { size: [32, 32] });
-const drawable = draw(gpu, { shader: `
+const drawable = draw(gpu, { shader: prepareShader(`
   struct Object { model: mat4x4f }
   @group(0) @binding(0) var<uniform> object: Object;
   @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
@@ -95,7 +96,7 @@ const drawable = draw(gpu, { shader: `
     return object.model * vec4f(p[vi], 0, 1);
   }
   @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }
-` });
+`) });
 
 type ObjectUniforms = { model: Float32Array };
 const objectLayout: UniformLayout<ObjectUniforms> = {

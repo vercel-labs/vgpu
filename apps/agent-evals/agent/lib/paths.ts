@@ -1,3 +1,4 @@
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -67,7 +68,63 @@ export function snapshotTarPath(sessionId: string): string {
   return join(snapshotDir(sessionId), "workspace.tar");
 }
 
+/** Immutable evidence for one logical turn. */
+export function snapshotTurnDir(sessionId: string, turnId: string): string {
+  return join(snapshotDir(sessionId), "turns", pathSegment(turnId));
+}
+
+/** Immutable evidence for one completion attempt of a logical turn. */
+export function snapshotAttemptDir(sessionId: string, turnId: string, eventId: string): string {
+  return join(snapshotTurnDir(sessionId, turnId), pathSegment(eventId));
+}
+
+export function snapshotAttemptTarPath(sessionId: string, turnId: string, eventId: string): string {
+  return join(snapshotAttemptDir(sessionId, turnId, eventId), "workspace.tar");
+}
+
+export function snapshotAttemptVerifyTarPath(sessionId: string, turnId: string, eventId: string): string {
+  return join(snapshotAttemptDir(sessionId, turnId, eventId), "verify.tar");
+}
+
+/** Written last, after the sandbox verify directory is removed and evidence is exported. */
+export function snapshotAttemptCompletePath(sessionId: string, turnId: string, eventId: string): string {
+  return join(snapshotAttemptDir(sessionId, turnId, eventId), "complete.json");
+}
+
+/**
+ * Records first-seen logical turns in order. Retried completion events retain
+ * their stage and get a new attempt directory beneath the same turn.
+ */
+export function recordSceneTurn(sessionId: string, turnId: string): { stage: number; isNew: boolean } {
+  const directory = join(snapshotDir(sessionId), "turns");
+  const orderPath = join(directory, "order.json");
+  mkdirSync(directory, { recursive: true });
+  let order: string[] = [];
+  if (existsSync(orderPath)) {
+    const parsed = JSON.parse(readFileSync(orderPath, "utf8")) as unknown;
+    if (!Array.isArray(parsed) || !parsed.every((value) => typeof value === "string")) {
+      throw new Error(`scene turn order is corrupt at ${orderPath}`);
+    }
+    order = parsed;
+  }
+  let index = order.indexOf(turnId);
+  const isNew = index === -1;
+  if (isNew) {
+    order.push(turnId);
+    index = order.length - 1;
+    const staging = `${orderPath}.partial`;
+    writeFileSync(staging, `${JSON.stringify(order, null, 2)}\n`, "utf8");
+    renameSync(staging, orderPath);
+  }
+  return { stage: index + 1, isNew };
+}
+
 /** Where a snapshot tar is extracted so the eval can read files out of it. */
 export function snapshotWorkspaceDir(sessionId: string): string {
   return join(snapshotDir(sessionId), "workspace");
+}
+
+function pathSegment(value: string): string {
+  if (typeof value !== "string" || value.length === 0) throw new TypeError("snapshot identifier must be nonempty");
+  return encodeURIComponent(value);
 }

@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { expect, test, vi } from "vitest";
 import { bind, createBindGroup, createBindGroupLayout } from "@vgpu/core";
 import { UniformPool } from "../../src/core.ts";
@@ -28,13 +29,28 @@ struct Obj { value: f32 }
 }
 `;
 
+test("BundleRecorder.draw rejects invalid Draw instances with the stable TypeError", async () => {
+  const gpu = await init();
+  const scene = target(gpu, { size: [4, 4] });
+
+  try {
+    for (const invalid of [{}, null]) {
+      expect(() => bundle(gpu, { target: scene }, (recorder) => recorder.draw(invalid as never))).toThrowError(
+        new TypeError("Invalid Draw instance"),
+      );
+    }
+  } finally {
+    gpu.dispose();
+  }
+});
+
 test("R3 bundle replay stays valid after JS value writes and stales on bind-group identity changes", async () => {
   const gpu = await init();
   const scene = target(gpu, { size: [4, 4] });
   const tex1 = target(gpu, { size: [4, 4] });
   const tex2 = target(gpu, { size: [4, 4] });
-  const floor = effect(gpu, FLOOR, { label: "floor", set: { fogDensity: 0.1 } });
-  const walls = effect(gpu, WALLS, { label: "walls" });
+  const floor = effect(gpu, prepareShader(FLOOR), { label: "floor", set: { fogDensity: 0.1 } });
+  const walls = effect(gpu, prepareShader(WALLS), { label: "walls" });
   walls.set({ detail: tex1 });
 
   const staticScene = bundle(gpu, { target: scene, label: "staticScene" }, (b) => {
@@ -59,7 +75,7 @@ test("R3 bundle sampling a repeatedly resized target stales through binding iden
   const gpu = await init();
   const scene = target(gpu, { size: [4, 4] });
   const source = target(gpu, { size: [4, 4] });
-  const post = effect(gpu, WALLS, { label: "post", set: { detail: source } });
+  const post = effect(gpu, prepareShader(WALLS), { label: "post", set: { detail: source } });
   const recordBundle = (label: string) => bundle(gpu, { target: scene, label }, (b) => {
     b.draw(post);
   });
@@ -142,7 +158,7 @@ test("R4 raw claim validation stays attributed when frames overlap", async () =>
 });
 
 function rawClaimedDraw(gpu: Awaited<ReturnType<typeof init>>, label: string) {
-  const cube = draw(gpu, { shader: OBJECTS, label, set: { globals: { tint: 1 } } });
+  const cube = draw(gpu, { shader: prepareShader(OBJECTS), label, set: { globals: { tint: 1 } } });
   const rawBuffer = gpu.device.gpu.createBuffer({ size: 4, usage: 64 });
   const rawLayout = gpu.device.gpu.createBindGroupLayout({
     label: `${label}.raw-static-layout`,
@@ -161,7 +177,7 @@ function rawClaimedDraw(gpu: Awaited<ReturnType<typeof init>>, label: string) {
 test("R4 claimed groups reject set() and per-draw offsets reach setBindGroup", async () => {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [4, 4] });
-  const cube = draw(gpu, { shader: OBJECTS, label: "cube", set: { globals: { tint: 1 } } });
+  const cube = draw(gpu, { shader: prepareShader(OBJECTS), label: "cube", set: { globals: { tint: 1 } } });
   const offsets: readonly number[][] = [];
   const originalCreateCommandEncoder = gpu.device.gpu.createCommandEncoder.bind(gpu.device.gpu);
   vi.spyOn(gpu.device.gpu, "createCommandEncoder").mockImplementation((desc?: GPUCommandEncoderDescriptor) => {

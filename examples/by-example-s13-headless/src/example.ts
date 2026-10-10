@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { init, effect, target } from "vgpu/node";
 
 export const GRADIENT = /* wgsl */ `
@@ -7,11 +8,12 @@ struct Params { time: f32, speed: f32 }
   return vec4f(uv.x + params.time * 0.1, uv.y, params.speed, 1.0);
 }
 `;
+const GRADIENT_SHADER = prepareShader(GRADIENT, "by-example-s13-gradient.wgsl");
 
 export async function renderGradientHeadless() {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [8, 8], format: "rgba8unorm" });
-  const p = effect(gpu, GRADIENT, { label: "gradient" });
+  const p = effect(gpu, GRADIENT_SHADER, { label: "gradient" });
   p.set({ time: 1.25, speed: 1 });
   p.draw({ target: colorTarget });
   return { gpu, target: colorTarget };

@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { init, effect, frame, target } from "vgpu/node";
 
 export const SOLID = /* wgsl */ `
@@ -12,13 +13,15 @@ struct PostParams { texel: vec2f }
   return vec4f(c.rgb, 1.0);
 }
 `;
+const SOLID_SHADER = prepareShader(SOLID, "by-example-s07-solid.wgsl");
+const POST_SHADER = prepareShader(POST, "by-example-s07-post.wgsl");
 
 export async function runHdrPostExample() {
   const gpu = await init();
   const scene = target(gpu, { size: [8, 8], format: "rgba16float", depth: true, label: "scene" });
   const output = target(gpu, { size: [8, 8], format: "rgba8unorm", label: "output" });
-  const solid = effect(gpu, SOLID, { label: "solid" });
-  const post = effect(gpu, POST, { label: "post" });
+  const solid = effect(gpu, SOLID_SHADER, { label: "solid" });
+  const post = effect(gpu, POST_SHADER, { label: "post" });
   frame(gpu, (currentFrame) => {
     currentFrame.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.draw(solid));
     currentFrame.pass({ target: output }, (p) => { post.set({ src: scene.color, texel: scene.texelSize }); p.draw(post); });

@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { expect, test, vi } from "vitest";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
 import { init as initBrowser, bundle, draw, effect, frame, pingPong, surface, target } from "../src/index.ts";
@@ -183,10 +184,10 @@ test("surface lifecycle rejects duplicates, disposes, unregisters, and allows re
   expect(recreated.disposed).toBe(true);
 });
 
-test("surface color readback requires the current texture from a submitted frame", async () => {
+test.each([false, true])("surface color readback requires the submitted presentation texture (msaa: %s)", async (msaa) => {
   const gpu = await initBrowser({ adapter: createMockAdapter() });
   const canvas = canvasLike(2, 2, false);
-  const canvasSurface = surface(gpu, canvas, { label: "preview" });
+  const canvasSurface = surface(gpu, canvas, { label: "preview", depth: true, msaa });
   const readTexture = vi.spyOn(gpu.device.readback, "readTexture").mockResolvedValue(new Uint8Array([1, 2, 3, 4]));
   const selection = { mipLevel: 0, region: "all" } as const;
 
@@ -219,6 +220,47 @@ test("surface color readback requires the current texture from a submitted frame
   gpu.dispose();
 });
 
+test("surface readback rejects pending, canceled, failed, resized, and disposed frames", async () => {
+  const gpu = await initBrowser({ adapter: createMockAdapter() });
+  const canvasSurface = surface(gpu, canvasLike(2, 2, false));
+  const readTexture = vi.spyOn(gpu.device.readback, "readTexture").mockResolvedValue(new Uint8Array([1, 2, 3, 4]));
+  const selection = { mipLevel: 0, region: "all" } as const;
+  const render = () => frame(gpu, (currentFrame) => currentFrame.pass(canvasSurface, () => undefined));
+  const unavailable = { code: "VGPU-SURFACE-READ-UNAVAILABLE" };
+
+  render();
+  const color = canvasSurface.color;
+  await expect(color.read(selection)).resolves.toEqual(new Uint8Array([1, 2, 3, 4]));
+
+  const pending = frame(gpu);
+  pending.pass(canvasSurface, () => undefined);
+  await expect(color.read(selection)).rejects.toMatchObject(unavailable);
+  pending.cancel();
+  await expect(color.read(selection)).rejects.toMatchObject(unavailable);
+
+  render();
+  const failed = frame(gpu);
+  expect(() => failed.pass(canvasSurface, () => { throw new Error("failed surface pass"); })).toThrowError("failed surface pass");
+  failed.submit();
+  await expect(color.read(selection)).rejects.toMatchObject(unavailable);
+
+  render();
+  const submit = vi.spyOn(gpu.device.gpu.queue, "submit").mockImplementationOnce(() => { throw new Error("failed submit"); });
+  expect(render).toThrowError("failed submit");
+  await expect(color.read(selection)).rejects.toMatchObject(unavailable);
+  submit.mockRestore();
+
+  render();
+  canvasSurface.resize([3, 3]);
+  await expect(canvasSurface.color.read(selection)).rejects.toMatchObject(unavailable);
+  render();
+  const resizedColor = canvasSurface.color;
+  canvasSurface.dispose();
+  await expect(resizedColor.read(selection)).rejects.toMatchObject({ code: "VGPU-SURFACE-DISPOSED" });
+  expect(readTexture).toHaveBeenCalledTimes(1);
+  gpu.dispose();
+});
+
 test("resize and frame reentrancy are guarded, but resizing another surface and creating resources is allowed", async () => {
   const gpu = await initBrowser({ adapter: createMockAdapter() });
   const a = surface(gpu, canvasLike(10, 10), { autoResize: false });
@@ -235,8 +277,8 @@ test("resize and frame reentrancy are guarded, but resizing another surface and 
 
 test("target is required for frame and one-shot draws, and target size is required at runtime", async () => {
   const gpu = await init();
-  const shader1 = effect(gpu, SOLID);
-  const drawable = draw(gpu, { shader: SOLID });
+  const shader1 = effect(gpu, prepareShader(SOLID));
+  const drawable = draw(gpu, { shader: prepareShader(SOLID) });
   expect(() => {
     // @ts-expect-error Frame.pass requires an explicit target; this asserts the runtime JS error.
     frame(gpu, (currentFrame) => currentFrame.pass({}, (p) => p.draw(shader1)));
@@ -269,7 +311,7 @@ test("bloom pattern immediate same-size resize does not recreate derived target 
 test("surface bundle survives resize, and re-recording from onResize is usable in the same frame", async () => {
   const gpu = await initBrowser({ adapter: createMockAdapter() });
   const manual = surface(gpu, canvasLike(10, 10), { autoResize: false });
-  const shader1 = effect(gpu, SOLID);
+  const shader1 = effect(gpu, prepareShader(SOLID));
   const resizeBundle = bundle(gpu, { target: { colors: [manual.format] }, label: "surfaceBundle" }, (b) => b.draw(shader1));
 
   manual.resize([12, 12]);
@@ -290,7 +332,7 @@ test("surface bundle survives resize, and re-recording from onResize is usable i
 test("a deferred frame can pass a surface before manual submit", async () => {
   const gpu = await initBrowser({ adapter: createMockAdapter() });
   const canvasSurface = surface(gpu, canvasLike(4, 4), { autoResize: false });
-  const shader1 = effect(gpu, SOLID);
+  const shader1 = effect(gpu, prepareShader(SOLID));
   const currentFrame = frame(gpu);
 
   expect(() => currentFrame.pass(canvasSurface, shader1)).not.toThrow();

@@ -1,8 +1,9 @@
 import type { Draw, Frame, Geometry, Gpu, Target } from 'vgpu';
 import { draw, geometry, sampler } from 'vgpu';
 import type { Texture } from 'vgpu/core';
-import { box, perspectiveCamera } from 'vgpu/scene';
+import { box } from 'vgpu/scene';
 
+import { cameraMatrices } from './camera';
 import cubeWgsl from './cube.wgsl';
 
 /** Size of the committed clip, and the fallback when no video is available. */
@@ -148,7 +149,7 @@ export function renderScene(
   output: Target,
   time: number,
 ): void {
-  const camera = perspectiveCamera({
+  const camera = cameraMatrices({
     fov: 38,
     aspect: output.size[0] / Math.max(1, output.size[1]),
     near: 0.1,

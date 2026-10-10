@@ -21,6 +21,7 @@ conditions apply; the linked steps are mandatory, not optional reference materia
 | When | Read before proceeding |
 | --- | --- |
 | Starting authorized maintainer implementation, including documentation or policy edits. | [Implementation](.github/guides/implementation.md) |
+| Designing or changing scene utilities or their guides. | [Scene library boundary](.github/guides/scene-scope.md) |
 | Changing published behavior, writing a changeset, or deciding whether consumers need migration. | [Changesets and migrations](.github/guides/migrations.md) |
 | Preparing, editing, reviewing, or merging a maintainer integration PR. | [Pull requests](.github/guides/pull-requests.md) and [CONTRIBUTING.md](CONTRIBUTING.md) |
 | Preparing/reviewing an RC or stable release, changing package versions for release, or publishing packages. | [Releases](.github/guides/releases.md) |
@@ -29,3 +30,21 @@ conditions apply; the linked steps are mandatory, not optional reference materia
 | Submitting an external PR or changing its type/checks/merge policy. | [Contribution policy rollout](CONTRIBUTING.md#contribution-policy-rollout) |
 
 Normal development targets `canary`. The linked production/release workflows define the exceptions.
+
+## Agent team
+
+Repository specialists (researchers, API designer, planner, implementer, implementer-simple, writer,
+PR writer, reviewer, fixer) are defined in `.subharness/agents/` and run through the `subharness` CLI. The lead workflow —
+research, API design, human-validated decisions, planning, parallel implementation, integration —
+is in `.claude/skills/vgpu-agent-flow/SKILL.md`. Pipeline artifacts live in the gitignored
+`.context/work/<topic>/`.
+
+When the user asks to explain a problem, issue, PR, or feature as an infographic, use
+[visual-explainer](.claude/skills/visual-explainer/SKILL.md). It defines the shared narrative and
+visual style for personal PDF explanations and PR descriptions composed of Markdown and small
+SVGs. The PR writer also reads this skill; it owns PR-specific structure, while the lead publishes.
+
+For Blender assets, `asset-author` (Astra) delegates runtime integration and visual critique to
+`asset-runtime` and `asset-critic` (Opus 5.5). Follow the
+[asset iteration lane](.claude/skills/vgpu-agent-flow/references/asset-iteration.md) for concept
+handoffs, actual render comparisons, measured budgets, and evidence-based workflow improvements.

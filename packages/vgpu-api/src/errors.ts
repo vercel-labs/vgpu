@@ -3,6 +3,16 @@ import type { BindingInfo } from "@vgpu/wgsl/reflect-source";
 
 export class VGPUError extends CoreVGPUError {}
 
+export function surfaceNotBindableError(label: string, binding: BindingInfo): VGPUError {
+  return new VGPUError({
+    code: "VGPU-SURFACE-NOT-BINDABLE",
+    message: `Binding '${binding.name}' (@group(${binding.group}) @binding(${binding.binding})) in '${label}' cannot use a Surface as an input.`,
+    where: `${label}.${binding.name}`,
+    fix: "Render to an offscreen target and bind that target or its texture. Use Surface only as a render destination.",
+    detail: { binding: binding.binding, bindingName: binding.name },
+  });
+}
+
 export function destroyedBindingError(label: string, binding: BindingInfo, resourceName = "resource"): VGPUError {
   return new VGPUError({
     code: "VGPU-R1-BINDING-DESTROYED",
@@ -105,6 +115,35 @@ export function blendConstantInvalidError(label: string, reason: string): VGPUEr
     message: `Invalid blendConstant in '${label}': ${reason}`,
     fix: `Use [r, g, b, a] finite numbers with a blend whose color or alpha uses "constant"/"one-minus-constant"; omit it to keep the pass default (0, 0, 0, 0).`,
     where: "draw",
+  });
+}
+
+export function bundleDisposedError(bundleId: string): VGPUError {
+  return new VGPUError({
+    code: "VGPU-BUNDLE-DISPOSED",
+    message: `Bundle '${bundleId}' has been disposed.`,
+    where: "bundle",
+    fix: "Record a new bundle before replaying; this bundle was disposed.",
+  });
+}
+
+export function drawDisposedError(label: string, operation: string): VGPUError {
+  return new VGPUError({
+    code: "VGPU-DRAW-DISPOSED",
+    message: `Draw '${label}' has been disposed.`,
+    where: `${label}.${operation}`,
+    fix: "Create a new draw(gpu, ...) or effect(gpu, ...); disposed render units cannot be reused.",
+    detail: { label },
+  });
+}
+
+export function computeDisposedError(label: string, operation: string): VGPUError {
+  return new VGPUError({
+    code: "VGPU-COMPUTE-DISPOSED",
+    message: `Compute '${label}' has been disposed.`,
+    where: `${label}.${operation}`,
+    fix: "Create a new compute(gpu, ...); disposed computes cannot be reused.",
+    detail: { label },
   });
 }
 
@@ -511,8 +550,18 @@ export function surfaceNotInFrameError(where: string): VGPUError {
   return new VGPUError({
     code: "VGPU-SURFACE-NOT-IN-FRAME",
     message: "Surface targets are only available inside frame(gpu).",
-    fix: "surface passes must run inside frame(gpu, ...); precompile against an offscreen target(gpu, ...) instead",
+    fix: "Encode surface draws inside frame(gpu, ...); compile(surface) and bundle(gpu, { target: surface }, ...) can prepare outside a frame.",
     where,
+  });
+}
+
+export function surfaceDepthInvalidError(received: unknown): VGPUError {
+  return new VGPUError({
+    code: "VGPU-SURFACE-DEPTH-INVALID",
+    message: "Surface depth must be false, true, or a depth-aspect texture format.",
+    fix: 'Use depth: true, a depth-aspect format such as "depth24plus", or omit depth.',
+    where: "surface",
+    detail: { actual: typeof received === "string" || typeof received === "number" ? received : undefined, type: typeof received },
   });
 }
 
@@ -522,6 +571,16 @@ export function surfaceReadUnavailableError(label: string | undefined, where: st
     message: `Surface '${label ?? "surface"}' color readback is unavailable because this canvas texture was not submitted by a completed frame for the current presentation frame.`,
     fix: "Read surface.color immediately after frame(gpu, ...) returns, before the browser advances the canvas texture; use target(gpu, ...) for deferred or reliable readback.",
     where,
+  });
+}
+
+export function surfaceMsaaInvalidError(received: unknown): VGPUError {
+  return new VGPUError({
+    code: "VGPU-SURFACE-MSAA-INVALID",
+    message: "Surface msaa must be false, true, or 4.",
+    fix: "Use msaa: false for one sample, msaa: true or msaa: 4 for four samples, or omit msaa.",
+    where: "surface",
+    detail: { actual: typeof received === "string" || typeof received === "number" ? received : undefined, type: typeof received },
   });
 }
 
@@ -580,6 +639,15 @@ export function clockDeltaInvalidError(received: unknown): VGPUError {
     message: `clock.advance() received ${String(received)}; expected a finite, non-negative number of seconds.`,
     fix: "Pass the elapsed seconds, e.g. clock(gpu).advance(1 / 60); use frame(gpu) alone to advance with wall-clock time.",
     where: "clock.advance",
+  });
+}
+
+export function asyncFrameCallbackError(where: "frame" | "frameLoop"): VGPUError {
+  return new VGPUError({
+    code: "VGPU-ASYNC-FRAME-CALLBACK",
+    message: `${where} callbacks must be synchronous.`,
+    where,
+    fix: "Await preparation before frame()/frameLoop(); keep the frame callback synchronous.",
   });
 }
 
@@ -665,18 +733,32 @@ export function setValueInvalidError(detail: {
   });
 }
 
-export function malformedShaderSourceError(input: unknown): VGPUError {
-  if (hasVersion(input) && input.version !== 1) {
-    return new VGPUError({
-      code: "VGPU-SHADER-SOURCE-INVALID",
-      message: `VGPU-SHADER-SOURCE-INVALID: unsupported ShaderSource v${String(input.version)}; expected v1. Fix: update vgpu or regenerate it.`,
-      where: "shader source",
-    });
-  }
+export function unpreparedShaderSourceError(): VGPUError {
+  return new VGPUError({
+    code: "VGPU-SHADER-SOURCE-UNPREPARED",
+    message: "The renderer requires a prepared ShaderSource v2, but received raw WGSL or a v1 artifact.",
+    fix: "Use a compatible @vgpu/wgsl loader, rebuild shader assets, or call prepareShader() from @vgpu/wgsl/prepare.",
+    where: "shader source",
+  });
+}
+
+export function unsupportedShaderSourceVersionError(version: number, producer?: string): VGPUError {
+  return new VGPUError({
+    code: "VGPU-SHADER-SOURCE-VERSION",
+    message: `ShaderSource version ${version} is unsupported; this runtime supports version 2${producer ? ` (producer: ${producer})` : ""}.`,
+    fix: "Align the shader producer and vgpu runtime versions, then regenerate the artifact.",
+    where: "shader source",
+    detail: { actual: version, expected: 2, reason: producer ? `producer: ${producer}` : undefined },
+  });
+}
+
+export function invalidShaderSourceError(field: string, reason: string): VGPUError {
   return new VGPUError({
     code: "VGPU-SHADER-SOURCE-INVALID",
-    message: `VGPU-SHADER-SOURCE-INVALID: expected WGSL or { version, wgsl }, got ${previewShaderSource(input)}. Fix: configure @vgpu/wgsl loader-vite or loader-webpack.`,
+    message: `Invalid ShaderSource field '${field}': ${reason}.`,
+    fix: "Regenerate the shader artifact with a compatible @vgpu/wgsl producer.",
     where: "shader source",
+    detail: { path: field, reason },
   });
 }
 
@@ -705,20 +787,6 @@ export function sharedUniformLayoutMismatchError(opts: {
 function describeCause(cause: unknown): string {
   if (cause instanceof Error) return `${cause.name}: ${cause.message}`;
   return String(cause);
-}
-
-function hasVersion(input: unknown): input is { readonly version: unknown } {
-  return typeof input === "object" && input !== null && "version" in input;
-}
-
-function previewShaderSource(input: unknown): string {
-  if (typeof input !== "object" || input === null) return typeof input;
-  try {
-    const json = JSON.stringify(input);
-    return json.length > 80 ? `${json.slice(0, 77)}...` : json;
-  } catch {
-    return "object";
-  }
 }
 
 function missingBindingFix(drawLabel: string, binding: BindingInfo): string {

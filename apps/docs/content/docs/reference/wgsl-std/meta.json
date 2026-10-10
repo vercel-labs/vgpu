@@ -2,6 +2,7 @@
   "title": "@vgpu/wgsl-std",
   "pages": [
     "color",
+    "scene",
     "fullscreen",
     "hash",
     "noise",

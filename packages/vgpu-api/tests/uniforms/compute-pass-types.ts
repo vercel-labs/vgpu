@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { compute, frame, type Gpu, type Compute, type FrameComputePass, type FrameComputePassOptions } from "../../src/index.ts";
 import type { FrameComputePass as NodePass } from "../../src/node.ts";
 import type { FrameComputePass as MockPass } from "../../src/mock.ts";
@@ -17,5 +18,5 @@ frame(gpu, f => f.computePass(options, p => {
   // @ts-expect-error compute pipelines have no target parameter
   pipeline.compile({});
 }));
-const created: Compute = compute(gpu, "@compute @workgroup_size(1) fn main() {}");
+const created: Compute = compute(gpu, prepareShader("@compute @workgroup_size(1) fn main() {}"));
 void [compiled, sync, node, mock, created];

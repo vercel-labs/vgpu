@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { resolve } from "node:path";
 import { expect, test } from "vitest";
 import { init, effect, frame, target } from "../../src/node.ts";
@@ -10,7 +11,7 @@ test.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("representative gradient match
   const gpu = await init();
   try {
     const colorTarget = target(gpu, { size: SNAPSHOT_SIZE, format: "rgba8unorm", label: "representative-gradient" });
-    const shader = effect(gpu, REPRESENTATIVE_GRADIENT_WGSL, { label: "representative-gradient", set: { speed: 2 } });
+    const shader = effect(gpu, prepareShader(REPRESENTATIVE_GRADIENT_WGSL), { label: "representative-gradient", set: { speed: 2 } });
     shader.set({ time: Math.PI / 4 });
     frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget }, (encoder) => encoder.draw(shader)));
     const result = await comparePixelSnapshot(BASELINE, await colorTarget.color.read({ mipLevel: 0, region: "all" }), SNAPSHOT_SIZE[0], SNAPSHOT_SIZE[1]);

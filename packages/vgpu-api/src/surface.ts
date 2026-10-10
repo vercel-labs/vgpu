@@ -1,16 +1,19 @@
 import { Texture, createResourceIdentity, DestroySignal, type Device, type ResourceDestroyCallback, type ResourceIdentity, type TextureOptions, type TextureReadOptions, type UnsubscribeResourceDestroy } from "@vgpu/core";
-import { BUILT_IN_CLEAR_COLOR, colorValue, copyClearColor, sameSize, validateClearColor, type ClearColor } from "./target-utils.ts";
-import type { RenderPassDescriptorOptions, Target } from "./target.ts";
+import { BUILT_IN_CLEAR_COLOR, colorAttachment, copyClearColor, depthAttachment, sameSize, validateClearColor, type ClearColor } from "./target-utils.ts";
+import type { RenderPassDescriptorOptions, Target, TargetSignature } from "./target.ts";
 import {
   surfaceAutoResizeUnsupportedError,
   surfaceContextError,
   surfaceDisposedError,
+  surfaceDepthInvalidError,
   surfaceDuplicateError,
+  surfaceMsaaInvalidError,
   surfaceReadUnavailableError,
   surfaceResizeReentrantError,
 } from "./errors.ts";
 import { frameState } from "./frame-state.ts";
 import type { FrameHandle, FrameOwner } from "./frame-protocols.ts";
+import { SURFACE_TARGET, TARGET_SIGNATURE } from "./draw-protocols.ts";
 import { liveKernel } from "./live-kernel.ts";
 import { serviceToken, type Gpu, type Kernel } from "./kernel.ts";
 
@@ -26,6 +29,8 @@ export interface SurfaceOptions {
   readonly format?: GPUTextureFormat;
   readonly alphaMode?: GPUCanvasAlphaMode;
   readonly colorSpace?: PredefinedColorSpace;
+  readonly depth?: boolean | GPUTextureFormat;
+  readonly msaa?: boolean | 4;
   readonly label?: string;
 }
 
@@ -90,18 +95,30 @@ export function enterFrame(): void { frameDepth += 1; }
 export function leaveFrame(): void { frameDepth -= 1; }
 export function isSurface(target: unknown): target is CanvasSurface { return target instanceof CanvasSurface; }
 
+interface SurfaceAttachments {
+  readonly msaaColor?: Texture;
+  readonly depth?: Texture;
+  readonly all: readonly Texture[];
+}
+
 export class CanvasSurface implements Surface, FrameOwner {
+  readonly [SURFACE_TARGET] = true;
   readonly resourceIdentity = createResourceIdentity("render-target");
   readonly label: string | undefined;
   readonly context: GPUCanvasContext;
   readonly autoResize: boolean;
   readonly layoutBacked: boolean;
   readonly format: GPUTextureFormat;
+  readonly #signature: TargetSignature;
+  readonly #depthFormat: GPUTextureFormat | undefined;
+  readonly #sampleCount: 1 | 4;
   readonly #destroySignal = new DestroySignal<Target>();
   readonly #callbacks = new Set<(event: SurfaceResizeEvent) => void>();
   readonly #texturesRecreatedCallbacks = new Set<() => void>();
   #currentDpr: number;
   #clearColor: ClearColor;
+  #attachments!: SurfaceAttachments;
+  #generationSize!: readonly [number, number];
   #isDisposed = false;
   #notifying = false;
   #attachmentTexture: GPUTexture | undefined;
@@ -124,15 +141,29 @@ export class CanvasSurface implements Surface, FrameOwner {
     this.autoResize = options.autoResize ?? (options.size ? false : this.layoutBacked);
     this.#currentDpr = effectiveDpr(options.dpr);
     this.format = options.format ?? preferredCanvasFormat();
+    this.#depthFormat = surfaceDepthFormat(options.depth);
+    this.#sampleCount = surfaceSampleCount(options.msaa);
+    this.#signature = Object.freeze({ colors: Object.freeze([this.format]), depth: this.#depthFormat, sampleCount: this.#sampleCount });
+    const previousSize = canvasSize(canvas);
     const initialSize = initialCanvasSize(canvas, options, this.layoutBacked, this.#currentDpr);
     if (options.size || this.layoutBacked) setCanvasSize(canvas, initialSize);
-    context.configure({
-      device: device.gpu,
-      format: this.format,
-      alphaMode: options.alphaMode ?? "premultiplied",
-      colorSpace: options.colorSpace ?? "srgb",
-      usage: canvasTextureUsage(),
-    });
+    try {
+      context.configure({
+        device: device.gpu,
+        format: this.format,
+        alphaMode: options.alphaMode ?? "premultiplied",
+        colorSpace: options.colorSpace ?? "srgb",
+        usage: canvasTextureUsage(),
+      });
+      this.#attachments = this.#allocateAttachments(initialSize);
+      this.#generationSize = Object.freeze([...initialSize]) as readonly [number, number];
+    } catch (error) {
+      try { context.unconfigure?.(); } catch { /* Preserve the construction error. */ }
+      if (options.size || this.layoutBacked) {
+        try { setCanvasSize(canvas, previousSize); } catch { /* Preserve the construction error. */ }
+      }
+      throw error;
+    }
   }
 
   get gpu(): unknown { return this.context; }
@@ -150,13 +181,18 @@ export class CanvasSurface implements Surface, FrameOwner {
     }, (where) => this.#assertReadable(gpuTexture, where));
   }
   get colors(): readonly [Texture, ...Texture[]] { return [this.color]; }
-  get depth(): undefined { this.#assertLive(); return undefined; }
-  get sampleCount(): 1 { this.#assertLive(); return 1; }
+  get depth(): Texture | undefined { this.#assertLive(); return this.#attachments.depth; }
+  get sampleCount(): 1 | 4 { this.#assertLive(); return this.#sampleCount; }
   get dpr(): number { return this.#currentDpr; }
   /** Default clear color of this surface; passes that clear without naming a color use it. */
   get clearColor(): ClearColor { return copyClearColor(this.#clearColor); }
   set clearColor(value: ClearColor) { this.#clearColor = validateClearColor(value, "surface.clearColor"); }
   get disposed(): boolean { return this.#isDisposed; }
+
+  [TARGET_SIGNATURE](): TargetSignature {
+    this.#assertLive();
+    return this.#signature;
+  }
 
   resize(size: readonly [number, number]): void {
     this.#assertLive();
@@ -165,19 +201,27 @@ export class CanvasSurface implements Surface, FrameOwner {
   }
 
   applyAutoResize(): void {
-    if (this.#isDisposed || !this.autoResize || !this.layoutBacked) return;
-    const nextDpr = effectiveDpr(this.options.dpr);
-    const nextSize = layoutCanvasSize(this.canvas, nextDpr);
-    this.#applyResize(nextSize, nextDpr, true);
+    if (this.#isDisposed) return;
+    if (this.autoResize && this.layoutBacked) {
+      const nextDpr = effectiveDpr(this.options.dpr);
+      const nextSize = layoutCanvasSize(this.canvas, nextDpr);
+      this.#applyResize(nextSize, nextDpr, true);
+      return;
+    }
+    const currentCanvasSize = sanitizeSize(canvasSize(this.canvas));
+    if (!sameSize(this.#generationSize, currentCanvasSize)) {
+      this.#applyResize(currentCanvasSize, this.#currentDpr, false);
+    }
   }
 
   onResize(cb: (event: SurfaceResizeEvent) => void): () => void {
     this.#assertLive();
     this.#callbacks.add(cb);
+    const wasNotifying = this.#notifying;
     this.#notifying = true;
     resizeCallbackDepth += 1;
     try { cb(this.#event()); }
-    finally { resizeCallbackDepth -= 1; this.#notifying = false; }
+    finally { resizeCallbackDepth -= 1; this.#notifying = wasNotifying; }
     return () => { this.#callbacks.delete(cb); };
   }
 
@@ -185,18 +229,27 @@ export class CanvasSurface implements Surface, FrameOwner {
   onTexturesRecreated(cb: () => void): () => void { this.#assertLive(); this.#texturesRecreatedCallbacks.add(cb); return () => { this.#texturesRecreatedCallbacks.delete(cb); }; }
 
   renderPassDescriptor(opts: RenderPassDescriptorOptions = {}): GPURenderPassDescriptor {
-    // Surfaces have no depth attachment; clearDepth, clearStencil, and depthReadOnly cannot apply.
-    const { clear = [0, 0, 0, 1], preserve } = opts;
+    const { clear = [0, 0, 0, 1], preserve, clearDepth, clearStencil, depthReadOnly } = opts;
     this.#assertLive();
-    const texture = this.context.getCurrentTexture();
-    this.#attachmentTexture = texture;
-    const attachment: GPURenderPassColorAttachment = { view: texture.createView(), loadOp: preserve ? "load" : "clear", storeOp: "store" };
-    if (!preserve) attachment.clearValue = colorValue(clear);
-    return { colorAttachments: [attachment] };
+    const currentCanvasSize = sanitizeSize(canvasSize(this.canvas));
+    if (!sameSize(this.#generationSize, currentCanvasSize)) {
+      this.#applyResize(currentCanvasSize, this.#currentDpr, false);
+    }
+    const resolved = this.context.getCurrentTexture();
+    this.#attachmentTexture = resolved;
+    return {
+      colorAttachments: [colorAttachment(resolved, this.#attachments.msaaColor, clear, preserve)],
+      depthStencilAttachment: this.#attachments.depth
+        ? depthAttachment(this.#attachments.depth, preserve, clearDepth, clearStencil, depthReadOnly)
+        : undefined,
+    };
   }
 
   attachFrame(frame: FrameHandle): void {
-    if (this.#attachmentTexture) this.#frameTextures.set(frame, this.#attachmentTexture);
+    if (this.#attachmentTexture) {
+      this.#frameTextures.set(frame, this.#attachmentTexture);
+      this.#lastSubmittedTexture = undefined;
+    }
   }
 
   finalizeFrame(): void {}
@@ -217,37 +270,66 @@ export class CanvasSurface implements Surface, FrameOwner {
     this.#attachmentTexture = undefined;
     this.#lastSubmittedTexture = undefined;
     try { this.context.unconfigure?.(); } catch { /* ignore native cleanup failures */ }
-    this.unregister(this);
+    const errors: unknown[] = [];
+    try { this.unregister(this); } catch (error) { errors.push(error); }
     this.#callbacks.clear();
     this.#texturesRecreatedCallbacks.clear();
-    this.#destroySignal.emit(this);
+    try { this.#destroySignal.emit(this); } catch (error) { errors.push(error); }
+    try { destroyTextures(this.#attachments.all); } catch (error) { errors.push(error); }
+    if (errors.length) throw errors[0];
   }
 
   #applyResize(size: readonly [number, number], dpr: number, notify: boolean): void {
-    const changed = !sameSize(canvasSize(this.canvas), size);
-    this.#currentDpr = dpr;
-    if (!changed) return;
-    setCanvasSize(this.canvas, size);
-    this.#attachmentTexture = undefined;
-    this.#lastSubmittedTexture = undefined;
-    this.#emitTexturesRecreated();
-    if (notify) this.#notify();
-  }
-
-  #emitTexturesRecreated(): void {
-    for (const cb of [...this.#texturesRecreatedCallbacks]) cb();
-  }
-
-  #notify(): void {
+    const generationChanged = !sameSize(this.#generationSize, size);
+    const canvasChanged = !sameSize(canvasSize(this.canvas), size);
+    if (!generationChanged && !canvasChanged) {
+      this.#currentDpr = dpr;
+      return;
+    }
+    const nextSize = Object.freeze([...size]) as readonly [number, number];
+    const next = generationChanged ? this.#allocateAttachments(nextSize) : this.#attachments;
+    const previous = this.#attachments;
+    const notifyPublic = notify && (canvasChanged || (generationChanged && previous.all.length > 0));
+    const wasNotifying = this.#notifying;
     this.#notifying = true;
     resizeCallbackDepth += 1;
     try {
-      const event = this.#event();
-      for (const cb of [...this.#callbacks]) cb(event);
+      if (canvasChanged) setCanvasSize(this.canvas, nextSize);
+      this.#currentDpr = dpr;
+      this.#generationSize = nextSize;
+      this.#attachments = next;
+      this.#attachmentTexture = undefined;
+      this.#lastSubmittedTexture = undefined;
+      const errors: unknown[] = [];
+      try { this.#emitTexturesRecreated(); } catch (error) { errors.push(error); }
+      if (notifyPublic) {
+        try { this.#notify(); } catch (error) { errors.push(error); }
+      }
+      if (generationChanged) {
+        try { destroyTextures(previous.all); } catch (error) { errors.push(error); }
+      }
+      if (errors.length) throw errors[0];
     } finally {
       resizeCallbackDepth -= 1;
-      this.#notifying = false;
+      this.#notifying = wasNotifying;
     }
+  }
+
+  #emitTexturesRecreated(): void {
+    const errors: unknown[] = [];
+    for (const cb of [...this.#texturesRecreatedCallbacks]) {
+      try { cb(); } catch (error) { errors.push(error); }
+    }
+    if (errors.length) throw errors[0];
+  }
+
+  #notify(): void {
+    const event = this.#event();
+    const errors: unknown[] = [];
+    for (const cb of [...this.#callbacks]) {
+      try { cb(event); } catch (error) { errors.push(error); }
+    }
+    if (errors.length) throw errors[0];
   }
 
   #event(): SurfaceResizeEvent {
@@ -263,6 +345,37 @@ export class CanvasSurface implements Surface, FrameOwner {
     this.#assertLive();
     if (isFrameActive() || this.#lastSubmittedTexture !== texture || this.context.getCurrentTexture() !== texture) {
       throw surfaceReadUnavailableError(this.options.label, where);
+    }
+  }
+
+  #allocateAttachments(size: readonly [number, number]): SurfaceAttachments {
+    const allocated: Texture[] = [];
+    const create = (options: Parameters<Device["createTexture"]>[0]): Texture => {
+      const texture = this.device.createTexture(options);
+      allocated.push(texture);
+      return texture;
+    };
+    try {
+      const msaaColor = this.#sampleCount === 4 ? create({
+        kind: "2d",
+        size,
+        format: this.format,
+        usage: ["render_attachment"],
+        sampleCount: 4,
+        label: this.options.label ? `${this.options.label}.color.msaa` : "surface.color.msaa",
+      }) : undefined;
+      const depth = this.#depthFormat ? create({
+        kind: "2d",
+        size,
+        format: this.#depthFormat,
+        usage: ["render_attachment", "texture_binding"],
+        sampleCount: this.#sampleCount,
+        label: this.options.label ? `${this.options.label}.depth` : "surface.depth",
+      }) : undefined;
+      return { msaaColor, depth, all: allocated };
+    } catch (error) {
+      try { destroyTextures(allocated); } catch { /* Preserve the allocation error. */ }
+      throw error;
     }
   }
 }
@@ -281,6 +394,35 @@ class SurfaceColorTexture extends Texture {
     this.assertReadable("Surface.color.readFloats");
     return super.readFloats(options);
   }
+}
+
+const SURFACE_DEPTH_FORMATS = new Set<GPUTextureFormat>([
+  "depth16unorm",
+  "depth24plus",
+  "depth24plus-stencil8",
+  "depth32float",
+  "depth32float-stencil8",
+]);
+
+function surfaceDepthFormat(value: SurfaceOptions["depth"]): GPUTextureFormat | undefined {
+  if (value === undefined || value === false) return undefined;
+  if (value === true) return "depth24plus";
+  if (SURFACE_DEPTH_FORMATS.has(value)) return value;
+  throw surfaceDepthInvalidError(value);
+}
+
+function surfaceSampleCount(value: SurfaceOptions["msaa"]): 1 | 4 {
+  if (value === undefined || value === false) return 1;
+  if (value === true || value === 4) return 4;
+  throw surfaceMsaaInvalidError(value);
+}
+
+function destroyTextures(textures: readonly Texture[]): void {
+  const errors: unknown[] = [];
+  for (const texture of textures) {
+    try { texture.destroy(); } catch (error) { errors.push(error); }
+  }
+  if (errors.length) throw errors[0];
 }
 
 export function isLayoutBacked(canvas: unknown): boolean {

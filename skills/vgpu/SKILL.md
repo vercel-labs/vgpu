@@ -3,7 +3,7 @@ name: vgpu
 description: >-
   Build, debug, test, and optimize WebGPU projects using vgpu, its CLI, or @vgpu packages.
   Use for vgpu API questions, WGSL workflows, browser or Node rendering, integrations,
-  testing, and performance work.
+  testing, performance work, and Blender asset modeling, baking, and runtime integration.
 ---
 
 # vgpu
@@ -18,6 +18,18 @@ The public skill install command has no branch pin:
 ```sh
 npx skills add vercel-labs/vgpu
 ```
+
+## 3D scenes
+
+If you need to work with 3D scenes, read [Scene composition](./scene.md) before implementing
+scene hierarchies, transforms, instances, cameras, or animation and physics integration.
+
+## Blender assets
+
+For Blender modeling, high/low-poly workflows, normal or ambient occlusion baking, LODs, and
+asset validation, read [Blender assets](blender/index.md). That guide links to focused references
+for shape and assembly or baking diagnostics; load them when the task needs them. Its authoring
+guidance is independent of the vgpu version. For runtime API work, use the package docs below.
 
 ## Select the package version
 

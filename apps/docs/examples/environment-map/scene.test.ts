@@ -18,11 +18,9 @@ vi.mock("vgpu", () => ({
   sampler: mocks.sampler,
   target: mocks.target,
 }));
-vi.mock("vgpu/scene", () => ({
+vi.mock("vgpu/scene", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("vgpu/scene")>()),
   box: mocks.box,
-  perspectiveCamera: vi.fn(() => ({
-    viewProjection: new Float32Array(16),
-  })),
 }));
 vi.mock("./blur.wgsl", () => ({ default: "blur" }));
 vi.mock("./metal.wgsl", () => ({ default: "metal" }));

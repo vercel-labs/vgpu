@@ -1,4 +1,4 @@
-import { perspectiveCamera } from "vgpu/scene";
+import { group, perspective, viewMatrices } from "vgpu/scene";
 
 export const FOV_DEGREES = 42;
 export const ORBIT_RADIUS = 3.35;
@@ -15,15 +15,23 @@ export function cameraView(yaw: number, pitch: number, aspect: number) {
   const right = normalize(cross(forward, [0, 1, 0]));
   const up = cross(right, forward);
 
+  const poseNode = group({ position }).lookAt([0, 0, 0]);
+  const projection = perspective(
+    { fov: FOV_DEGREES, near: 0.1, far: 40 },
+    aspect,
+    new Float32Array(16),
+  );
+  const camera = {
+    position: new Float32Array(position),
+    quaternion: new Float32Array(poseNode.quaternion),
+    projection,
+    view: new Float32Array(16),
+    viewProjection: new Float32Array(16),
+  };
+  viewMatrices(camera, projection, camera);
+
   return {
-    camera: perspectiveCamera({
-      fov: FOV_DEGREES,
-      aspect,
-      near: 0.1,
-      far: 40,
-      position,
-      target: [0, 0, 0],
-    }),
+    camera,
     position,
     forward,
     right,

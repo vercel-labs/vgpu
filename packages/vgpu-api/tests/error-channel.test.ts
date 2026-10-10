@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { afterEach, expect, test, vi } from "vitest";
 import { init, frame, target, draw, effect } from "../src/mock.ts";
 
@@ -144,7 +145,7 @@ test("gpu.settled snapshots pending validation deliveries", async () => {
 test("sync pipeline creation throws synchronously without duplicate onError delivery", async () => {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [4, 4] });
-  const drawable = draw(gpu, { shader: SIMPLE_SHADER, label: "syncThrow" });
+  const drawable = draw(gpu, { shader: prepareShader(SIMPLE_SHADER), label: "syncThrow" });
   const nativeError = new Error("native createRenderPipeline failed");
   const errors: unknown[] = [];
   gpu.onError((error) => errors.push(error));
@@ -157,10 +158,70 @@ test("sync pipeline creation throws synchronously without duplicate onError deli
   gpu.dispose();
 });
 
+test.each([
+  ["fragment", 1],
+  ["fixed vertex", 2],
+] as const)("fragment-only effect tracks a failing %s module through compile, retry, and settled", async (_stage, failedScope) => {
+  const gpu = await init();
+  const colorTarget = target(gpu, { size: [4, 4] });
+  const pending = deferredValidationScopes(gpu.device.gpu);
+  const errors: unknown[] = [];
+  gpu.onError((error) => errors.push(error));
+  const shader = effect(gpu, prepareShader(SIMPLE_SHADER), { label: `dependency-${failedScope}` });
+
+  shader.compileSync(colorTarget);
+  const compilation = shader.compile(colorTarget);
+  const rejected = expect(compilation).rejects.toMatchObject({ code: "VGPU-COMPILE-FAILED" });
+  let settled = false;
+  const waiting = gpu.settled().then(() => { settled = true; });
+  await Promise.resolve();
+
+  expect(pending).toHaveLength(4); // layout, fragment module, fixed vertex module, render pipeline
+  expect(settled).toBe(false);
+  pending.splice(0).forEach((resolve, index) => resolve(index === failedScope ? { message: `module ${failedScope} failed` } as GPUError : null));
+  await rejected;
+  await waiting;
+  expect(errors).toHaveLength(1);
+  expect(() => shader.draw(colorTarget)).toThrow(/compilation failed/);
+
+  const retry = shader.compile(colorTarget);
+  expect(pending).toHaveLength(1); // the explicit retry opens a fresh pipeline scope
+  pending.shift()!(null);
+  await expect(retry).rejects.toMatchObject({ code: "VGPU-COMPILE-FAILED" });
+  await gpu.settled();
+  expect(errors).toHaveLength(1);
+  gpu.dispose();
+});
+
+test("fragment-only effect explicitly retries a transient pipeline failure with both stages", async () => {
+  const gpu = await init();
+  const colorTarget = target(gpu, { size: [4, 4] });
+  const shader = effect(gpu, prepareShader(SIMPLE_SHADER), { label: "pipeline-retry" });
+  const pending = deferredValidationScopes(gpu.device.gpu);
+  const errors: unknown[] = [];
+  gpu.onError((error) => errors.push(error));
+
+  shader.compileSync(colorTarget);
+  const rejected = expect(shader.compile(colorTarget)).rejects.toMatchObject({ code: "VGPU-COMPILE-FAILED" });
+  expect(pending).toHaveLength(1);
+  pending.shift()!({ message: "transient pipeline failure" } as GPUError);
+  await rejected;
+  await gpu.settled();
+  expect(errors).toHaveLength(1);
+
+  const retry = shader.compile(colorTarget);
+  expect(pending).toHaveLength(1);
+  pending.shift()!(null);
+  await expect(retry).resolves.toBe(shader);
+  await gpu.settled();
+  expect(errors).toHaveLength(1);
+  gpu.dispose();
+});
+
 test("Frame.done awaits queue.onSubmittedWorkDone even without claimed groups", async () => {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [4, 4] });
-  const shader1 = effect(gpu, SIMPLE_SHADER);
+  const shader1 = effect(gpu, prepareShader(SIMPLE_SHADER));
   let resolveSubmitted!: () => void;
   let submitted = false;
   vi.spyOn(gpu.device.gpu.queue, "onSubmittedWorkDone").mockImplementation(() => new Promise<void>((resolve) => {
@@ -194,6 +255,13 @@ function resolveRawAndFinalizeFailures(popResolvers: ((error: GPUError | null) =
   for (const resolve of popResolvers.slice(1)) resolve({ message } as GPUError);
 }
 
+function deferredValidationScopes(device: GPUDevice): ((error: GPUError | null) => void)[] {
+  const pending: ((error: GPUError | null) => void)[] = [];
+  device.pushErrorScope = vi.fn();
+  device.popErrorScope = vi.fn(() => new Promise<GPUError | null>((resolve) => pending.push(resolve)));
+  return pending;
+}
+
 function rawClaimedDrawWithDeferredScopes(gpu: Awaited<ReturnType<typeof init>>, label: string) {
   const popResolvers: ((error: GPUError | null) => void)[] = [];
   const gpuDevice = gpu.device.gpu as GPUDevice & {
@@ -203,8 +271,8 @@ function rawClaimedDrawWithDeferredScopes(gpu: Awaited<ReturnType<typeof init>>,
   gpuDevice.pushErrorScope = vi.fn();
   gpuDevice.popErrorScope = vi.fn(() => new Promise<GPUError | null>((resolve) => popResolvers.push(resolve)));
 
-  const drawable = draw(gpu, { shader: `${RAW_GROUP_SHADER}
-// ${label}`, label, set: { globals: { tint: 1 } } });
+  const drawable = draw(gpu, { shader: prepareShader(`${RAW_GROUP_SHADER}
+// ${label}`), label, set: { globals: { tint: 1 } } });
   const rawBuffer = gpu.device.gpu.createBuffer({ size: 4, usage: 64 });
   const rawLayout = gpu.device.gpu.createBindGroupLayout({
     label: `${label}.raw-static-layout`,

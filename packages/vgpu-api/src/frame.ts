@@ -10,7 +10,7 @@ import type { Draw, DrawCallOptions } from "./draw.ts";
 import type { Effect } from "./effect.ts";
 import type { Target } from "./target.ts";
 import { assertDeviceUsable } from "./lifecycle.ts";
-import { claimedGroupNativeValidationError, frameAlreadySubmittedError, frameCanceledError, framePassActiveError, frameReentrantError, passClearDepthInvalidError, passClearStencilInvalidError, passDepthReadOnlyError, passDepthReadOnlyMsaaError, passPreserveClearDepthError, passPreserveClearStencilError, passPreserveMsaaError, passScissorInvalidError, passViewportInvalidError, queryNestedError, queryNoVisibilityError, surfaceNotInFrameError, targetRequiredError, timerInvalidError, VGPUError, visibilityInvalidError } from "./errors.ts";
+import { asyncFrameCallbackError, claimedGroupNativeValidationError, frameAlreadySubmittedError, frameCanceledError, framePassActiveError, frameReentrantError, passClearDepthInvalidError, passClearStencilInvalidError, passDepthReadOnlyError, passDepthReadOnlyMsaaError, passPreserveClearDepthError, passPreserveClearStencilError, passPreserveMsaaError, passScissorInvalidError, passViewportInvalidError, queryNestedError, queryNoVisibilityError, surfaceNotInFrameError, targetRequiredError, timerInvalidError, VGPUError, visibilityInvalidError } from "./errors.ts";
 import { enterFrame, isSurface, isSurfaceResizeCallbackActive, leaveFrame } from "./surface.ts";
 import { BUILT_IN_CLEAR_COLOR, hasStencilAspect, isTarget, type ClearColor } from "./target-utils.ts";
 import type { TimerSpan } from "./timer.ts";
@@ -20,31 +20,41 @@ import { frameState } from "./frame-state.ts";
 import { liveKernel } from "./live-kernel.ts";
 import { serviceToken, type Gpu, type Kernel } from "./kernel.ts";
 
+type IsAny<T> = 0 extends (1 & T) ? true : false;
+type SyncFrameCallback<R> = ((frame: Frame) => R)
+  & (IsAny<R> extends true
+    ? unknown
+    : [Extract<R, PromiseLike<unknown>>] extends [never] ? unknown : never);
+
 /**
  * Opens a frame on `gpu`: advances the frame clock, runs `cb` against a fresh command encoder and
- * submits it when the callback returns. If the callback throws, the frame is canceled instead —
- * nothing it encoded reaches the queue — and the error is rethrown unchanged; a callback that
- * already submitted or canceled the frame is left as it is. Only the command buffer is covered,
- * not the clock tick or CPU-side state. `frame.submit()` in your own `catch` keeps partial work.
+ * submits it when the callback returns a synchronous result. If the callback throws or returns a
+ * thenable, an open frame is canceled instead — nothing it encoded reaches the queue — and the
+ * error is thrown; a callback that already submitted or canceled the frame is left as it is. Only
+ * the command buffer is covered, not the clock tick or CPU-side state. `frame.submit()` in your own
+ * `catch` keeps partial work.
  *
  * Without a callback the frame is yours: encode passes at your own pace and finish it with
  * `frame.submit()` or `frame.cancel()` — an unfinished frame holds every retain its passes took.
  * Frames are not reentrant: opening one from inside another (or from a surface resize callback)
  * throws `VGPU-FRAME-REENTRANT`.
  */
-export function frame(gpu: Gpu, cb?: (frame: Frame) => void): Frame {
+export function frame(gpu: Gpu): Frame;
+export function frame<R>(gpu: Gpu, cb: SyncFrameCallback<R> | undefined): Frame;
+export function frame<R>(gpu: Gpu, cb?: SyncFrameCallback<R>): Frame {
   return frameRunner(liveKernel(gpu, "frame")).frame(cb);
 }
 
 /**
  * Runs `cb` once per animation frame until the returned handle is stopped. Each tick follows the
- * `frame(gpu, cb)` rule: submit on return, cancel on throw. A throwing tick also stops the loop,
- * since its error escapes the animation-frame callback and no further tick would run.
+ * `frame(gpu, cb)` rule: submit on a synchronous return, cancel an open frame on throw or thenable
+ * result. A failing tick also stops the loop, since its error escapes the animation-frame callback
+ * and no further tick would run.
  *
  * The loop belongs to the gpu's `scheduler` phase, so `gpu.dispose()` stops it before anything it
  * could encode against is torn down; a loop that stops on its own drops that registration.
  */
-export function frameLoop(gpu: Gpu, cb: FrameLoopCallback, opts: FrameLoopOptions = {}): FrameLoopHandle {
+export function frameLoop<R>(gpu: Gpu, cb: SyncFrameCallback<R>, opts: FrameLoopOptions = {}): FrameLoopHandle {
   return frameRunner(liveKernel(gpu, "frameLoop")).loop(cb, opts);
 }
 
@@ -68,7 +78,12 @@ function frameRunner(kernel: Kernel): FrameRunner {
         return frame;
       },
       () => state.tick(),
-      (handle) => self.own("scheduler", () => handle.stop()),
+      (handle) => {
+        const releaseScheduler = self.own("scheduler", () => handle.stop());
+        const releaseLoss = self.stopOnLoss(() => handle.stop());
+        return () => { releaseScheduler(); releaseLoss(); };
+      },
+      (where) => assertDeviceUsable(self.device, where),
     );
   });
 }
@@ -289,6 +304,7 @@ export class Frame {
       if (isSurface(resolvedTarget)) {
         resolvedTarget.attachFrame(this);
         this.#owners.add(resolvedTarget);
+        attached.push(resolvedTarget);
       }
       if (viewport) encoder.setViewport(viewport.x, viewport.y, viewport.width, viewport.height, viewport.minDepth, viewport.maxDepth);
       if (scissor) encoder.setScissorRect(scissor[0], scissor[1], scissor[2], scissor[3]);
@@ -625,10 +641,10 @@ function previewValue(value: unknown): string {
   return String(value);
 }
 
-/** True for the "the device this frame belongs to is gone" errors raised by the liveness guards. */
-function isDeviceGoneError(error: unknown): boolean {
-  const code = (error as VGPUError | undefined)?.code;
-  return code === "VGPU-DEVICE-DISPOSED" || code === "VGPU-DEVICE-LOST";
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return value !== null
+    && (typeof value === "object" || typeof value === "function")
+    && typeof (value as { readonly then?: unknown }).then === "function";
 }
 
 export class FrameRunner {
@@ -638,16 +654,33 @@ export class FrameRunner {
    * returns the untrack function the handle runs when it stops on its own, so `gpu.dispose()` can
    * stop the loops still running without holding on to the ones already stopped.
    */
-  constructor(private readonly createFrame: () => Frame, private readonly advance: () => void, private readonly trackLoop?: (handle: FrameLoopHandle) => () => void) {}
-  frame(cb?: (frame: Frame) => void): Frame {
+  constructor(
+    private readonly createFrame: () => Frame,
+    private readonly advance: () => void,
+    private readonly trackLoop?: (handle: FrameLoopHandle) => () => void,
+    private readonly assertActive?: (where: "frame" | "frameLoop") => void,
+  ) {}
+  frame(): Frame;
+  frame<R>(cb: SyncFrameCallback<R> | undefined): Frame;
+  frame<R>(cb?: SyncFrameCallback<R>): Frame {
+    return this.#runFrame(cb, "frame");
+  }
+  #runFrame<R>(cb: SyncFrameCallback<R> | undefined, where: "frame" | "frameLoop"): Frame {
     if (this.#running || isSurfaceResizeCallbackActive()) throw frameReentrantError();
+    this.assertActive?.(where);
     this.#running = true;
     enterFrame();
     try {
       this.advance();
       const frame = this.createFrame();
       if (cb) {
-        try { cb(frame); }
+        try {
+          const returned = cb(frame);
+          if (isThenable(returned)) {
+            void Promise.resolve(returned).catch(() => undefined);
+            throw asyncFrameCallbackError(where);
+          }
+        }
         catch (error) {
           // Submit-on-success, cancel-on-throw: a throw means the callback never reached a state it
           // meant to present, so the frame's command buffer is dropped whole rather than submitted
@@ -662,13 +695,11 @@ export class FrameRunner {
           }
           throw error;
         }
-        // A callback is allowed to dispose the owning gpu (gpu.dispose() inside a loop tick does
-        // exactly that). dispose() cancels the open frame, so this submit is a no-op; if the device
-        // was lost instead, the frame has nothing left to flush either, so the implicit submit
-        // swallows that one error rather than throwing over the callback's own intent. An explicit
-        // frame.submit() on a dead device still reports it.
-        try { frame.submit(); }
-        catch (error) { if (!isDeviceGoneError(error)) throw error; }
+        // A callback may dispose the owning gpu (including from inside a loop tick). dispose()
+        // cancels the open frame, so this submit is already a no-op. Observed native loss stops
+        // loops before their public notification and is refused by the entry guard above; every
+        // other submit failure, including a user error with a similar shape, must still escape.
+        frame.submit();
       }
       return frame;
     } finally {
@@ -676,7 +707,7 @@ export class FrameRunner {
       this.#running = false;
     }
   }
-  loop(cb: FrameLoopCallback, opts: FrameLoopOptions = {}): FrameLoopHandle {
+  loop<R>(cb: SyncFrameCallback<R>, opts: FrameLoopOptions = {}): FrameLoopHandle {
     let stopped = false;
     const request = globalThis.requestAnimationFrame ?? ((fn: FrameRequestCallback) => setTimeout(() => fn(performance.now()), 16) as unknown as number);
     const cancel = globalThis.cancelAnimationFrame ?? ((id: number) => clearTimeout(id));
@@ -696,7 +727,7 @@ export class FrameRunner {
       if (stopped) return;
       if (shouldRunFrame(timestamp, lastFrameMs, minIntervalMs)) {
         lastFrameMs = timestamp;
-        try { this.frame(cb); }
+        try { this.#runFrame(cb, "frameLoop"); }
         catch (error) {
           // The frame was canceled and the error is about to escape the rAF callback, where no
           // caller can catch it and no next tick would be scheduled anyway. Stop the loop properly

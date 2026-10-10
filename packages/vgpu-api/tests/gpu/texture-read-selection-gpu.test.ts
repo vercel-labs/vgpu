@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { describe, expect, test } from "vitest";
 import { compute, effect, frame, init, target, texture } from "../../src/node.ts";
 
@@ -30,12 +31,12 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("explicit mip/region readb
         const w = Math.max(1, Math.floor(7 / 2 ** mip)); const h = Math.max(1, Math.floor(5 / 2 ** mip));
         const d = kind === "3d" ? Math.max(1, Math.floor(5 / 2 ** mip)) : kind === "2d-array" ? 3 : 1;
         const view = tex.createView({ dimension: kind, baseMipLevel: mip, mipLevelCount: 1 });
-        compute(gpu, `
+        compute(gpu, prepareShader(`
           @group(0) @binding(0) var image: texture_storage_${dimension}<rgba16float, write>;
           @compute @workgroup_size(1) fn main(@builtin(global_invocation_id) id: vec3u) {
             textureStore(image, ${coords}, vec4f(f32(id.x) + ${mip}.5, f32(id.y) - 2.0, f32(id.z) * 7.0, 1.0));
           }
-        `, { set: { image: view } }).dispatch(w, h, d);
+        `), { set: { image: view } }).dispatch(w, h, d);
         const expected: number[] = [];
         for (let z = 0; z < d; z++) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) expected.push(x + mip + .5, y - 2, z * 7, 1);
         expect(await tex.readFloats({ mipLevel: mip, region: "all" })).toEqual(new Float32Array(expected));
@@ -46,12 +47,12 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("explicit mip/region readb
 
         const output = target(gpu, { size: [w, h], format: "rgba32float" });
         const sampleCoords = kind === "3d" ? `vec3i(vec2i(p.xy), ${d - 1})` : kind === "2d-array" ? `vec2i(p.xy), ${d - 1}` : "vec2i(p.xy)";
-        const sample = effect(gpu, `
+        const sample = effect(gpu, prepareShader(`
           @group(0) @binding(0) var image: texture_${dimension}<f32>;
           @fragment fn main(@builtin(position) p: vec4f) -> @location(0) vec4f {
             return textureLoad(image, ${sampleCoords}, ${restricted ? 0 : mip});
           }
-        `, { set: { image: restricted ? view : tex.createView({ dimension: kind }) } });
+        `), { set: { image: restricted ? view : tex.createView({ dimension: kind }) } });
         frame(gpu, f => f.pass({ target: output }, p => p.draw(sample)));
         expect((await gpu.device.gpu.popErrorScope())?.message).toBeUndefined();
         gpu.device.gpu.pushErrorScope("validation");

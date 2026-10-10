@@ -16,8 +16,8 @@ vi.mock("vgpu", () => ({
     gpu.makeSurface(canvas, options),
 }));
 
-vi.mock("vgpu/scene", () => ({
-  perspectiveCamera: vi.fn(() => ({ viewProjection: new Float32Array(16) })),
+vi.mock("./camera", () => ({
+  cameraView: vi.fn(() => ({ viewProjection: new Float32Array(16) })),
 }));
 
 vi.mock("./scene", () => ({

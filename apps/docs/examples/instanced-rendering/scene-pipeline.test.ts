@@ -8,7 +8,7 @@ const api = vi.hoisted(() => ({
   effect: vi.fn(),
   geometry: vi.fn(),
   sampler: vi.fn(),
-  perspectiveCamera: vi.fn(),
+  cameraMatrices: vi.fn(),
 }));
 
 vi.mock("vgpu", () => ({
@@ -18,7 +18,7 @@ vi.mock("vgpu", () => ({
   geometry: api.geometry,
   sampler: api.sampler,
 }));
-vi.mock("vgpu/scene", () => ({ perspectiveCamera: api.perspectiveCamera }));
+vi.mock("./camera", () => ({ cameraMatrices: api.cameraMatrices }));
 
 import {
   createBlit,
@@ -59,7 +59,7 @@ function setup() {
       return recorded;
     }
   );
-  api.perspectiveCamera.mockReturnValue({ viewProjection: matrix });
+  api.cameraMatrices.mockReturnValue({ viewProjection: matrix });
 
   return { bundleDraw, draws, geometries, matrix, recorded };
 }
@@ -206,7 +206,7 @@ test("reuses the recorded bundle every frame and preserves the camera arithmetic
     target: colorTarget,
     clear: [0.008, 0.014, 0.035, 1],
   });
-  expect(api.perspectiveCamera).toHaveBeenNthCalledWith(1, {
+  expect(api.cameraMatrices).toHaveBeenNthCalledWith(1, {
     fov: 42,
     aspect: 2,
     near: 0.1,

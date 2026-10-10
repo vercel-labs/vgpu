@@ -1,0 +1,11 @@
+{
+  "extends": "../../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": ["../../src/scene/instances.ts", "../../src/scene/instance-protocol.ts", "instances-types.ts"]
+}

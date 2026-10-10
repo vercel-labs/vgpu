@@ -4,6 +4,7 @@ import type { EntryPointInfo, OverrideInfo } from "@vgpu/wgsl/reflect-source";
 import type { Target, CompileTarget, TargetSignature } from "./target.ts";
 import { isTarget } from "./target-utils.ts";
 import { compileDisposedError, compileFailedError, compileSignatureInvalidError, constantsInvalidError, entryInvalidError, pipelineLayoutGapError, type VGPUError } from "./errors.ts";
+import { targetSignatureOf } from "./draw-protocols.ts";
 
 export interface ErrorCtx {
   readonly where: string;
@@ -55,6 +56,14 @@ const shaderModuleIds = new WeakMap<GPUShaderModule, number>();
 const pipelineLayoutIds = new WeakMap<GPUPipelineLayout, number>();
 
 export function normalizeSignature(arg: CompileTarget): TargetSignature {
+  const configured = targetSignatureOf(arg);
+  if (configured) {
+    return {
+      colors: [...configured.colors],
+      depth: configured.depth,
+      sampleCount: configured.sampleCount ?? 1,
+    };
+  }
   if (isTarget(arg)) {
     return {
       colors: arg.colors.map((color) => color.format),
@@ -84,7 +93,8 @@ export function validateTargetSignature(sig: TargetSignature, where: string): vo
 }
 
 export function pipelineKeyOf(parts: {
-  readonly module: GPUShaderModule;
+  readonly vertexModule: GPUShaderModule;
+  readonly fragmentModule: GPUShaderModule;
   readonly pipelineLayout: GPUPipelineLayout;
   readonly vertexBufferLayouts?: readonly GPUVertexBufferLayout[];
   readonly signature: TargetSignature;
@@ -100,17 +110,13 @@ export function pipelineKeyOf(parts: {
   readonly constantsKey?: string;
   readonly entryKey?: string;
 }): string {
-  const base = `${idFor(shaderModuleIds, parts.module, () => nextShaderModuleId++)}|${idFor(pipelineLayoutIds, parts.pipelineLayout, () => nextPipelineLayoutId++)}|${vertexLayoutHash(parts.vertexBufferLayouts ?? [])}|${signatureKeyOf(parts.signature)}`;
-  const primitive = parts.topology || parts.stripIndexFormat ? `${base}|${parts.topology ?? "triangle-list"}|${parts.stripIndexFormat ?? "none"}` : base;
-  const culled = parts.cullMode || parts.frontFace ? `${primitive}|${parts.cullMode ?? "none"}|${parts.frontFace ?? "ccw"}` : primitive;
-  const clipped = parts.unclippedDepth ? `${culled}|unclipped` : culled;
-  const withDepth = parts.depthKey ? `${clipped}|${parts.depthKey}` : clipped;
-  const withStencil = parts.stencilKey ? `${withDepth}|${parts.stencilKey}` : withDepth;
-  const withMultisample = parts.multisampleKey ? `${withStencil}|${parts.multisampleKey}` : withStencil;
-  const withConstants = parts.constantsKey ? `${withMultisample}|${parts.constantsKey}` : withMultisample;
+  let key = `${idFor(shaderModuleIds, parts.vertexModule, () => nextShaderModuleId++)}|${idFor(shaderModuleIds, parts.fragmentModule, () => nextShaderModuleId++)}|${idFor(pipelineLayoutIds, parts.pipelineLayout, () => nextPipelineLayoutId++)}|${vertexLayoutHash(parts.vertexBufferLayouts ?? [])}|${signatureKeyOf(parts.signature)}`;
+  if (parts.topology || parts.stripIndexFormat) key += `|${parts.topology ?? "triangle-list"}|${parts.stripIndexFormat ?? "none"}`;
+  if (parts.cullMode || parts.frontFace) key += `|${parts.cullMode ?? "none"}|${parts.frontFace ?? "ccw"}`;
+  if (parts.unclippedDepth) key += "|unclipped";
   // The shader module is shared per byte-identical source, so entry point names must key variants themselves.
-  const withEntry = parts.entryKey ? `${withConstants}|${parts.entryKey}` : withConstants;
-  return parts.fragmentKey ? `${withEntry}|${parts.fragmentKey}` : withEntry;
+  for (const suffix of [parts.depthKey, parts.stencilKey, parts.multisampleKey, parts.constantsKey, parts.entryKey, parts.fragmentKey]) if (suffix) key += `|${suffix}`;
+  return key;
 }
 
 /** Compute variants use the same immutable module/layout identities as render variants. */

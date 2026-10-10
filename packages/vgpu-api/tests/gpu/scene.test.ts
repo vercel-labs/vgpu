@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -6,7 +7,7 @@ import { describe, expect, test } from "vitest";
 import { resolveShader } from "@vgpu/wgsl/runtime";
 import { init, draw, geometry, target } from "../../src/node.ts";
 import { drawReflection } from "../../src/draw.ts";
-import { box, orbit, perspectiveCamera } from "../../src/scene.ts";
+import { box, composeMatrix, group, perspective, viewMatrices } from "../../src/scene.ts";
 
 const shaderPath = join(dirname(fileURLToPath(import.meta.url)), "scene-lit-cube.wgsl");
 
@@ -38,15 +39,22 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("vgpu/scene Docker GPU acc
 
 async function renderCube(gpu: Awaited<ReturnType<typeof init>>, shader: string, geo: ReturnType<Awaited<ReturnType<typeof init>>["geometry"]>, direction: readonly [number, number, number]): Promise<Uint8Array> {
   const colorTarget = target(gpu, { size: [48, 48], format: "rgba8unorm", depth: true, label: "litCube" });
-  const cube = draw(gpu, { shader, geometry: geo, targets: [colorTarget] });
-  const cam = perspectiveCamera({ fov: 45, aspect: 1, position: [2, 2, 3], target: [0, 0, 0] });
+  const cube = draw(gpu, { shader: prepareShader(shader), geometry: geo, targets: [colorTarget] });
+  const poseNode = group({ position: [2, 2, 3] }).lookAt([0, 0, 0]);
+  const projection = perspective({ fov: 45, near: 0.1, far: 100 }, 1, new Float32Array(16));
+  const matrices = { view: new Float32Array(16), viewProjection: new Float32Array(16) };
+  viewMatrices(
+    { position: new Float32Array(poseNode.worldPosition), quaternion: new Float32Array(poseNode.quaternion) },
+    projection,
+    matrices,
+  );
 
   const camera = bindingName(cube, 0);
   const model = bindingName(cube, 1);
   const light = bindingName(cube, 2);
   cube.set({
-    [camera]: { viewProjection: cam.viewProjection },
-    [model]: { matrix: orbit(0, { radius: 0 }) },
+    [camera]: { viewProjection: matrices.viewProjection },
+    [model]: { matrix: composeMatrix({ position: [0, 0, 0], rotation: [0, 0, 0] }, new Float32Array(16)) },
     [light]: { direction, color: [1, 1, 1], intensity: 1 },
   });
   cube.draw({ target: colorTarget });

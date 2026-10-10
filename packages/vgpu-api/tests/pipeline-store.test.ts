@@ -1,8 +1,11 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
+import type { ShaderSource } from "@vgpu/wgsl";
 import { afterEach, expect, test, vi } from "vitest";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
-import { createMockAdapter, init, draw, target } from "../src/mock.ts";
+import { createMockAdapter, init, draw, effect, target } from "../src/mock.ts";
 import { InternalDraw } from "../src/draw.ts";
 import { createPipelineStore, createShaderModuleCache, pipelineKeyOf, signatureKeyOf } from "../src/pipeline-store.ts";
+import { snapshotShaderSource } from "../src/shader-source.ts";
 
 const WGSL = `
 @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
@@ -29,6 +32,42 @@ struct Params { value: f32 }
 @fragment fn fs_main() -> @location(0) vec4f { return vec4f(1.0); }
 `;
 
+const EFFECT_RED = `
+@fragment fn main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return vec4f(uv, 0.0, 1.0);
+}
+`;
+
+const EFFECT_BLUE = `
+@fragment fn main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return vec4f(0.0, uv, 1.0);
+}
+`;
+
+const AUTHORED_EFFECT = `
+struct VertexOut {
+  @builtin(position) position: vec4f,
+  @location(0) uv: vec2f,
+}
+@vertex fn vs_main(@builtin(vertex_index) vi: u32) -> VertexOut {
+  var out: VertexOut;
+  out.position = vec4f(f32((vi << 1u) & 2u) * 2.0 - 1.0, f32(vi & 2u) * -2.0 + 1.0, 0.0, 1.0);
+  out.uv = vec2f(0.0);
+  return out;
+}
+@fragment fn fs_main(input: VertexOut) -> @location(0) vec4f {
+  return vec4f(input.uv, 0.0, 1.0);
+}
+`;
+
+const MULTI_FRAGMENT_EFFECT = `
+@vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
+  return vec4f(f32((vi << 1u) & 2u) * 2.0 - 1.0, f32(vi & 2u) * -2.0 + 1.0, 0.0, 1.0);
+}
+@fragment fn shade_red() -> @location(0) vec4f { return vec4f(1.0, 0.0, 0.0, 1.0); }
+@fragment fn shade_blue() -> @location(0) vec4f { return vec4f(0.0, 0.0, 1.0, 1.0); }
+`;
+
 const VERTEX_LAYOUT_A: GPUVertexBufferLayout = {
   arrayStride: 12,
   attributes: [{ shaderLocation: 0, offset: 0, format: "float32x3" }],
@@ -44,8 +83,8 @@ afterEach(() => vi.restoreAllMocks());
 test("device store dedupes byte-identical WGSL, layout, and signature across draws", async () => {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [2, 2] });
-  const a = draw(gpu, { shader: WGSL, label: "dedupe-a" });
-  const b = draw(gpu, { shader: WGSL, label: "dedupe-b" });
+  const a = draw(gpu, { shader: prepareShader(WGSL), label: "dedupe-a" });
+  const b = draw(gpu, { shader: prepareShader(WGSL), label: "dedupe-b" });
 
   a.draw(colorTarget);
   b.draw(colorTarget);
@@ -58,11 +97,65 @@ test("device store dedupes byte-identical WGSL, layout, and signature across dra
   gpu.dispose();
 });
 
+test("fragment-only effects share the fixed vertex module while fragment changes separate pipelines", async () => {
+  const gpu = await init();
+  const colorTarget = target(gpu, { size: [2, 2] });
+  const redA = effect(gpu, prepareShader(EFFECT_RED), { label: "red-a" });
+  const blue = effect(gpu, prepareShader(EFFECT_BLUE), { label: "blue" });
+  const redB = effect(gpu, prepareShader(EFFECT_RED), { label: "red-b" });
+
+  redA.draw(colorTarget);
+  blue.draw(colorTarget);
+  redB.draw(colorTarget);
+
+  const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
+  expect(mock.calls.createShaderModule).toBe(3);
+  expect(mock.calls.createRenderPipeline).toBe(2);
+  const [redPipeline, bluePipeline] = mock.createRenderPipelineDescriptors;
+  expect(redPipeline?.vertex.module).toBe(bluePipeline?.vertex.module);
+  expect(redPipeline?.fragment?.module).not.toBe(bluePipeline?.fragment?.module);
+  gpu.dispose();
+});
+
+test("authored-vertex effects retain the single-module descriptor path", async () => {
+  const gpu = await init();
+  const colorTarget = target(gpu, { size: [2, 2] });
+
+  effect(gpu, prepareShader(AUTHORED_EFFECT), { label: "authored" }).draw(colorTarget);
+
+  const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
+  expect(mock.calls.createShaderModule).toBe(1);
+  expect(mock.calls.createRenderPipeline).toBe(1);
+  const descriptor = mock.createRenderPipelineDescriptors[0];
+  expect(descriptor?.vertex.module).toBe(descriptor?.fragment?.module);
+  gpu.dispose();
+});
+
+test("same-module artifacts with reordered valid entries key the selected identities", async () => {
+  const gpu = await init();
+  const colorTarget = target(gpu, { size: [2, 2] });
+  const artifact = prepareShader(MULTI_FRAGMENT_EFFECT);
+  const original = effect(gpu, artifact, { label: "original-entries" });
+  const reordered = effect(gpu, reverseFragmentEntries(artifact), { label: "reordered-entries" });
+
+  original.draw(colorTarget);
+  reordered.draw(colorTarget);
+
+  const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
+  expect(mock.calls.createShaderModule).toBe(1);
+  expect(mock.calls.createRenderPipeline).toBe(2);
+  expect(mock.createRenderPipelineDescriptors.map(descriptor => [descriptor.vertex.entryPoint, descriptor.fragment?.entryPoint])).toEqual([
+    ["vs_main", "shade_red"],
+    ["vs_main", "shade_blue"],
+  ]);
+  gpu.dispose();
+});
+
 test("different vertex buffer layouts do not collide", async () => {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [2, 2] });
-  const a = draw(gpu, { shader: VERTEX_WGSL, label: "layout-a", geometry: { vertexBufferLayouts: [VERTEX_LAYOUT_A] } });
-  const b = draw(gpu, { shader: VERTEX_WGSL, label: "layout-b", geometry: { vertexBufferLayouts: [VERTEX_LAYOUT_B] } });
+  const a = draw(gpu, { shader: prepareShader(VERTEX_WGSL), label: "layout-a", geometry: { vertexBufferLayouts: [VERTEX_LAYOUT_A] } });
+  const b = draw(gpu, { shader: prepareShader(VERTEX_WGSL), label: "layout-b", geometry: { vertexBufferLayouts: [VERTEX_LAYOUT_B] } });
 
   a.draw(colorTarget);
   b.draw(colorTarget);
@@ -77,7 +170,7 @@ test("different vertex buffer layouts do not collide", async () => {
 test("dynamic layout swap changes the pipeline key without clearing the store", async () => {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [2, 2] });
-  const drawable = draw(gpu, { shader: GROUP_WGSL, label: "dynamic-layout" }) as InternalDraw;
+  const drawable = draw(gpu, { shader: prepareShader(GROUP_WGSL), label: "dynamic-layout" }) as InternalDraw;
 
   drawable.pipelineFor(colorTarget);
   drawable.layout(0, { dynamicOffsets: true });
@@ -91,10 +184,10 @@ test("dynamic layout swap changes the pipeline key without clearing the store", 
 test("blend and writeMask participate in shared pipeline cache keys", async () => {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [2, 2] });
-  const a = draw(gpu, { shader: WGSL, label: "blend-a", blend: "alpha" });
-  const b = draw(gpu, { shader: WGSL, label: "blend-b", blend: "additive" });
-  const c = draw(gpu, { shader: WGSL, label: "blend-c", blend: "alpha" });
-  const mask = draw(gpu, { shader: WGSL, label: "mask", writeMask: ["r", "g", "b"] });
+  const a = draw(gpu, { shader: prepareShader(WGSL), label: "blend-a", blend: "alpha" });
+  const b = draw(gpu, { shader: prepareShader(WGSL), label: "blend-b", blend: "additive" });
+  const c = draw(gpu, { shader: prepareShader(WGSL), label: "blend-c", blend: "alpha" });
+  const mask = draw(gpu, { shader: prepareShader(WGSL), label: "mask", writeMask: ["r", "g", "b"] });
 
   a.draw(colorTarget);
   b.draw(colorTarget);
@@ -111,9 +204,9 @@ test("strip geometries that derive stripIndexFormat from indexFormat do not coll
   const gpu = await init();
   const colorTarget = target(gpu, { size: [2, 2] });
   // Neither geometry spells stripIndexFormat out: the descriptor derives it from indexFormat, so the key must too.
-  const a = draw(gpu, { shader: WGSL, label: "strip-uint16", geometry: { topology: "triangle-strip", indexFormat: "uint16" } });
-  const b = draw(gpu, { shader: WGSL, label: "strip-uint32", geometry: { topology: "triangle-strip", indexFormat: "uint32" } });
-  const c = draw(gpu, { shader: WGSL, label: "strip-uint16-again", geometry: { topology: "triangle-strip", indexFormat: "uint16" } });
+  const a = draw(gpu, { shader: prepareShader(WGSL), label: "strip-uint16", geometry: { topology: "triangle-strip", indexFormat: "uint16" } });
+  const b = draw(gpu, { shader: prepareShader(WGSL), label: "strip-uint32", geometry: { topology: "triangle-strip", indexFormat: "uint32" } });
+  const c = draw(gpu, { shader: prepareShader(WGSL), label: "strip-uint16-again", geometry: { topology: "triangle-strip", indexFormat: "uint16" } });
 
   a.draw(colorTarget);
   b.draw(colorTarget);
@@ -130,8 +223,8 @@ test("strip geometries that derive stripIndexFormat from indexFormat do not coll
 test("an explicit stripIndexFormat and the derived one share a pipeline", async () => {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [2, 2] });
-  const derived = draw(gpu, { shader: WGSL, label: "derived", geometry: { topology: "line-strip", indexFormat: "uint16" } });
-  const explicitFormat = draw(gpu, { shader: WGSL, label: "explicit", geometry: { topology: "line-strip", stripIndexFormat: "uint16", indexFormat: "uint16" } });
+  const derived = draw(gpu, { shader: prepareShader(WGSL), label: "derived", geometry: { topology: "line-strip", indexFormat: "uint16" } });
+  const explicitFormat = draw(gpu, { shader: prepareShader(WGSL), label: "explicit", geometry: { topology: "line-strip", stripIndexFormat: "uint16", indexFormat: "uint16" } });
 
   derived.draw(colorTarget);
   explicitFormat.draw(colorTarget);
@@ -144,10 +237,10 @@ test("an explicit stripIndexFormat and the derived one share a pipeline", async 
 test("cull and frontFace participate in shared pipeline cache keys", async () => {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [2, 2] });
-  const a = draw(gpu, { shader: WGSL, label: "cull-a", cull: "back" });
-  const b = draw(gpu, { shader: WGSL, label: "cull-b", cull: "front" });
-  const c = draw(gpu, { shader: WGSL, label: "cull-c", cull: "back" });
-  const face = draw(gpu, { shader: WGSL, label: "face", cull: "back", frontFace: "cw" });
+  const a = draw(gpu, { shader: prepareShader(WGSL), label: "cull-a", cull: "back" });
+  const b = draw(gpu, { shader: prepareShader(WGSL), label: "cull-b", cull: "front" });
+  const c = draw(gpu, { shader: prepareShader(WGSL), label: "cull-c", cull: "back" });
+  const face = draw(gpu, { shader: prepareShader(WGSL), label: "face", cull: "back", frontFace: "cw" });
 
   a.draw(colorTarget);
   b.draw(colorTarget);
@@ -163,10 +256,10 @@ test("cull and frontFace participate in shared pipeline cache keys", async () =>
 test("depth participates in shared pipeline cache keys", async () => {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [2, 2], depth: true });
-  const a = draw(gpu, { shader: WGSL, label: "depth-a", depth: { compare: "greater" } });
-  const b = draw(gpu, { shader: WGSL, label: "depth-b", depth: false });
-  const c = draw(gpu, { shader: WGSL, label: "depth-c", depth: { compare: "greater" } });
-  const d = draw(gpu, { shader: WGSL, label: "depth-d", depth: { compare: "greater", write: false } });
+  const a = draw(gpu, { shader: prepareShader(WGSL), label: "depth-a", depth: { compare: "greater" } });
+  const b = draw(gpu, { shader: prepareShader(WGSL), label: "depth-b", depth: false });
+  const c = draw(gpu, { shader: prepareShader(WGSL), label: "depth-c", depth: { compare: "greater" } });
+  const d = draw(gpu, { shader: prepareShader(WGSL), label: "depth-d", depth: { compare: "greater", write: false } });
 
   a.draw(colorTarget);
   b.draw(colorTarget);
@@ -182,12 +275,12 @@ test("depth participates in shared pipeline cache keys", async () => {
 test("stencil participates in shared pipeline cache keys; ref stays out", async () => {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [2, 2], depth: "depth24plus-stencil8" });
-  const a = draw(gpu, { shader: WGSL, label: "st-a", stencil: { front: { compare: "equal", pass: "replace" } } });
-  const b = draw(gpu, { shader: WGSL, label: "st-b", stencil: { front: { compare: "equal", pass: "replace" }, writeMask: 0xFF } });
-  const c = draw(gpu, { shader: WGSL, label: "st-c", stencil: { front: { compare: "equal", pass: "replace" } } });
-  const refOnlyDiff = draw(gpu, { shader: WGSL, label: "st-ref", stencil: { front: { compare: "equal", pass: "replace" }, ref: 7 } });
-  const plain = draw(gpu, { shader: WGSL, label: "st-plain" });
-  const empty = draw(gpu, { shader: WGSL, label: "st-empty", stencil: {} });
+  const a = draw(gpu, { shader: prepareShader(WGSL), label: "st-a", stencil: { front: { compare: "equal", pass: "replace" } } });
+  const b = draw(gpu, { shader: prepareShader(WGSL), label: "st-b", stencil: { front: { compare: "equal", pass: "replace" }, writeMask: 0xFF } });
+  const c = draw(gpu, { shader: prepareShader(WGSL), label: "st-c", stencil: { front: { compare: "equal", pass: "replace" } } });
+  const refOnlyDiff = draw(gpu, { shader: prepareShader(WGSL), label: "st-ref", stencil: { front: { compare: "equal", pass: "replace" }, ref: 7 } });
+  const plain = draw(gpu, { shader: prepareShader(WGSL), label: "st-plain" });
+  const empty = draw(gpu, { shader: prepareShader(WGSL), label: "st-empty", stencil: {} });
 
   a.draw(colorTarget);
   b.draw(colorTarget);
@@ -206,11 +299,11 @@ test("stencil participates in shared pipeline cache keys; ref stays out", async 
 test("multisample participates in shared pipeline cache keys", async () => {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [2, 2], msaa: true });
-  const a = draw(gpu, { shader: WGSL, label: "ms-a", multisample: { alphaToCoverage: true } });
-  const b = draw(gpu, { shader: WGSL, label: "ms-b", multisample: { mask: 0b0101 } });
-  const c = draw(gpu, { shader: WGSL, label: "ms-c", multisample: { alphaToCoverage: true } });
-  const plain = draw(gpu, { shader: WGSL, label: "ms-plain" });
-  const empty = draw(gpu, { shader: WGSL, label: "ms-empty", multisample: {} });
+  const a = draw(gpu, { shader: prepareShader(WGSL), label: "ms-a", multisample: { alphaToCoverage: true } });
+  const b = draw(gpu, { shader: prepareShader(WGSL), label: "ms-b", multisample: { mask: 0b0101 } });
+  const c = draw(gpu, { shader: prepareShader(WGSL), label: "ms-c", multisample: { alphaToCoverage: true } });
+  const plain = draw(gpu, { shader: prepareShader(WGSL), label: "ms-plain" });
+  const empty = draw(gpu, { shader: prepareShader(WGSL), label: "ms-empty", multisample: {} });
 
   a.draw(colorTarget);
   b.draw(colorTarget);
@@ -228,10 +321,10 @@ test("multisample participates in shared pipeline cache keys", async () => {
 test("unclippedDepth participates in shared pipeline cache keys", async () => {
   const gpu = await init({ adapter: createMockAdapter({ features: ["depth-clip-control"] }), requiredFeatures: ["depth-clip-control"] });
   const colorTarget = target(gpu, { size: [2, 2] });
-  const a = draw(gpu, { shader: WGSL, label: "unclipped-a", unclippedDepth: true });
-  const b = draw(gpu, { shader: WGSL, label: "unclipped-b" });
-  const c = draw(gpu, { shader: WGSL, label: "unclipped-c", unclippedDepth: true });
-  const explicitFalse = draw(gpu, { shader: WGSL, label: "unclipped-false", unclippedDepth: false });
+  const a = draw(gpu, { shader: prepareShader(WGSL), label: "unclipped-a", unclippedDepth: true });
+  const b = draw(gpu, { shader: prepareShader(WGSL), label: "unclipped-b" });
+  const c = draw(gpu, { shader: prepareShader(WGSL), label: "unclipped-c", unclippedDepth: true });
+  const explicitFalse = draw(gpu, { shader: prepareShader(WGSL), label: "unclipped-false", unclippedDepth: false });
 
   a.draw(colorTarget);
   b.draw(colorTarget);
@@ -251,11 +344,11 @@ test("constants participate in shared pipeline cache keys", async () => {
   const OVERRIDE_WGSL = `
 override SCALE: f32 = 1.0;
 ${WGSL}`;
-  const a = draw(gpu, { shader: OVERRIDE_WGSL, label: "cn-a", constants: { SCALE: 2 } });
-  const b = draw(gpu, { shader: OVERRIDE_WGSL, label: "cn-b", constants: { SCALE: 3 } });
-  const c = draw(gpu, { shader: OVERRIDE_WGSL, label: "cn-c", constants: { SCALE: 2 } });
-  const plain = draw(gpu, { shader: OVERRIDE_WGSL, label: "cn-plain" });
-  const empty = draw(gpu, { shader: OVERRIDE_WGSL, label: "cn-empty", constants: {} });
+  const a = draw(gpu, { shader: prepareShader(OVERRIDE_WGSL), label: "cn-a", constants: { SCALE: 2 } });
+  const b = draw(gpu, { shader: prepareShader(OVERRIDE_WGSL), label: "cn-b", constants: { SCALE: 3 } });
+  const c = draw(gpu, { shader: prepareShader(OVERRIDE_WGSL), label: "cn-c", constants: { SCALE: 2 } });
+  const plain = draw(gpu, { shader: prepareShader(OVERRIDE_WGSL), label: "cn-plain" });
+  const empty = draw(gpu, { shader: prepareShader(OVERRIDE_WGSL), label: "cn-empty", constants: {} });
 
   a.draw(colorTarget);
   b.draw(colorTarget);
@@ -275,10 +368,10 @@ test("entry points participate in shared pipeline cache keys", async () => {
   const colorTarget = target(gpu, { size: [2, 2] });
   const TWO_FRAGMENT_WGSL = `${WGSL}
 @fragment fn fs_alt() -> @location(0) vec4f { return vec4f(0.5); }`;
-  const a = draw(gpu, { shader: TWO_FRAGMENT_WGSL, label: "en-a", entry: { fragment: "fs_alt" } });
-  const b = draw(gpu, { shader: TWO_FRAGMENT_WGSL, label: "en-b", entry: { fragment: "fs_alt" } });
-  const plain = draw(gpu, { shader: TWO_FRAGMENT_WGSL, label: "en-plain" });
-  const explicitDefaults = draw(gpu, { shader: TWO_FRAGMENT_WGSL, label: "en-defaults", entry: { vertex: "vs_main", fragment: "fs_main" } });
+  const a = draw(gpu, { shader: prepareShader(TWO_FRAGMENT_WGSL), label: "en-a", entry: { fragment: "fs_alt" } });
+  const b = draw(gpu, { shader: prepareShader(TWO_FRAGMENT_WGSL), label: "en-b", entry: { fragment: "fs_alt" } });
+  const plain = draw(gpu, { shader: prepareShader(TWO_FRAGMENT_WGSL), label: "en-plain" });
+  const explicitDefaults = draw(gpu, { shader: prepareShader(TWO_FRAGMENT_WGSL), label: "en-defaults", entry: { vertex: "vs_main", fragment: "fs_main" } });
 
   a.draw(colorTarget);
   b.draw(colorTarget);
@@ -295,7 +388,7 @@ test("entry points participate in shared pipeline cache keys", async () => {
 test("pipelineKeyOf appends fragmentKey only when present", () => {
   const module = {} as GPUShaderModule;
   const pipelineLayout = {} as GPUPipelineLayout;
-  const parts = { module, pipelineLayout, signature: { colors: ["rgba8unorm"] as const } };
+  const parts = { vertexModule: module, fragmentModule: module, pipelineLayout, signature: { colors: ["rgba8unorm"] as const } };
   const base = pipelineKeyOf(parts);
 
   expect(pipelineKeyOf({ ...parts, fragmentKey: undefined })).toBe(base);
@@ -304,12 +397,26 @@ test("pipelineKeyOf appends fragmentKey only when present", () => {
   expect(pipelineKeyOf({ ...parts, entryKey: "en~vs_main~fs_alt" })).toBe(`${base}|en~vs_main~fs_alt`);
 });
 
+test("pipelineKeyOf keeps ordered vertex and fragment module identities independent", () => {
+  const vertexA = {} as GPUShaderModule;
+  const vertexB = {} as GPUShaderModule;
+  const fragmentA = {} as GPUShaderModule;
+  const fragmentB = {} as GPUShaderModule;
+  const pipelineLayout = {} as GPUPipelineLayout;
+  const common = { pipelineLayout, signature: { colors: ["rgba8unorm"] as const } };
+  const base = pipelineKeyOf({ ...common, vertexModule: vertexA, fragmentModule: fragmentA });
+
+  expect(pipelineKeyOf({ ...common, vertexModule: vertexB, fragmentModule: fragmentA })).not.toBe(base);
+  expect(pipelineKeyOf({ ...common, vertexModule: vertexA, fragmentModule: fragmentB })).not.toBe(base);
+  expect(pipelineKeyOf({ ...common, vertexModule: fragmentA, fragmentModule: vertexA })).not.toBe(base);
+});
+
 test("sync pipeline creation wins a pending async create and suppresses late native rejection", async () => {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [2, 2] });
   const store = createPipelineStore(gpu.device);
   const modules = createShaderModuleCache(gpu.device);
-  const drawable = new InternalDraw(gpu.device, WGSL, { shader: WGSL, label: "sync-wins" }, undefined, undefined, store, modules);
+  const drawable = new InternalDraw(gpu.device, snapshotShaderSource(prepareShader(WGSL)), { label: "sync-wins" }, undefined, undefined, store, modules);
   const lateNativeError = new Error("late native compile failed");
   let rejectNative!: (error: unknown) => void;
   vi.spyOn(gpu.device.gpu, "createRenderPipelineAsync").mockImplementation((desc: GPURenderPipelineDescriptor) => {
@@ -345,7 +452,7 @@ test("disposing the store rejects pending async compiles with VGPU-COMPILE-DISPO
   const colorTarget = target(gpu, { size: [2, 2] });
   const store = createPipelineStore(gpu.device);
   const modules = createShaderModuleCache(gpu.device);
-  const drawable = new InternalDraw(gpu.device, WGSL, { shader: WGSL, label: "dispose-pending" }, undefined, undefined, store, modules);
+  const drawable = new InternalDraw(gpu.device, snapshotShaderSource(prepareShader(WGSL)), { label: "dispose-pending" }, undefined, undefined, store, modules);
   vi.spyOn(gpu.device.gpu, "createRenderPipelineAsync").mockImplementation(() => new Promise<GPURenderPipeline>(() => undefined));
 
   const pending = drawable.pipelineForAsync(colorTarget);
@@ -363,3 +470,11 @@ test("signatureKeyOf matches the pre-store draw key", async () => {
     .toBe(`${colorTarget.colors.map((color) => color.format).join(",")}:${colorTarget.depth?.format ?? "none"}:${colorTarget.sampleCount}`);
   gpu.dispose();
 });
+
+function reverseFragmentEntries(shader: ShaderSource): ShaderSource {
+  const clone = structuredClone(shader) as unknown as { reflection: { entryPoints: { name: string; mangledName: string; stage: string }[] } };
+  const vertex = clone.reflection.entryPoints.filter(entry => entry.stage === "vertex");
+  const fragments = clone.reflection.entryPoints.filter(entry => entry.stage === "fragment").reverse();
+  clone.reflection.entryPoints = [...vertex, ...fragments];
+  return clone as unknown as ShaderSource;
+}

@@ -1,0 +1,18 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "baseUrl": "../../..",
+    "paths": {
+      "vgpu": ["packages/vgpu-api/src/index.ts"],
+      "vgpu/node": ["packages/vgpu-api/src/node.ts"],
+      "vgpu/mock": ["packages/vgpu-api/src/mock.ts"],
+      "vgpu/core": ["packages/vgpu-api/src/core.ts"]
+    }
+  },
+  "include": ["../src/**/*.ts", "device-loss-types.ts", "gpu/device-loss-gpu.test.ts"]
+}

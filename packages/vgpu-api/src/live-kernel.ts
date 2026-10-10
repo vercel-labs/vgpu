@@ -11,6 +11,7 @@
  */
 import { VGPUError } from "./errors.ts";
 import { kernelOf, type Gpu, type Kernel, type Release } from "./kernel.ts";
+import { assertDeviceUsable } from "./lifecycle.ts";
 import type { QueryHostOptions } from "./query-ring.ts";
 
 /**
@@ -22,6 +23,7 @@ import type { QueryHostOptions } from "./query-ring.ts";
 export function liveKernel(gpu: Gpu, where: string): Kernel {
   const kernel = kernelOf(gpu);
   if (kernel.disposed) throw gpuDisposedError(where);
+  assertDeviceUsable(kernel.device, where);
   return kernel;
 }
 

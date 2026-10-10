@@ -5,10 +5,12 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { resolveShader } from "@vgpu/wgsl/runtime";
 import { PNG } from "pngjs";
 import { draw, frame, geometry, init, target } from "vgpu/node";
-import { perspectiveCamera } from "vgpu/scene";
+
+import { cameraMatrices } from "../camera";
 
 type DebugMode = "normal" | "diffuse-environment" | "environment";
 
@@ -60,13 +62,13 @@ try {
     validate: false,
   });
   const drawable = draw(gpu, {
-    shader: shader.wgsl,
+    shader: prepareShader(shader, DEBUG_SHADER_PATH),
     geometry: mesh.geometry,
     instances: 4,
     cull: "back",
     label: "hero-fractal-vector-debug",
   });
-  const camera = perspectiveCamera({
+  const camera = cameraMatrices({
     fov: CAMERA_FOV,
     aspect: options.size[0] / options.size[1],
     near: 0.05,
@@ -107,7 +109,11 @@ try {
     await gpu.gpu.queue.onSubmittedWorkDone();
     await gpu.settled();
     const path = join(options.outDir, `${mode}.png`);
-    await writePng(path, options.size, await output.read());
+    await writePng(
+      path,
+      options.size,
+      await output.color.read({ mipLevel: 0, region: "all" }),
+    );
     console.log(path);
   }
 

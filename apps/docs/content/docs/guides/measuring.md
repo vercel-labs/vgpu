@@ -18,7 +18,7 @@ If the first visible frame stutters, pre-warm target signatures with `compile()`
 
 ```text
 const hdr = target(gpu, { size: [256, 256], format: "rgba16float", depth: true, msaa: true });
-const draw = draw(gpu, { shader: WGSL, mesh });
+const draw = draw(gpu, { shader: sceneShader, mesh }); // sceneShader: a prepared .wgsl import
 await draw.compile(hdr);
 ```
 

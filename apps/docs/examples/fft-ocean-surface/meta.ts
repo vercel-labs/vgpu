@@ -19,6 +19,8 @@ export const meta = {
   files: [
     "index.tsx",
     "renderer.ts",
+    "camera.ts",
+    "orbit-input.ts",
     "scene.ts",
     "params.wgsl",
     "fft-core.wgsl",

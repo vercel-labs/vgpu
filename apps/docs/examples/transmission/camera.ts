@@ -1,4 +1,4 @@
-import { perspectiveCamera } from "vgpu/scene";
+import { group, perspective, viewMatrices, type Mat4 } from "vgpu/scene";
 
 const FOV = 42;
 const TARGET = [0, 0.05, 0] as const;
@@ -11,9 +11,7 @@ export const DEFAULT_YAW = CUBE_YAW + 0.63;
 export const DEFAULT_PITCH = 0.42;
 
 export interface CameraView {
-  readonly viewProjection: ReturnType<
-    typeof perspectiveCamera
-  >["viewProjection"];
+  readonly viewProjection: Mat4;
   readonly position: readonly [number, number, number];
   readonly forward: readonly [number, number, number];
   readonly right: readonly [number, number, number];
@@ -43,16 +41,26 @@ export function cameraView(
   ]);
   const right = normalize(cross(forward, [0, 1, 0]));
   const up = cross(right, forward);
-  const camera = perspectiveCamera({
-    fov: FOV,
+  const poseNode = group({ position }).lookAt(TARGET);
+  const projection = perspective(
+    { fov: FOV, near: 0.1, far: 200 },
     aspect,
-    near: 0.1,
-    far: 200,
-    position,
-    target: [...TARGET],
-  });
+    new Float32Array(16),
+  );
+  const matrices = {
+    view: new Float32Array(16),
+    viewProjection: new Float32Array(16),
+  };
+  viewMatrices(
+    {
+      position: new Float32Array(position),
+      quaternion: new Float32Array(poseNode.quaternion),
+    },
+    projection,
+    matrices,
+  );
   return {
-    viewProjection: camera.viewProjection,
+    viewProjection: matrices.viewProjection,
     position,
     forward,
     right,

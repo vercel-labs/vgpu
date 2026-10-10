@@ -28,6 +28,7 @@ test("exported wgsl-std snippets stay pure declaration modules", async () => {
     "src/noise/perlin/index.wgsl",
     "src/noise/simplex/index.wgsl",
     "src/sampling/index.wgsl",
+    "src/scene/index.wgsl",
   ]);
 
   for (const file of files) {

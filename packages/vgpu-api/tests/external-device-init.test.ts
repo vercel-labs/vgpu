@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { afterEach, expect, test, vi } from "vitest";
 import { createMockGPUDevice, getMockGPUDeviceInstrumentation } from "@vgpu/core";
 import { clock, compute, draw, effect, frame, init as initBrowser, initFromDevice, uniforms } from "../src/index.ts";
@@ -31,7 +32,7 @@ test("browser external init preserves exact identity and bypasses adapter resolu
   expect(requestAdapter).not.toHaveBeenCalled();
   gpu.dispose(); gpu.dispose();
   // A factory is refused at the kernel boundary: the gpu, not the device, is what went away.
-  expect(() => compute(gpu, "@compute @workgroup_size(1) fn main() {}")).toThrow(expect.objectContaining({ code: "VGPU-GPU-DISPOSED" }));
+  expect(() => compute(gpu, prepareShader("@compute @workgroup_size(1) fn main() {}"))).toThrow(expect.objectContaining({ code: "VGPU-GPU-DISPOSED" }));
   expect(device.destroy).not.toHaveBeenCalled();
 });
 
@@ -77,12 +78,12 @@ test("disposing a wrapped buffer evicts Ring-1 cache identity and rejects later 
   const gpu = await initFromDevice(device);
   const raw = device.createBuffer({ size: 16, usage: 128 | 4 | 8 });
   const first = gpu.device.wrapBuffer(raw);
-  const pipeline = compute(gpu, `@group(0) @binding(0) var<storage, read> source: array<u32>; @compute @workgroup_size(1) fn main() { let value = source[0]; }`);
+  const pipeline = compute(gpu, prepareShader(`@group(0) @binding(0) var<storage, read> source: array<u32>; @compute @workgroup_size(1) fn main() { let value = source[0]; }`));
   const instrumentation = getMockGPUDeviceInstrumentation(device);
   pipeline.set({ source: first }); pipeline.dispatch(1);
   expect(instrumentation.calls.createBindGroup).toBe(1);
   first.dispose();
-  expect(() => pipeline.set({ source: first })).toThrow(expect.objectContaining({ code: "VGPU-BUFFER-DISPOSED" }));
+  expect(() => pipeline.set({ source: first })).toThrow(expect.objectContaining({ code: "VGPU-R1-BINDING-DESTROYED" }));
   const second = gpu.device.wrapBuffer(raw);
   pipeline.set({ source: second }); pipeline.dispatch(1);
   expect(instrumentation.calls.createBindGroup).toBe(2);
@@ -92,13 +93,13 @@ test("disposing a wrapped buffer evicts Ring-1 cache identity and rejects later 
 test("retained compute and uniform-like bindings respect logical disposal", async () => {
   const device = externalDevice();
   const gpu = await initFromDevice(device);
-  const dispatch = compute(gpu, "@compute @workgroup_size(1) fn main() {}");
+  const dispatch = compute(gpu, prepareShader("@compute @workgroup_size(1) fn main() {}"));
   const raw = device.createBuffer({ size: 16, usage: 64 | 8 });
   const wrapped = gpu.device.wrapBuffer(raw);
   const uniformLike = { gpu: wrapped.gpu, size: 16, buffer: wrapped };
-  const set = compute(gpu, "struct U { value: u32 }; @group(0) @binding(0) var<uniform> u: U; @compute @workgroup_size(1) fn main() { let x = u.value; }");
+  const set = compute(gpu, prepareShader("struct U { value: u32 }; @group(0) @binding(0) var<uniform> u: U; @compute @workgroup_size(1) fn main() { let x = u.value; }"));
   wrapped.dispose();
-  expect(() => set.set({ u: uniformLike })).toThrow(expect.objectContaining({ code: "VGPU-BUFFER-DISPOSED" }));
+  expect(() => set.set({ u: uniformLike })).toThrow(expect.objectContaining({ code: "VGPU-R1-BINDING-DESTROYED" }));
   gpu.dispose();
   // Retained object, already built: our own guard reports the device it can no longer reach.
   expect(() => dispatch.dispatch(1)).toThrow(expect.objectContaining({ code: "VGPU-DEVICE-DISPOSED" }));
@@ -106,8 +107,8 @@ test("retained compute and uniform-like bindings respect logical disposal", asyn
 
 test("retained draw and effect operations respect logical disposal", async () => {
   const gpu = await initFromDevice(externalDevice());
-  const fullscreen = effect(gpu, "@fragment fn fs() -> @location(0) vec4f { return vec4f(1); }");
-  const triangle = draw(gpu, { shader: "@vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f { return vec4f(f32(i), 0, 0, 1); } @fragment fn fs() -> @location(0) vec4f { return vec4f(1); }" });
+  const fullscreen = effect(gpu, prepareShader("@fragment fn fs() -> @location(0) vec4f { return vec4f(1); }"));
+  const triangle = draw(gpu, { shader: prepareShader("@vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f { return vec4f(f32(i), 0, 0, 1); } @fragment fn fs() -> @location(0) vec4f { return vec4f(1); }") });
   gpu.dispose();
   expect(() => fullscreen.set({})).toThrow(expect.objectContaining({ code: "VGPU-DEVICE-DISPOSED" }));
   expect(() => triangle.set({})).toThrow(expect.objectContaining({ code: "VGPU-DEVICE-DISPOSED" }));
@@ -128,7 +129,7 @@ test("an explicit submit still reports a device the owner killed", async () => {
 test("retained compute reports device loss reason", async () => {
   const { device, lose } = losableDevice();
   const gpu = await initFromDevice(device);
-  const pipeline = compute(gpu, "@compute @workgroup_size(1) fn main() {}");
+  const pipeline = compute(gpu, prepareShader("@compute @workgroup_size(1) fn main() {}"));
   lose({ reason: "unknown", message: "runtime lost" });
   await Promise.resolve();
   expect(() => pipeline.dispatch(1)).toThrow(expect.objectContaining({ code: "VGPU-DEVICE-LOST", message: expect.stringContaining("runtime lost") }));
@@ -144,11 +145,11 @@ test("hostile plain-JS devices use stable validation codes", async () => {
 test("shared uniforms reject a disposed backing buffer", async () => {
   const gpu = await initFromDevice(externalDevice());
   const shared = uniforms(gpu, { value: 1 });
-  const pipeline = compute(gpu, "struct U { value: f32 }; @group(0) @binding(0) var<uniform> u: U; @compute @workgroup_size(1) fn main() { let x = u.value; }");
+  const pipeline = compute(gpu, prepareShader("struct U { value: f32 }; @group(0) @binding(0) var<uniform> u: U; @compute @workgroup_size(1) fn main() { let x = u.value; }"));
   pipeline.set({ u: shared });
   const buffer = (shared as unknown as { buffer: import("@vgpu/core").Buffer }).buffer;
   buffer.dispose();
-  expect(() => pipeline.set({ u: shared })).toThrow(expect.objectContaining({ code: "VGPU-BUFFER-DISPOSED" }));
+  expect(() => pipeline.set({ u: shared })).toThrow(expect.objectContaining({ code: "VGPU-R1-BINDING-DESTROYED" }));
   gpu.dispose();
 });
 

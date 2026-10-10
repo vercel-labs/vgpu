@@ -1,7 +1,7 @@
 import type { Draw, Effect, Gpu, Surface, Target } from "vgpu";
 import { draw, effect, frame, sampler, target } from "vgpu";
-import { perspectiveCamera } from "vgpu/scene";
 
+import { cameraMatrices } from "./camera";
 import type { HeroGlassAssets } from "./hero-glass-assets-core";
 import heroFractalBackgroundDrawWgsl from "./hero-fractal-background-draw.wgsl";
 import heroFractalMeshWgsl from "./hero-fractal-mesh.wgsl";
@@ -190,7 +190,7 @@ export function setHeroFractalSceneSettings(
       )
     : basePosition;
   const fov = settings.view?.fov ?? camera.fov;
-  const view = perspectiveCamera({
+  const view = cameraMatrices({
     fov,
     aspect: resolution[0] / Math.max(resolution[1], 1),
     near: 0.05,
@@ -228,7 +228,7 @@ export function setHeroFractalSceneSettings(
     },
   });
   const glassParams = {
-    viewProjection: view.viewProjectionMatrix,
+    viewProjection: view.viewProjection,
     model: GLASS_MODEL_MATRIX,
     cameraPosition: position,
     meshMin: assets.meshMin,
@@ -254,7 +254,7 @@ export function setHeroFractalSceneSettings(
   });
   scene.fractal.set({
     params: {
-      viewProjection: view.viewProjectionMatrix,
+      viewProjection: view.viewProjection,
       model: fractalModel,
       cameraPosition: position,
       meshMin: assets.fractalMeshMin,
@@ -277,7 +277,7 @@ export function setHeroFractalSceneSettings(
   });
   scene.present.set({ sceneTexture: scene.interior });
   return {
-    viewProjection: view.viewProjectionMatrix as Float32Array,
+    viewProjection: view.viewProjection,
     environmentRotation,
     fractalModel,
     sphereMix: glass.sphereMix * (settings.morphDirection ?? 1),

@@ -1,5 +1,228 @@
 # vgpu
 
+## 0.6.0-rc.2
+
+### Patch Changes
+
+- 4c2e627: `geometry(gpu, { indices })` now accepts an odd-length (or otherwise non-4-byte-multiple) `Uint16Array`. Previously the owned index buffer's initial upload failed natively with "size is not a multiple of 4 bytes". Only that initial upload is zero-padded to a 4-byte multiple; `indexFormat`, `indexCount`, the logical byte length and `writeIndices` bounds are unchanged, so the padding is never drawable or writable. Subarray views upload only their own bytes. The geometry reference now notes that `writeIndices` cannot rewrite the last index of an odd-length array, and that passing an even-length array with an explicit `indexCount` keeps every index rewritable.
+- 7670671: Reduce CPU work when encoding unchanged draws, effects, and computes with identity-bound resources. In 0.6.0-rc.1 every encode repeated work whose result could not have changed: lifetime maintenance on each bind group cache hit, up to three full binding verifications, and rebuilt bind group keys.
+
+  Draws, effects, and computes now share three improvements. A cache hit only records recency instead of running lifetime maintenance, and abandoned consumers are still reclaimed. An unchanged consumer reuses its last passing binding verification until a binding changes, a layout is replaced, a group is claimed, or a tracked resource is destroyed. Static bind groups reuse their precomputed keys.
+
+  Draws and effects also reuse their pipeline key for each target while the target signature, pipeline layout, and geometry primitive state still match. The pipeline cache is still consulted on every encode, so delayed pipeline validation failures and disposal errors surface as before.
+
+  Behavior is unchanged: destroying a bound resource still fails the next encode with `VGPU-R1-BINDING-DESTROYED`, managed, shared, and JS-owned uniform values continue to update and capture as before, and bundle staleness, per-consumer bind group bounds, and weak consumer lifetimes are preserved.
+
+  - @vgpu/core@0.6.0-rc.2
+  - @vgpu/wgsl@0.6.0-rc.2
+  - @vgpu/wgsl-std@0.6.0-rc.2
+  - @vgpu/adapter-node@0.6.0-rc.2
+  - @vgpu/adapter-mock@0.6.0-rc.2
+
+## 0.6.0-rc.1
+
+### Minor Changes
+
+- 018410e: Fix abandoned Draw, Effect, and Compute retention and add optional `dispose()` methods with exact disposed-consumer diagnostics. Disposal releases consumer state without destroying borrowed resources or invalidating native work already encoded or saved, while managed bundles recorded from the consumer become stale. Letting a consumer be collected without disposing it leaves its retained bundles valid through independent resource snapshots. Raw `GPUBuffer` and `GPUBufferBinding` buffer bindings now reject checkably invalid usage and byte ranges at `set()`, keeping the previous binding, and bind a snapshot of the canonical `{ buffer, offset, size }` range; tracked Buffer, Uniform-like, and provider bindings add the same checkable range validation while retaining synchronous usage validation. Compute rejects writable aliases by underlying allocation, including a tracked Buffer bound beside its raw `GPUBuffer`, and compatible generated texture views are reused without changing `Texture.createView()` freshness. Bundled Draw, Effect, and Compute documentation covers the new lifetime and binding behavior.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.6.0-rc.1/docs/migrations/0.6.0.docs.md).
+
+- d5ea651: Renderer shaders are now prepared ahead of time. `draw(gpu, { shader })`, `effect(gpu, source)`, and
+  `compute(gpu, source)` accept only a prepared `ShaderSource` (`version: 2`): the final WGSL plus its
+  `reflection`, a `sourceChecksum`, and a `producer`. The renderer validates that metadata before a
+  draw, effect, or compute uses it and never parses WGSL, so prepared-only browser consumers that
+  import `.wgsl` files and do not call `prepareShader()` at runtime no longer ship the WGSL scanner,
+  parser, or reflection.
+
+  Prepared artifacts from the loaders and from `prepareShader()` are deeply immutable: the root,
+  `reflection`, `functionExports`, and every nested object and array are frozen. The renderer fully
+  validates an immutable artifact (checksum and reflection) the first time a draw, effect, or compute
+  uses it and then reuses that validated, device-independent snapshot for later draws, effects, and
+  computes built from the same artifact, on any gpu, so large scenes no longer pay validation cost per
+  draw. Each draw, effect, and compute keeps its own label, `set` values, and binding assignments;
+  existing pipeline, shader-module, and layout caches and explicitly shared resources behave as before.
+  Artifacts whose consumed data is not entirely frozen — such as a `structuredClone` or JSON copy, an
+  object spread, a root-only `Object.freeze`, or a typical hand-built object — are still accepted and
+  revalidated on every creation, as before; vgpu never freezes or retains them and only skips
+  rehashing `wgsl` text that is unchanged since the previous creation, while still comparing the
+  supplied `sourceChecksum`. Reuse is per artifact, so use one artifact per source revision: a new or
+  rebuilt artifact (including after HMR) is validated on its own first use. The reuse cache is weakly
+  keyed by the artifact and keeps no global registry; draws, effects, and computes still hold the
+  metadata they use until `dispose()`, collection is not deterministic, and GPU resource disposal is
+  unchanged.
+  `prepareShader()` still copies supplied `functionExports` and never freezes the caller's arrays.
+
+  The `@vgpu/wgsl` Vite and webpack/Turbopack loaders emit prepared ESM modules for every `.wgsl`
+  import — ordinary leaf files included, with `functionExports: []`. Generated modules never import
+  the WGSL parser. For eligible reflections, a bounded conservative estimate that requires distinct
+  substantial uniform layouts can select compact metadata decoded by a small parser-free helper;
+  Vite and webpack can also share private,
+  independently reachable encoded metadata modules. Compact and literal forms export the same full
+  own-data `ShaderSource` v2 object, while small inputs, bounded-work cases, and estimates that do not
+  justify packing fall back to the literal form. Final bundler compression can vary, so compact
+  selection estimates savings rather than guaranteeing them. The decoder, generated metadata modules,
+  and requests are private implementation details, not author APIs, and require no extra configuration.
+
+  Because leaf files are now reflected at build time, reflection-detectable parse and layout errors
+  (for example a `bool` in a uniform struct, `VGPU-WGSL-REFLECT-BOOL-HOST-SHAREABLE`) fail the build
+  instead of surfacing at runtime. Loaders still do not run device validation; keep
+  `npx vgpu check --require-validation` as the WGSL gate. When an import names a missing WGSL file,
+  `resolveShader()` reports the missing candidate paths through its existing `onDependency` callback
+  before `VGPU-WGSL-RES-NOTFOUND`, allowing Vite and webpack watch builds to rebuild after the file is
+  restored; successful dependency reporting is unchanged.
+
+  The new `prepareShader(source, path?)` from `@vgpu/wgsl/prepare` builds a prepared artifact at
+  runtime from a WGSL string, a `resolveShader()` result, or a legacy v1 asset, preserving
+  `functionExports` from object input. `ShaderReflection`, the type of `ShaderSource.reflection`, is
+  now exported from `@vgpu/wgsl`, `vgpu`, `vgpu/node`, `vgpu/mock`, and `vgpu/client`.
+
+  Renderers report unprepared or incompatible input synchronously:
+
+  - `VGPU-SHADER-SOURCE-UNPREPARED` for a raw WGSL string or a `version: 1` artifact.
+  - `VGPU-SHADER-SOURCE-VERSION` for any other integer `version`; the message names the received and
+    supported versions and, when present, the artifact's `producer`.
+  - `VGPU-SHADER-SOURCE-INVALID` for a missing or malformed field, inconsistent reflection, or a
+    `sourceChecksum` that does not match `wgsl`.
+
+  The checksum detects accidental replacement of `wgsl`; it does not authenticate an artifact or prove
+  that its reflection matches the WGSL. Prepared metadata is trusted: produce it with the loaders or
+  `prepareShader()` and never hand-edit it.
+
+  Unchanged: `reflectSource()` and `compile()` keep their string contracts (`compile()` still returns
+  a `ResolvedShader`, which is not a renderer input), native `device.createShaderModule({ code })`
+  calls still take strings, and `vgpu/three` still accepts raw strings, structural
+  `{ wgsl, functionExports }` objects, and v1 artifacts.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.6.0-rc.1/docs/migrations/0.6.0.docs.md).
+
+### Patch Changes
+
+- 6284cf7: Managed uniform `set()` calls whose packed bytes are unchanged no longer start a new frame snapshot revision, so later draws and dispatches in the same frame reuse the snapshot already captured. Storage bindings and live uniforms (recorded into a render bundle, or a `uniforms()` object whose buffer was accessed) are still written on every `set()`. Frame uniform pages are now pooled and reused across frames with bounded idle retention, and their bind groups are reused by frames that repeat the same draws in the same order, without a whole-cache invalidation scan on frame completion. Raw `GPUBuffer` and `GPUBufferBinding` values set on uniform or storage buffer bindings are now bound as live resources keyed by buffer, offset and size instead of being treated as struct values.
+- a5833da: `@vgpu/wgsl/next` adds `wgslTurbopackRule(options?)`, a Node configuration helper that returns a
+  complete Next.js Turbopack rule for `"*.wgsl"`. It resolves the loader from its own `@vgpu/wgsl`
+  installation and adds a content hash of the installed compiler files — `package.json`, the shipped
+  metadata anchor, and every published `dist` JavaScript file — to the loader options when Next
+  evaluates the config. Turbopack keys loader output on those options, so a restored `.next/cache`
+  rebuilds shader output after the compiler changes, while an unchanged installation keeps its warm
+  cache. `options.minify` uses the raw loader's vocabulary and defaults. Unlike the raw loader, the
+  helper rejects unknown or mistyped options with `VGPU-WGSL-NEXT-OPTIONS` and invalid identifier
+  modes with `VGPU-WGSL-MINIFY-IDENTIFIERS`; it throws `VGPU-WGSL-CACHE-IDENTITY` when its installation's
+  compiler files cannot be read or are inconsistent. The helper configures Turbopack only, does not
+  depend on or import `next`, and is not re-exported from browser entrypoints.
+
+  `@vgpu/wgsl/loader-webpack` keeps its public specifier, default export, and supported options.
+  Its output is the prepared `ShaderSource` v2 format introduced in this release; applications
+  upgrading from 0.5.0 must rebuild their shaders. It now
+  registers the same compiler files on every run, before metadata requests, ordinary leaves, or shader
+  errors end the transform: through `addBuildDependency()` in webpack, and through `addDependency()` in
+  Turbopack or contexts without build dependencies. Shader dependency and missing-import registration
+  are unchanged. Contexts with neither hook still transform. A compiler inventory failure throws
+  `VGPU-WGSL-CACHE-IDENTITY` (`where: "wgslWebpackLoader"`). The public specifier now
+  resolves to a new internal file that re-exports the same loader; the previous file still ships.
+
+  Webpack's default managed-package snapshot trusts an installed package's `name@version` instead of
+  hashing internal files. The authentic 0.5.0 `require.resolve()` upgrade rebuilt exact v2 with its
+  cache retained because the public resolved target changed; a separate disposable bare-rule replay
+  also rebuilt when the candidate manifest version changed. A bare same-version replacement stayed on
+  v1 even with the new build dependencies. Workspace symlinks observed same-version compiler edits
+  and recovery.
+
+  The retained-cache matrix passes on Next 16.3.3: the authentic resolved-rule upgrade and the
+  bare-rule-to-helper migration both rebuilt exact v2 without deleting the cache. Stable Next 15.5
+  cannot enable Turbopack's persistent cache — 15.5.25 rejects
+  `experimental.turbopackPersistentCaching: true` with `CanaryOnlyError` — while builds, config types,
+  and dev edit/delete/recreate recovery pass there.
+
+  The bundled Next.js guide and loader reference now use `wgslTurbopackRule()` for Turbopack, require
+  a direct `@vgpu/wgsl` dependency for JavaScript tooling imports, distinguish Next 15 and 16 bundler
+  defaults, and replace the previous blanket `addDependency()` claim with Next 16.3.3 behavior.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.6.0-rc.1/docs/migrations/0.6.0.docs.md).
+
+- Updated dependencies [d5ea651]
+- Updated dependencies [a5833da]
+  - @vgpu/wgsl@0.6.0-rc.1
+  - @vgpu/core@0.6.0-rc.1
+  - @vgpu/adapter-mock@0.6.0-rc.1
+  - @vgpu/adapter-node@0.6.0-rc.1
+  - @vgpu/wgsl-std@0.6.0-rc.1
+
+## 0.6.0-rc.0
+
+### Minor Changes
+
+- b2d4038: Stop draws and captured-resource subscriptions from retaining abandoned render bundles, detach stale or failed recordings, and add synchronous idempotent `Bundle.dispose()` for deterministic facade release. Disposal does not destroy borrowed resources or revoke a native render bundle handle saved before disposal.
+- 7cb11d3: Unify compute and render pipeline preparation with lazy compute compilation, `Compute.compile()` / `compileSync()`, and frame-owned `computePass()` dispatches. Capture managed uniform values per direct frame draw/dispatch. Surface native compute validation, validate dispatch counts and workgroup limits, and wait for synchronous pipeline validation before resolving asynchronous preparation.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.6.0-rc.0/docs/migrations/0.6.0.docs.md).
+
+- bc81b4e: Reject async and thenable `frame` / `frameLoop` callbacks before their frame is implicitly submitted. Inferred Promise and PromiseLike returns are rejected by the public types, while runtime checks protect JavaScript and callbacks whose return type was erased.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.6.0-rc.0/docs/migrations/0.6.0.docs.md).
+
+- 333ccf3: `Gpu` now exposes `readonly lost: Promise<GPUDeviceLostInfo>`, a loss-only notification. The promise keeps one identity, never rejects, and resolves once with the native `GPUDeviceLostInfo` when vgpu observes native device loss while the gpu is active. vgpu stops every running `frameLoop` before `gpu.lost` handlers run, so no tick runs or throws after vgpu observes the loss. Loss does not dispose the gpu, destroy its resources, deliver anything to `gpu.onError`, or recover the device: create a new `Gpu` with `init()`, recreate its resources, and restart the loop.
+
+  `gpu.dispose()` remains your own teardown, not a loss. Disposing before vgpu observes a loss leaves `gpu.lost` pending; disposing after keeps its resolved value; disposing a gpu from `initFromDevice(device)` still never destroys the borrowed device. A borrowed device destroyed by its owner while the wrapper is active counts as a loss, with `reason: "destroyed"`. `gpu.settled()` never waits for `gpu.lost`.
+
+  After an observed loss, every factory, `clock(gpu)`, `frame(gpu)`, and `frameLoop(gpu, cb)` throw `VGPU-DEVICE-LOST` at the call, before the frame clock advances or surface auto-resize runs. A manual `frame(gpu)` that was open at the time is not canceled: its `submit()` still throws `VGPU-DEVICE-LOST` until `gpu.dispose()` cancels it. The `VGPU-DEVICE-LOST` error raised by `@vgpu/core` now carries the fix "Create a new Gpu with init(), then recreate its resources and restart the loop."
+
+  The implicit submit of `frame(gpu, cb)` and `frameLoop` ticks no longer swallows `VGPU-DEVICE-LOST` or `VGPU-DEVICE-DISPOSED`: any error it throws now escapes the call, and a loop tick that fails this way stops the loop and rethrows. Calling `gpu.dispose()` inside a callback still cancels the open frame, so its implicit submit stays a no-op.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.6.0-rc.0/docs/migrations/0.6.0.docs.md).
+
+- a332125: Rebuild `vgpu/scene` around material-independent scene composition: CPU transform math, parent/child groups, external hierarchy evaluation, fixed-capacity typed instances, and camera functions that operate on application-owned state. Geometry recipes remain available.
+
+  Add `vgpu/scene/gpu` to publish instance matrices and custom attributes as an instanced vertex stream, borrowing an existing mesh. Add pure `@vgpu/wgsl-std/scene` helpers for world matrices, positions, directions, and normals. Shaders own their resources and binding locations; applications connect uniforms by name and choose their own shading and passes.
+
+  Remove the previous mesh, material, light, camera-node, and orbit-control abstractions. This is a breaking pre-1.0 API revision.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.6.0-rc.0/docs/migrations/0.6.0.docs.md).
+
+- 7d51e9d: Make automatic shader entry selection consistent across vertex, fragment, and compute stages.
+  Explicit selections are validated and take priority. A sole entry works with any name. With
+  multiple entries of a stage, prefer `vs_main`, `fs_main`, or `cs_main` respectively; if that name
+  is absent, retain the first entry of the stage. These are vgpu conventions, not WGSL requirements.
+
+  Add `effect(gpu, source, { entry: { fragment: "name" } })` to select a fragment explicitly.
+  Selection is fixed at construction and determines resource layouts as well as the compiled entry.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.6.0-rc.0/docs/migrations/0.6.0.docs.md).
+
+- 13aa182: Reject canvas `Surface` objects passed to Draw, Effect, or Compute input bindings. Constructor `set` options and later `set()` calls now throw `VGPU-SURFACE-NOT-BINDABLE` before acquiring the current presentation texture; surfaces remain supported as render destinations.
+
+  [Migration guide](https://github.com/vercel-labs/vgpu/blob/v0.6.0-rc.0/docs/migrations/0.6.0.docs.md).
+
+- e843185: Add opt-in depth and MSAA to canvas surfaces, so depth-tested, antialiased 3D — including `vgpu/scene` instance geometry — renders straight to the canvas without an offscreen target and present pass. `surface(gpu, canvas, { depth, msaa })` accepts `depth: true` (`"depth24plus"`) or an explicit depth-aspect format (`"depth16unorm"`, `"depth24plus"`, `"depth24plus-stencil8"`, `"depth32float"`, `"depth32float-stencil8"`, subject to native features), and `msaa: true` or `4` for four samples. Invalid values throw the new `VGPU-SURFACE-DEPTH-INVALID` and `VGPU-SURFACE-MSAA-INVALID`. `surface.depth` is an owned texture, stable until resize or dispose; the MSAA color attachment is private and resolves into `surface.color`, which remains the single-sample current canvas texture. `compile(surface)`, `compileSync(surface)`, Draw `targets`, and `bundle(gpu, { target: surface }, ...)` prepare against the configured format, depth format, and sample count without acquiring a canvas texture.
+
+  Surface resize now prepares replacement attachments before committing the new canvas size, DPR, and attachments together, then notifies and destroys the old attachments. A synchronous allocation failure destroys partial replacements and leaves the previous size, DPR, and attachments in place; a throwing listener no longer stops later listeners or the old-attachment cleanup, and its error is rethrown afterwards. Resizing the same surface from any replacement notification throws `VGPU-SURFACE-RESIZE-REENTRANT`. Direct `canvas.width`/`height` writes between frames reconcile owned attachments at the next frame boundary before user encoding, without public `onResize` callbacks; the pass descriptor also reconciles later writes before acquiring the canvas texture. Resize before encoding commands that use the attachments. `dispose()` destroys owned attachments even when an `onDestroy` listener throws.
+
+- 21026b7: Prepare pipelines and render bundles against a live `Surface` outside a frame. `Draw`/`Effect` `compile()` and `compileSync()`, Draw constructor `targets`, and `bundle(gpu, { target: surface }, ...)` now read the surface's configured render signature — its `format`, configured depth format, and sample count — without acquiring a canvas texture, reading or allocating attachments, resizing the canvas, or submitting work. A surface and the equivalent explicit signature share cached pipelines, and size-only resizes keep compiled pipelines and recorded bundles valid. Preparing against a disposed surface still throws `VGPU-SURFACE-DISPOSED`; drawing to a surface outside a frame still throws `VGPU-SURFACE-NOT-IN-FRAME`, now with a fix that points to the accepted preparation calls.
+
+### Patch Changes
+
+- eedcb29: Preserve authored Blender skill resources during documentation generation and route the vgpu skill to portable modeling, baking, and runtime validation guidance.
+- b617aa8: Avoid redundant persistent-buffer uploads for managed uniforms used by frame draws and compute dispatches. `set()` still validates and packs values immediately; frames upload their captured values in batches, and one-shot draws/dispatches upload pending persistent values only when needed. Uniforms recorded in render bundles remain live, as do shared uniform buffers whose implementation-level buffer handles have been exposed. Storage and explicit buffer writes keep their existing behavior.
+- b6ec97a: Guide agents to consider an optional numerical library for quaternion interpolation, spatial
+  queries and procedural motion when using vgpu. The skill preserves existing project dependencies
+  and routes integration examples through the installed CLI's documentation.
+- 668aa6e: Correct the compilation and render-bundle guides to query the preferred canvas format before surface creation and use the actual format of existing surfaces. Update examples to pre-warm and record with signatures outside frames, then render canvas content inside frames.
+- 929b97f: Document the boundary between scene composition and general CPU math, with checked examples for
+  using pmndrs/math matrices in instance collections, external hierarchies, and camera uniforms.
+  The CLI documentation explains representation, projection, ownership, and explicit update rules.
+- e21ecee: Route 3D scene tasks from the public skill to a dedicated `scene.md` reference. Keep scene
+  composition and optional numerical-library guidance in that reference so it can evolve
+  independently of the main skill. Preserve the authored reference during skill regeneration.
+- f8f9f7e: `gpu.settled()` now snapshots queue work already submitted when it is called while preserving its resolve-only result and existing tracked error deliveries. Fulfillment can take longer and remains a completion signal, not a successful-execution guarantee. If a queue's `onSubmittedWorkDone()` throws synchronously, `compute.dispatch()` has already submitted its work and now reports one `VGPU-COMPUTE-VALIDATION` with `where: "<label>.completion"` through `gpu.onError` instead of throwing after submission.
+- Updated dependencies [a617198]
+- Updated dependencies [7cb11d3]
+- Updated dependencies [333ccf3]
+- Updated dependencies [a332125]
+  - @vgpu/wgsl@0.6.0-rc.0
+  - @vgpu/core@0.6.0-rc.0
+  - @vgpu/wgsl-std@0.6.0-rc.0
+  - @vgpu/adapter-mock@0.6.0-rc.0
+  - @vgpu/adapter-node@0.6.0-rc.0
+
 ## 0.5.0
 
 ### Minor Changes

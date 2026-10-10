@@ -111,6 +111,27 @@ fn main() -> f32 {
   expect(compact).not.toMatch(/inverseLerp|remap|safeNormalize|rotate2d/u);
 });
 
+test("scene helpers resolve from the package export without injecting resources", async () => {
+  const dir = await workspaceFixture();
+  const entry = join(dir, "app", "scene.wgsl");
+  await writeFile(entry, `import { instanceWorldMatrix, transformPosition, transformDirection, transformNormal } from "@vgpu/wgsl-std/scene";
+fn applyScene(world0: vec4f, world1: vec4f, world2: vec4f, world3: vec4f, value: vec3f) -> vec3f {
+  let world = instanceWorldMatrix(world0, world1, world2, world3);
+  return transformPosition(world, value) + transformDirection(world, value) + transformNormal(world, value);
+}`);
+
+  const resolved = await resolveShader({ entry, validate: false });
+  const first = await resolveShader({ entry, validate: false, minify: true });
+  const second = await resolveShader({ entry, validate: false, minify: true });
+
+  expect(resolved.deps.some((dep) => dep.endsWith("node_modules/@vgpu/wgsl-std/src/scene/index.wgsl"))).toBe(true);
+  expect(resolved.reflection.bindings).toEqual([]);
+  expect(first.wgsl).toBe(second.wgsl);
+  for (const helper of ["instanceWorldMatrix", "transformPosition", "transformDirection", "transformNormal"]) {
+    expect(resolved.wgsl).toContain(helper);
+  }
+});
+
 test("importing @vgpu/wgsl-std/noise/perlin does not pull in simplex, and vice versa", async () => {
   const dir = await workspaceFixture();
 

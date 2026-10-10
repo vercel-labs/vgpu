@@ -15,6 +15,7 @@ export const meta = {
   files: [
     "index.tsx",
     "renderer.ts",
+    "camera.ts",
     "scene-pipeline.ts",
     "scene.wgsl",
     "blit.wgsl",

@@ -1,3 +1,4 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { expect, test, vi } from "vitest";
 import { getMockGPUDeviceInstrumentation } from "@vgpu/core";
 import { init, bundle, draw, effect, frame, surface, target } from "../src/mock.ts";
@@ -28,34 +29,43 @@ function expectOutsideFrame(fn: () => unknown): void {
   catch (error) {
     expect(error).toMatchObject({
       code: "VGPU-SURFACE-NOT-IN-FRAME",
-      fix: "surface passes must run inside frame(gpu, ...); precompile against an offscreen target(gpu, ...) instead",
+      fix: "Encode surface draws inside frame(gpu, ...); compile(surface) and bundle(gpu, { target: surface }, ...) can prepare outside a frame.",
     });
     return;
   }
   throw new Error("Expected VGPU-SURFACE-NOT-IN-FRAME");
 }
 
-test("surface pipeline creation is rejected outside frame(gpu) with an offscreen precompile hint", async () => {
+test("surface pipeline preparation is accepted outside frame(gpu)", async () => {
   const gpu = await init();
   const canvasSurface = surface(gpu, surfaceCanvas());
-  const drawable = draw(gpu, { shader: WGSL });
-  const shader1 = effect(gpu, FRAGMENT_ONLY);
+  const drawable = draw(gpu, { shader: prepareShader(WGSL) });
+  const shader1 = effect(gpu, prepareShader(FRAGMENT_ONLY));
 
-  expectOutsideFrame(() => drawable.compile(canvasSurface));
-  expectOutsideFrame(() => drawable.compileSync(canvasSurface));
-  expectOutsideFrame(() => drawable.draw(canvasSurface));
-  expectOutsideFrame(() => shader1.compile(canvasSurface));
-  expectOutsideFrame(() => shader1.compileSync(canvasSurface));
-  expectOutsideFrame(() => shader1.draw(canvasSurface));
-  expectOutsideFrame(() => bundle(gpu, { target: canvasSurface }, () => undefined));
+  await expect(drawable.compile(canvasSurface)).resolves.toBe(drawable);
+  expect(drawable.compileSync(canvasSurface)).toBe(drawable);
+  await expect(shader1.compile(canvasSurface)).resolves.toBe(shader1);
+  expect(shader1.compileSync(canvasSurface)).toBe(shader1);
+  expect(() => bundle(gpu, { target: canvasSurface }, () => undefined)).not.toThrow();
   expect(() => frame(gpu, (currentFrame) => currentFrame.pass(canvasSurface, drawable))).not.toThrow();
+  gpu.dispose();
+});
+
+test("surface drawing remains rejected outside frame(gpu)", async () => {
+  const gpu = await init();
+  const canvasSurface = surface(gpu, surfaceCanvas());
+  const drawable = draw(gpu, { shader: prepareShader(WGSL) });
+  const shader1 = effect(gpu, prepareShader(FRAGMENT_ONLY));
+
+  expectOutsideFrame(() => drawable.draw(canvasSurface));
+  expectOutsideFrame(() => shader1.draw(canvasSurface));
   gpu.dispose();
 });
 
 test("Draw.compile warms the shared store so later draw does not sync-create", async () => {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [4, 4] });
-  const drawable = draw(gpu, { shader: WGSL, label: "warm" });
+  const drawable = draw(gpu, { shader: prepareShader(WGSL), label: "warm" });
   const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
 
   await expect(drawable.compile(colorTarget)).resolves.toBe(drawable);
@@ -73,7 +83,7 @@ test("Draw.compile warms the shared store so later draw does not sync-create", a
 test("concurrent Draw.compile calls for the same signature share one async native create", async () => {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [4, 4] });
-  const drawable = draw(gpu, { shader: WGSL, label: "fanout" });
+  const drawable = draw(gpu, { shader: prepareShader(WGSL), label: "fanout" });
   const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
 
   const [a, b, c] = await Promise.all([drawable.compile(colorTarget), drawable.compile(colorTarget), drawable.compile(colorTarget)]);
@@ -89,7 +99,7 @@ test("concurrent Draw.compile calls for the same signature share one async nativ
 test("Draw.compile rejection is owned by the returned promise and not mirrored to gpu.onError", async () => {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [4, 4] });
-  const drawable = draw(gpu, { shader: WGSL, label: "rejectOwned" });
+  const drawable = draw(gpu, { shader: prepareShader(WGSL), label: "rejectOwned" });
   const nativeError = new Error("async pipeline failed");
   const errors: unknown[] = [];
   gpu.onError((error) => errors.push(error));
@@ -110,7 +120,7 @@ test("Draw.compile rejection is owned by the returned promise and not mirrored t
 test("Draw.compileSync wins an in-flight Draw.compile and resolves the pending public promise", async () => {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [4, 4] });
-  const drawable = draw(gpu, { shader: WGSL, label: "publicSyncWins" });
+  const drawable = draw(gpu, { shader: prepareShader(WGSL), label: "publicSyncWins" });
   let rejectNative!: (error: unknown) => void;
   vi.spyOn(gpu.device.gpu, "createRenderPipelineAsync").mockImplementation((desc: GPURenderPipelineDescriptor) => {
     const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
@@ -145,7 +155,7 @@ test("Draw.compileSync wins an in-flight Draw.compile and resolves the pending p
 
 test("compile validates signatures and missing default targets synchronously", async () => {
   const gpu = await init();
-  const drawable = draw(gpu, { shader: WGSL, label: "invalid" });
+  const drawable = draw(gpu, { shader: prepareShader(WGSL), label: "invalid" });
 
   expect(() => drawable.compile()).toThrowError(/VGPU-TARGET-REQUIRED|Target required/);
   expect(() => drawable.compileSync()).toThrowError(/VGPU-TARGET-REQUIRED|Target required/);
@@ -160,8 +170,8 @@ test("compile validates signatures and missing default targets synchronously", a
 test("Effect compile delegates to Draw, fixes gpu getter, and shares the device store", async () => {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [4, 4] });
-  const shader1 = effect(gpu, WGSL, { label: "fx" });
-  const drawable = draw(gpu, { shader: WGSL, label: "drawFx" });
+  const shader1 = effect(gpu, prepareShader(WGSL), { label: "fx" });
+  const drawable = draw(gpu, { shader: prepareShader(WGSL), label: "drawFx" });
   const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
 
   expect(shader1.gpu).toBeUndefined();
@@ -178,7 +188,7 @@ test("Effect compile delegates to Draw, fixes gpu getter, and shares the device 
 test("gpu.settled drains in-flight async compiles", async () => {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [4, 4] });
-  const drawable = draw(gpu, { shader: WGSL, label: "settledCompile" });
+  const drawable = draw(gpu, { shader: prepareShader(WGSL), label: "settledCompile" });
   let resolveNative!: (pipeline: GPURenderPipeline) => void;
   vi.spyOn(gpu.device.gpu, "createRenderPipelineAsync").mockImplementation((desc: GPURenderPipelineDescriptor) => {
     const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
@@ -205,7 +215,7 @@ test("DrawOptions.targets remains compileSync creation sugar", async () => {
   const colorTarget = target(gpu, { size: [4, 4] });
   const mock = getMockGPUDeviceInstrumentation(gpu.device.gpu);
 
-  const drawable = draw(gpu, { shader: WGSL, label: "targetsSugar", targets: [colorTarget] });
+  const drawable = draw(gpu, { shader: prepareShader(WGSL), label: "targetsSugar", targets: [colorTarget] });
   expect(drawable.gpu).toBeDefined();
   expect(mock.calls.createRenderPipeline).toBe(1);
   expect(mock.calls.createRenderPipelineAsync).toBe(0);

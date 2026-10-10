@@ -18,12 +18,17 @@ agent/sandbox/          boots a sandbox, installs those tarballs, gates on `vgpu
 agent/sandbox/tasks/    one seed project per task, copied into /workspace by bootstrap
 agent/                  a neutral coding agent (eve defaults: bash, read/write, glob, grep)
                         plus one generic `view-image` tool (see "The view-image tool")
+agent/skills/           task-scoped dynamic skills: the public vgpu skill resolves for
+                        scene-quaternion-keyframes only, null for every other task
 agent/hooks/            after every turn: run the task's verification, then tar /workspace
-                        back to .work/snapshots/<sessionId>/
+                        back to .work/snapshots/<sessionId>/ (scene tasks: archive first,
+                        then rerun, under .work/snapshots/<sessionId>/turns/<turnId>/<eventId>/)
 agent/lib/verify/       harness-side verification that needs the LIVE sandbox (n1 builds,
-                        serves and hovers the app itself). Never under agent/hooks/: eve
-                        auto-discovers every module there as a hook.
+                        serves and hovers the app itself; scene tasks rerun a fresh copy
+                        of the source). Never under agent/hooks/: eve auto-discovers every
+                        module there as a hook.
 evals/                  sends the task, then grades what came back out of that tar
+tests/                  node:test suites for the scene harness and grader; no model, network or GPU
 ```
 
 **One process runs exactly one task.** `defineSandbox`'s configuration is
@@ -50,6 +55,30 @@ own build copies the CLI out of it and its `prepack` generates the docs that
 | `view-image-smoke` | name the two colors in `known.png` | that the `view-image` tool really delivers pixels |
 | `n2-ship-hero` | a working, approved vgpu hero: "get it ready to merge", write `PR.md` | build + `vgpu check` by the **harness**; whether the agent found and followed the shipping-to-production guide |
 | `n3-explore-hero` | the same hero, "still exploring the look", one palette change | build + `vgpu check`; that the agent did **not** run the pre-PR checklist |
+| `scene-robot-arm` | a headless five-part arm renderer, then parent and joint edits | matrices and pixels from a harness rerun of the source on host-chosen poses |
+| `scene-shader-bindings` | three boxes through a supplied WGSL interface, then camera updates | the view-projection binding and image position across an `A, B, A` batch |
+| `scene-warehouse` | 2,304 boxes with a color and an application-ID pass, then delete/move/recolor | state, colors and IDs by stable `appId` across four frames |
+| `scene-math-interop` | integrate a supplied math-based ECS, then add spawning, deletion and reparenting | immutable ECS files, independent matrices and pixels; math-use conformance reviewed separately |
+| `scene-quaternion-keyframes` | a keyframed-rotation renderer with the public vgpu skill available, then endpoint clamping | independent rotation matrices and marker pixels; numerical-source choice observed, never graded |
+
+The three neutral scene tasks share a contract, a rerun verifier and a host grader. They are
+documented separately in [scene-evals.md](scene-evals.md); findings from lead-run pilots go in
+[scene-evals-findings.md](scene-evals-findings.md).
+The [explicit math interoperability task](scene-evals.md#scene-math-interop) has its own contract
+revision and requires the installed math package; it does not measure spontaneous adoption.
+Its completed two-session pilot has [findings](scene-math-interop-findings.md) and
+[machine-readable results](scene-math-interop-results.json).
+The completed math-guidance comparison has separate
+[findings](scene-math-evals-findings.md) and [machine-readable results](scene-math-evals-results.json).
+The [quaternion task](scene-evals.md#scene-quaternion-keyframes) is the only task
+that receives the public vgpu skill. It observes which numerical source the agent picks, grades
+correctness independently, and is neither unaided discovery nor an A/B estimate. Its completed
+two-session pilot has [findings](scene-math-discovery-findings.md) and
+[machine-readable results](scene-math-discovery-results.json), including the separately retained
+infrastructure attempt.
+
+The follow-up with the split `SKILL.md` / `scene.md` has
+[findings](scene-skill-split-findings.md) and [results](scene-skill-split-results.json).
 
 ### s2-gradient
 
@@ -327,6 +356,22 @@ whether the names are right is soft, because live vision quality varies. The
 image is generated at bootstrap from a six-color palette, so the answer cannot
 be guessed from what a demo usually looks like.
 
+### scene-robot-arm, scene-shader-bindings and scene-warehouse
+
+Each of these tasks runs two turns: the agent first builds a headless `node render.mjs <input>
+<output>` renderer, then responds to a follow-up prompt and a larger input batch. A second-turn
+pass does not by itself demonstrate a new capability: the robot and shader contracts already
+define the relevant pose and camera fields. See [pilot findings](scene-evals-findings.md) for
+first-turn-source controls against the second batch. After each turn the hook archives the workspace
+before verification writes anything, copies the source outside `/workspace`, and reruns it on a
+batch the host chose, with a 60-second limit. The host then grades the exported `result.json` and
+PNGs against independent scalar math. Hard gates cover protocol, artifacts, numeric state and
+pixels. Scene API adoption, batching and draw counts are observations only.
+
+Scene tasks accept project OIDC only: competing API keys are rejected, and a missing token is an
+error rather than a skip. See [scene-evals.md](scene-evals.md) for the exact I/O contract,
+thresholds, controls and limits.
+
 ### The view-image tool
 
 `agent/tools/view-image.ts` is the one tool this suite adds to eve's defaults,
@@ -354,6 +399,27 @@ node --env-file .env.local ./node_modules/.bin/pnpm agent-evals --task view-imag
 Shortcuts: `pnpm agent-evals:s2`, `pnpm agent-evals:n1`, `pnpm agent-evals:view-image`,
 `pnpm agent-evals:n2`, `pnpm agent-evals:n3`.
 
+Scene tasks have no shortcut, and they split packing from the run. You build and pack under
+Node 22, then launch under Node 24 with `--skip-pack`, which checks that the pack matches the
+current branch and exits **2** if it is stale:
+
+```bash
+fnm exec --using=22 pnpm build
+fnm exec --using=22 node apps/agent-evals/scripts/pack-vgpu.mjs --skip-build
+fnm exec --using=24 node scripts/agent-evals.mjs --task scene-robot-arm --skip-pack \
+  --max-concurrency 1 --timeout 1200000 --verbose
+```
+
+The harness tests are not part of root `pnpm test:fast`; run them explicitly:
+
+```bash
+fnm exec --using=24 node --test apps/agent-evals/tests/*.test.mjs
+```
+
+Native reference and broken-variant controls, with no model involved, run through
+`fnm exec --using=24 node apps/agent-evals/scripts/scene-controls.mjs --task <id> --backend host|docker`.
+See [Running it](scene-evals.md#running-it) in `scene-evals.md`.
+
 `pnpm agent-evals` preflights the Node version (exit code **2** with an
 actionable message if it is too old), resolves `--task` (exit **2** listing the
 known tasks if it is missing or unknown), packs the branch, then runs that one
@@ -366,17 +432,23 @@ and the eval filter, so the two can never drift apart.
 > file with a real dotenv reader (`node --env-file .env.local`), never with
 > hand-rolled shell parsing.
 
-Without a credential the eval **skips**; it does not fail. A red result that only
-means "you have no token" teaches people to ignore red results.
+For the non-scene tasks, a missing credential makes the eval **skip**, not fail. A red result
+that only means "you have no token" teaches people to ignore red results. Scene tasks are the
+exception: they require a project `VERCEL_OIDC_TOKEN` with at least 25 minutes left and reject
+every competing API key. Both conditions are checked before packing and before the first turn,
+and either one failing is an environment error (see
+[Model access](scene-evals.md#model-access-project-oidc-only)).
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `AI_GATEWAY_API_KEY` / `VERCEL_OIDC_TOKEN` | — | model access; absent ⇒ skip |
+| `AI_GATEWAY_API_KEY` / `VERCEL_OIDC_TOKEN` | — | model access; absent ⇒ skip. Scene tasks: `VERCEL_OIDC_TOKEN` only, absent ⇒ error |
 | `VGPU_EVALS_MODEL` | `anthropic/claude-sonnet-5` | model under observation |
 | `VGPU_EVALS_SANDBOX` | `docker` | `docker` or `vercel`; anything else throws at startup |
 | `VGPU_EVALS_DOCKER_IMAGE` | `ghcr.io/vercel/eve:latest` | pin it when you need reproducibility |
-| `VGPU_EVALS_WORK_DIR` | `<package>/.work` | tarballs and per-session snapshots |
+| `VGPU_EVALS_WORK_DIR` | `<package>/.work` | tarballs, per-session snapshots and scene per-turn attempts |
 | `VGPU_EVALS_TASK` | — | set by `--task`; which seed bootstrap materializes. Required, and bootstrap throws without it |
+| `VGPU_EVALS_SCENE_GUIDANCE` | unset (off) | scene tasks only: `baseline` or `math` runs one arm of the [docs guidance experiment](scene-evals.md#docs-guidance-experiment-opt-in) and requires `VGPU_EVALS_MODEL=anthropic/claude-sonnet-5` plus the pinned `ghcr.io/vercel/eve@sha256:…` image; any other value exits 2 |
+| `VGPU_EVALS_SCENE_REPETITIONS` | `1` | scene tasks only: `2` exports two fresh-session cases per task; any other value exits 2 |
 | `VGPU_EVALS_JUDGE_MODEL` | `openai/gpt-4.1-mini` | text judge for the docs-usage questions |
 | `VGPU_EVALS_VISION_JUDGE_MODEL` | `VGPU_EVALS_JUDGE_MODEL` | image-capable judge for n1's trail screenshots; separate so the two can be pinned independently |
 
@@ -384,7 +456,8 @@ This suite has no CI job: it is run by hand, because every run spends model
 tokens and observes discovery behaviour, which says nothing about the commit
 under review. Should that ever change, a non-interactive run cannot use the
 12-hour OIDC token — it would need `AI_GATEWAY_API_KEY`, since a Vercel access
-token does **not** work as a Gateway bearer token. `VERCEL_TOKEN` +
+token does **not** work as a Gateway bearer token. That would not cover the scene tasks: they
+reject `AI_GATEWAY_API_KEY` by design. `VERCEL_TOKEN` +
 `VERCEL_TEAM_ID` + `VERCEL_PROJECT_ID` matter only if you switch to
 `VGPU_EVALS_SANDBOX=vercel`; the default docker backend needs no Vercel
 credentials at all.
@@ -412,7 +485,9 @@ cost of a cold rebuild.
 
 Each task trusts a different amount, and the difference is the point: `s2` reads
 a file the agent left behind, `n1` re-runs the app itself. Neither is yet a proof
-of correctness.
+of correctness. The scene tasks rerun a fresh copy of the source on inputs the
+harness chooses, and assume the same non-adversarial agent; their limits are in
+[scene-evals.md](scene-evals.md#trust-model-and-limits).
 
 ### s2-gradient: it trusts the agent's `out.png`
 
@@ -484,7 +559,11 @@ Two things are already load-bearing and should not be softened:
   misreading is expensive.
 - **The neutrality of `agent/instructions.md` and the task prompt.** Neither may
   mention vgpu, doctor, docs, `check`, shaders or WebGPU. The moment they do,
-  the run stops telling us anything about discoverability.
+  the run stops telling us anything about discoverability. The scene tasks make
+  two narrow, disclosed exceptions. Their prompts end with ``Use `npx vgpu`.``
+  and name no function, import path or docs command. The shader task also
+  supplies its WGSL interface, and requires it unchanged, as an integration
+  condition. `agent/instructions.md` stays neutral.
 
 ## Sandbox backends
 
@@ -537,6 +616,8 @@ Vercel is x86_64 only. vgpu's Dawn/lavapipe path is verified there, not on arm64
    process, `LD_PRELOAD`, `iptables`, or anything else — can influence
    grading. This is the remaining structural hole in n1's trust model, and
    it is general, not specific to any one mechanism; the port/nonce fix only
-   closes the realistic *accidental* case (a leftover dev server).
+   closes the realistic *accidental* case (a leftover dev server). The scene
+   tasks' fresh-copy rerun still executes in the agent's container, so it
+   does not close this hole either.
 5. **More tasks** — beyond the gradient and the hero: a real shader bug, a
    texture task, an error-code lookup.

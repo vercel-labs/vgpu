@@ -33,12 +33,12 @@ Use before the first visible frame or route transition. This compiles render pip
 
 Before:
 ```text
-const cube = draw(gpu, { shader: LIT_WGSL, geometry: geometry(gpu, box()) });
+const cube = draw(gpu, { shader: litShader, geometry: geometry(gpu, box()) });
 ```
 After:
 ```text
 const scene = target(gpu, { size: [256, 256], format: "rgba16float", depth: true, msaa: true });
-const cube = draw(gpu, { shader: LIT_WGSL, geometry: geometry(gpu, box()) });
+const cube = draw(gpu, { shader: litShader, geometry: geometry(gpu, box()) });
 await cube.compile(scene);
 frame(gpu, (f) => f.pass({ target: scene }, (p) => p.draw(cube)));
 ```
@@ -90,7 +90,7 @@ Use for animated JS values. The first `set()` latches ownership: plain JS values
 
 Before:
 ```text
-const wave = effect(gpu, WAVE_WGSL, { set: { time: 0, speed: 2 } });
+const wave = effect(gpu, waveShader, { set: { time: 0, speed: 2 } });
 frameLoop(gpu, (frame) => {
   wave.set({ time: clock(gpu).time, speed: 2 });
   frame.pass(target, wave);
@@ -98,14 +98,13 @@ frameLoop(gpu, (frame) => {
 ```
 After:
 ```text
-const wave = effect(gpu, WAVE_WGSL, { set: { time: 0, speed: 2 } });
+const wave = effect(gpu, waveShader, { set: { time: 0, speed: 2 } });
 frameLoop(gpu, (frame) => {
   wave.set({ time: clock(gpu).time });
   frame.pass(target, wave);
 });
 ```
-Default: create once; update changing numbers/vectors/structs with `set()`. `set()` performs no equality check — a value written every frame is uploaded
-every frame, so hoist static and resize-class values out of the render loop.
+Default: create once; update changing numbers/vectors/structs with `set()`. `set()` validates and packs on every call, and frame captures are still uploaded each frame, so hoist static and resize-class values out of the render loop. For managed uniforms, a `set()` whose packed bytes equal the previous ones does not start a new revision, so later draws in the same frame reuse the snapshot already captured; you never need to compare values or pack buffers yourself. Storage bindings and live uniforms still write on every `set()`.
 
 ## 5. Bake static inputs once
 
@@ -140,7 +139,7 @@ for (let i = 0; i < COUNT; i++) {
 ```
 After:
 ```text
-const particles = draw(gpu, { shader: PARTICLE_WGSL, instances: COUNT, vertices: 6 });
+const particles = draw(gpu, { shader: particleShader, instances: COUNT, vertices: 6 });
 await particles.compile(scene);
 particles.set({ particleBuffer });
 frameLoop(gpu, (f) => f.pass({ target: scene }, (p) => p.draw(particles)));
@@ -161,8 +160,8 @@ post.set({ time: time.time, mouse });
 After:
 ```text
 const globals = uniforms(gpu, { time: 0, mouse: [0, 0] });
-const wave = effect(gpu, WAVE_WGSL, { set: { globals } });
-const blur = effect(gpu, BLUR_WGSL, { set: { globals } });
+const wave = effect(gpu, waveShader, { set: { globals } });
+const blur = effect(gpu, blurShader, { set: { globals } });
 frameLoop(gpu, (frame) => {
   globals.set({ time: clock(gpu).time, mouse });
   frame.pass(target, (pass) => {
@@ -209,12 +208,12 @@ Use for 3D anti-aliasing and depth testing. Resolution, depth, color format, and
 Before:
 ```text
 const scene = target(gpu, { size: [256, 256], format: "rgba8unorm" });
-const cube = draw(gpu, { shader: LIT_WGSL, geometry: geometry(gpu, box()) });
+const cube = draw(gpu, { shader: litShader, geometry: geometry(gpu, box()) });
 ```
 After:
 ```text
 const scene = target(gpu, { size: [256, 256], format: "rgba16float", depth: true, msaa: true });
-const cube = draw(gpu, { shader: LIT_WGSL, geometry: geometry(gpu, box()) });
+const cube = draw(gpu, { shader: litShader, geometry: geometry(gpu, box()) });
 await cube.compile(scene);
 frameLoop(gpu, (f) => f.pass({ target: scene, clear: [0, 0, 0, 1] }, (p) => p.draw(cube)));
 ```
@@ -226,11 +225,11 @@ Use for closed geometries. With the default `cull: "none"`, triangles facing awa
 
 Before:
 ```text
-const cube = draw(gpu, { shader: LIT_WGSL, geometry: geometry(gpu, box()) });
+const cube = draw(gpu, { shader: litShader, geometry: geometry(gpu, box()) });
 ```
 After:
 ```text
-const cube = draw(gpu, { shader: LIT_WGSL, geometry: geometry(gpu, box()), cull: "back" });
+const cube = draw(gpu, { shader: litShader, geometry: geometry(gpu, box()), cull: "back" });
 ```
 Default: `cull: "back"` for closed geometries. Keep `"none"` for planes, alpha-tested foliage, and anything seen from both sides.
 

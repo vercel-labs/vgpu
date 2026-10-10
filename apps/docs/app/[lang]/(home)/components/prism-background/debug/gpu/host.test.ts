@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import type { Gpu } from "vgpu";
 import { effect, frame, init, sampler, target } from "vgpu/mock";
 
@@ -16,6 +17,7 @@ const SOLID = `
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
   return vec4f(uv, 0.0, 1.0);
 }`;
+const SOLID_SHADER = prepareShader(SOLID, "prism-debug-host-test.wgsl");
 
 describe("GPU debug preview host", () => {
   test("keeps one stable bridge and owns a fixed small surface per attachment", async () => {
@@ -58,19 +60,20 @@ describe("GPU debug preview host", () => {
     host.bridge.attachPreview({ canvas, source: debugSource("scene-hdr") });
 
     renderHost(gpu, host, 0);
+    expect(contextOf(canvas).getCurrentTexture).not.toHaveBeenCalled();
     await settle();
     renderHost(gpu, host, 0);
-    expect(contextOf(canvas).getCurrentTexture).toHaveBeenCalledTimes(2);
+    expect(contextOf(canvas).getCurrentTexture).toHaveBeenCalledTimes(1);
     expect(createDebugDraws).not.toHaveBeenCalled();
 
     host.invalidate();
     const callsAfterInvalidation = requestRender.mock.calls.length;
     renderHost(gpu, host, 0.05);
     renderHost(gpu, host, 0.06);
-    expect(contextOf(canvas).getCurrentTexture).toHaveBeenCalledTimes(2);
+    expect(contextOf(canvas).getCurrentTexture).toHaveBeenCalledTimes(1);
     expect(requestRender).toHaveBeenCalledTimes(callsAfterInvalidation);
     renderHost(gpu, host, 0.11);
-    expect(contextOf(canvas).getCurrentTexture).toHaveBeenCalledTimes(4);
+    expect(contextOf(canvas).getCurrentTexture).toHaveBeenCalledTimes(2);
     expect(requestRender).toHaveBeenCalled();
 
     dispose(gpu, host);
@@ -78,7 +81,7 @@ describe("GPU debug preview host", () => {
 
   test("renders static entry points once but refreshes their shared bindings", async () => {
     const gpu = await init();
-    const raw = effect(gpu, SOLID, { label: "test.raw-caustic" });
+    const raw = effect(gpu, SOLID_SHADER, { label: "test.raw-caustic" });
     const bind = vi.fn();
     const createDebugDraws = vi.fn(
       async (): Promise<PrismDebugDrawSet> => ({
@@ -92,16 +95,18 @@ describe("GPU debug preview host", () => {
     host.bridge.attachPreview({ canvas, source: debugSource("raw-caustic") });
 
     renderHost(gpu, host, 0);
+    expect(contextOf(canvas).getCurrentTexture).not.toHaveBeenCalled();
     await settle();
     renderHost(gpu, host, 0);
+    expect(contextOf(canvas).getCurrentTexture).not.toHaveBeenCalled();
     await settle();
     renderHost(gpu, host, 0);
-    expect(contextOf(canvas).getCurrentTexture).toHaveBeenCalledTimes(2);
+    expect(contextOf(canvas).getCurrentTexture).toHaveBeenCalledTimes(1);
     expect(createDebugDraws).toHaveBeenCalledTimes(1);
 
     host.invalidate();
     renderHost(gpu, host, 1);
-    expect(contextOf(canvas).getCurrentTexture).toHaveBeenCalledTimes(2);
+    expect(contextOf(canvas).getCurrentTexture).toHaveBeenCalledTimes(1);
     expect(bind).toHaveBeenCalledTimes(2);
 
     dispose(gpu, host);
@@ -118,9 +123,10 @@ describe("GPU debug preview host", () => {
     });
 
     renderHost(gpu, host, 0);
+    expect(contextOf(canvas).getCurrentTexture).not.toHaveBeenCalled();
     await settle();
     renderHost(gpu, host, 0);
-    expect(contextOf(canvas).getCurrentTexture).toHaveBeenCalledTimes(2);
+    expect(contextOf(canvas).getCurrentTexture).toHaveBeenCalledTimes(1);
 
     host.dispose();
     expect(contextOf(canvas).unconfigure).toHaveBeenCalledTimes(1);

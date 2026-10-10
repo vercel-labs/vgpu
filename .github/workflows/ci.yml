@@ -72,7 +72,7 @@ jobs:
 
   wgsl-loader-bundler-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: Install pnpm
@@ -87,6 +87,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm test packages/wgsl/tests/webpack-real.test.ts packages/wgsl/tests/vite-real.test.ts packages/wgsl/tests/runtime-cjs-require.test.ts
+      - name: Webpack persistent-cache upgrade and compiler dependency matrix
+        run: node scripts/test-wgsl-webpack-cache.mjs --artifact-dir=artifacts/wgsl-cache-webpack
+      - name: Upload webpack cache evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wgsl-cache-webpack
+          path: artifacts/wgsl-cache-webpack
+          if-no-files-found: ignore
 
   docker-gpu:
     runs-on: ubuntu-24.04
@@ -113,7 +122,7 @@ jobs:
             -e VGPU_DOCKER_TEST=1 \
             -e VGPU_VALIDATE=require \
             vgpu-test-dev:ci \
-            sh -lc 'pnpm exec vitest run packages/adapter-node/tests/buffer-readback.test.ts packages/adapter-node/tests/compatibility-mode.test.ts packages/wgsl/tests/reflection-gpu-layout.test.ts packages/wgsl/tests/representative-shaders.test.ts packages/wgsl/tests/validation-real-device.test.ts packages/wgsl/tests/validation.test.ts packages/vgpu-api/tests/gpu examples/fluid-validation/src/fluid-gpu.test.ts "apps/docs/app/[lang]/(home)/components/prism-background/prism-gpu.test.ts" "apps/docs/app/[lang]/(home)/components/prism-background/pipelines/shared/glass/ray-footprint.test.ts"'
+            sh -lc 'pnpm exec vitest run packages/adapter-node/tests/buffer-readback.test.ts packages/adapter-node/tests/compatibility-mode.test.ts packages/wgsl/tests/reflection-gpu-layout.test.ts packages/wgsl/tests/representative-shaders.test.ts packages/wgsl/tests/validation-real-device.test.ts packages/wgsl/tests/validation.test.ts packages/vgpu-api/tests/gpu packages/wgsl-std/tests/scene.test.ts examples/by-example-s06-scene/tests/composition.test.ts examples/fluid-validation/src/fluid-gpu.test.ts "apps/docs/app/[lang]/(home)/components/prism-background/prism-gpu.test.ts" "apps/docs/app/[lang]/(home)/components/prism-background/pipelines/shared/glass/ray-footprint.test.ts"'
       - name: Verify doctor and pixel snapshot CLI in Docker
         run: |
           docker run --rm \
@@ -217,7 +226,7 @@ jobs:
 
   wgsl-turbopack-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Install pnpm
@@ -231,6 +240,17 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @vgpu/wgsl build
+      - name: Next 15 WGSL package, build and HMR matrix
+        run: node scripts/test-wgsl-turbopack-cache.mjs --next=15 --artifact-dir=artifacts/wgsl-cache-next-15
+      - name: Next 16 authentic upgrade and restored-cache matrix
+        run: node scripts/test-wgsl-turbopack-cache.mjs --next=16 --artifact-dir=artifacts/wgsl-cache-next-16
+      - name: Upload Next cache evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wgsl-cache-next
+          path: artifacts/wgsl-cache-next-*
+          if-no-files-found: ignore
       - name: next build (turbopack)
         run: pnpm --filter @vgpu/example-next-wgsl exec next build --turbopack
       - name: assert WGSL content in Turbopack output
@@ -275,7 +295,13 @@ jobs:
   # same reason the app directory is named `apps/docs`: it is the docs app, and the required status
   # check kept reporting across the cutover without a branch-protection edit.
   docs-app-build:
-    runs-on: ubuntu-24.04-arm
+    # Match the verified browser WebGPU baseline (issue #109): Jammy, pinned Playwright Chromium,
+    # Mesa's Vulkan runtime, and headed rendering under Xvfb. System Chrome on Noble is not viable.
+    runs-on: ubuntu-22.04
+    env:
+      # 32 zero bytes in base64: valid flags-sdk key material, visibly synthetic, and never reused
+      # outside this build. It must match for `next build` and the `next start` spawned by the smoke.
+      FLAGS_SECRET: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
     steps:
       - uses: actions/checkout@v4
       - name: Install pnpm
@@ -341,6 +367,37 @@ jobs:
       # against `content/docs/**` once TGEIST-04 lands the real corpus.
       - name: Unit-test the docs remark plugins (M1-M9)
         run: pnpm --filter docs test:remark
+      - name: Unit-test the production browser smoke contract
+        run: pnpm --filter docs test:browser-render-smoke
+      - name: Install pinned Chromium and the software WebGPU runtime
+        run: |
+          export PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/vgpu-chromium"
+          pnpm dlx playwright@1.61.1 install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libvulkan1 mesa-vulkan-drivers xvfb xauth
+          chrome_executables=("$PLAYWRIGHT_BROWSERS_PATH"/chromium-*/chrome-linux64/chrome)
+          test "${#chrome_executables[@]}" -eq 1
+          test -x "${chrome_executables[0]}"
+          echo "VGPU_CHROME_PATH=${chrome_executables[0]}" >> "$GITHUB_ENV"
+      # A compiled docs tree can contain stale loader output even when every source-level and
+      # bundle-isolation check above is green. Exercise the exact production build in raw-CDP
+      # Chrome and require GPU canvas texture acquisitions plus queue submissions to continue for
+      # both signed homepage hero themes and Particle Orbit, with nonuniform scene pixels.
+      # Caught renderer errors remain fatal.
+      - name: Smoke production WebGPU rendering in Chrome
+        env:
+          VGPU_CHROME_ARGS: --no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage
+          # Linux headless screenshots can be black despite successful WebGPU submissions.
+          VGPU_CHROME_HEADED: "1"
+        run: xvfb-run -a -s '-screen 0 1280x720x24' pnpm --filter docs check:browser-render-smoke
+      - name: Upload production WebGPU smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-browser-render-smoke
+          path: artifacts/docs-browser-smoke
+          if-no-files-found: warn
+          retention-days: 7
       # TGEIST-12 moved `check:mdast-parity` out of this job: it is gate (c) of Decision 4 and now
       # runs inside `docs-parity` below, next to gates (a), (b) and (d), so the four of them report
       # as one suite (that suite is the evidence F5 is approved on, per risk #9 — "PR de cutover

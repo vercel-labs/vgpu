@@ -1,5 +1,6 @@
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { init, draw, frame, geometry, target } from "vgpu/node";
-import { box, orbit, perspectiveCamera } from "vgpu/scene";
+import { box, composeMatrix, group, perspective, viewMatrices } from "vgpu/scene";
 
 export const LIT_WGSL = /* wgsl */ `
 struct Camera { viewProjection: mat4x4f }
@@ -21,13 +22,36 @@ struct VertexOut { @builtin(position) position: vec4f, @location(0) normal: vec3
   return vec4f(vec3f(0.2, 0.5, 1.0) * l, 1.0);
 }
 `;
+const LIT_SHADER = prepareShader(LIT_WGSL, "by-example-s06-scene.wgsl");
 
 export async function runSceneExample() {
   const gpu = await init();
   const colorTarget = target(gpu, { size: [32, 32], format: "rgba8unorm", depth: true });
-  const cam = perspectiveCamera({ fov: 45, aspect: 1, position: [2, 2, 3], target: [0, 0, 0] });
-  const cube = draw(gpu, { shader: LIT_WGSL, geometry: geometry(gpu, box({ size: 1 })), label: "cube", targets: [colorTarget] });
-  cube.set({ camera: { viewProjection: cam.viewProjection }, model: { model: orbit(0) }, light: { direction: [-1, -1, -1], intensity: 1 } });
+  const poseNode = group({ position: [2, 2, 3] }).lookAt([0, 0, 0]);
+  const projection = perspective({ fov: 45, near: 0.1, far: 100 }, 1, new Float32Array(16));
+  const matrices = { view: new Float32Array(16), viewProjection: new Float32Array(16) };
+  viewMatrices(
+    { position: new Float32Array(poseNode.worldPosition), quaternion: new Float32Array(poseNode.quaternion) },
+    projection,
+    matrices,
+  );
+  const cube = draw(gpu, { shader: LIT_SHADER, geometry: geometry(gpu, box({ size: 1 })), label: "cube", targets: [colorTarget] });
+  cube.set({
+    camera: { viewProjection: matrices.viewProjection },
+    model: { model: composeOrbitMatrix(0) },
+    light: { direction: [-1, -1, -1], intensity: 1 },
+  });
   frame(gpu, (currentFrame) => currentFrame.pass({ target: colorTarget, clear: [0.05, 0.05, 0.08, 1] }, (p) => p.draw(cube)));
   return { gpu, target: colorTarget };
+}
+
+function composeOrbitMatrix(time: number, radius = 1, height = 0, speed = 1): Float32Array {
+  const angle = time * speed;
+  return composeMatrix(
+    {
+      position: [Math.cos(angle) * radius, height, Math.sin(angle) * radius],
+      rotation: [0, angle, 0],
+    },
+    new Float32Array(16),
+  );
 }

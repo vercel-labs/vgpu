@@ -1,0 +1,98 @@
+# Baking and Diagnostics
+
+For an end-to-end reduction and transfer procedure, start with [high-to-low baking](high-to-low-baking.md).
+
+## Prepare the final low-poly mesh
+
+The final LOW defines the bake: transforms resolved without breaking rig pivots, clean topology, stable normals, UV seams, and triangulation. Export its tangents or verify equivalent tangent generation in the importer. Revisit affected bakes when this base changes.
+
+Inspect hard, smooth, or weighted normals across flat panels and bevel transitions. Smoothing every face does not repair unsuitable topology. HIGH and LOW need corresponding intended surfaces, not matching vertex counts.
+
+Before raytracing, check finite UVs, collapsed triangles, unintended overlap, padding and actual texel coverage at the final resolution. Positive chart area or a large bounding box does not guarantee coverage of a narrow exposed strip. Repeat fragile checks after export or LOD simplification. Compare whole-view AO-on/off images as well as repaired crops; a new atlas can fix one seam while making another face black.
+
+Use stable names or groups to pair parts, and list their roles for each pass. For example, a LOW wall receives the normal map, a beveled HIGH wall supplies the detail, and a cage controls the projection rays. The floor and neighboring pillar may receive no map in that pass but still block light in the wall's assembled AO bake. An isolated wall pair is therefore sufficient for some normal projections, but not for that AO bake. Include every relevant occluder. An explicit cage must match LOW topology and transforms; an automatic extrusion still needs inspection. Choose projection distances for local thickness, curvature, and nearby surfaces rather than copying a universal offset.
+
+For selected-to-active normal baking, verify the source selection, active LOW, source visibility, active image target in each receiving material, tangent space, and Y convention. Initialize unused normal texels to neutral (0.5, 0.5, 1) and AO to 1. Disable clearing between passes that accumulate into one atlas.
+
+Isolate matched HIGH/LOW pairs when projection picks up adjacent parts. Move an explicit cage with its pair. Use compact, deterministic offsets: extreme coordinates lose precision around narrow bevels. Restore the intended assembled occluders for AO or illumination, and restore LOW to its intended arrangement for export.
+
+Check the normal and tangent vectors separately: their directions should agree with the saved reference within a declared angular tolerance, their lengths should be near one, and they should be perpendicular. Check tangent handedness too: it is the sign used to orient the third frame axis, and mirrored UVs can change it. Limited storage precision can cause small numeric differences; a flipped sign is not rounding noise. Derive tolerances from the stored UV/vector precision and runtime use. Keep exact hashes of the saved inputs separate from these approximate comparisons, as shown in [freezing the receiving surface](high-to-low-baking.md#3-freeze-the-receiving-surface-and-its-frames). Run this diagnostic before an expensive bake; do not loosen a failed threshold merely to accept output.
+
+## Directional tile mapping
+
+For shingles, boards or masonry courses, check the material axes against the intended construction direction on every differently oriented face. Dominant-axis projection can switch axes between adjacent facets, rotating rows or stretching their physical size. More texture resolution does not fix that mapping.
+
+On a planar pitched roof, use a horizontal eave axis and an orthogonal uphill axis in the face plane, with UV distances measured in metres. For unit upward normal `N` and world up `Z`, one frame is `U = normalize(Z × N)`, `V = N × U`; horizontal roofs need a separately chosen direction. Project relative to a shared eave origin and divide by the intended tile repeat distance. Define the frame on the whole polygon before triangulation so a diagonal cannot introduce a new orientation. Check constant row height along the eave, consistent physical tile dimensions and course alignment across hips under matched close-up and distant views.
+
+Rotate the associated color, roughness and normal maps together. Changing UV0 also changes its tangent frame: regenerate stored tangents or verify the renderer's derivative frame. Preserve a separate lighting UV layout when possible, but evaluate bake dependencies independently: unchanged UV1 can justify geometric AO reuse while changed material sampling still affects indirect lighting.
+
+## Cap and side normals
+
+For a straight cylinder with flat ends, cap normals point outward along the cylinder axis: opposite directions at the two ends. Smooth side normals point radially outward and have no axial component. Keep a hard shading boundary at each rim; use flat cap faces, sharp rim edges, and split corner normals or separate cap/side vertices. Coincident positions do not imply that their normals should be averaged. Actual bevels have their own transition normals; preserve those deliberately.
+
+Check the final exported mesh after joins, welding, triangulation, axis conversion and import. Inspect cap directions, side-normal axial components, unit lengths and outward orientation. Where the format stores normals per vertex, cap and side triangles must use distinct rim vertices. Avoid a later normal-recalculation or vertex-merge step that removes the crease. Review grazing highlights with maps disabled, then rebake affected maps after correcting normals.
+
+## Bake stable occlusion
+
+Decide which surfaces can occlude one another throughout the expected motion. Preserve permanent contacts within rigid assemblies; avoid imprinting stationary bodywork onto rotating wheels or other changing neighbors. Choose a finite occlusion distance appropriate to the asset. Keep directional lighting and material color out of the AO bake.
+
+Use runtime occlusion for changing environmental contacts. Smooth, low-frequency self-occlusion can use vertex data when mesh density supports it; finer variation may require a texture. Keep emissive or intentionally unshaded features from being darkened unintentionally.
+
+## Reuse bakes by their dependencies
+
+Keep reusable tile reflectance/normal detail separate from unique assembly AO and lightmaps. Select tile scale and lighting texel density from the closest required camera rather than increasing a single unique atlas for all detail. A tile bake must not depend on assembled-object attributes absent from its bake plane; verify representative pixels and the restored final material as well as successful image creation.
+
+Record pass-specific cache inputs, including source identity, evaluated geometry and transforms, receiver normals/UVs, resolution, settings, seed and relevant tool versions. Include HIGH and cage inputs for projected normals, occluders for AO, and participating materials, lights and environment for illumination. Use these dependencies to invalidate only affected passes:
+
+| Change | Recheck or invalidate |
+| --- | --- |
+| Receiver geometry, normals, UVs or triangulation | Dependent projected normals, AO and illumination, including LOD bindings |
+| Occluder placement or shape | AO and illumination for affected receivers, including neighboring objects |
+| Material reflectance, lights or environment | Illumination passes that depend on them; independent AO need not change |
+| Compression, channels or mip generation only | Delivery textures and runtime validation; preserve unchanged lossless bake masters |
+
+For example, adding a pillar beside an unchanged wall can change the wall's AO and indirect lighting even when its mesh, UVs and old map bytes are identical. Recheck the wall and floor contacts with AO and lightmaps independently enabled and disabled. The AO pass's finite distance can limit which surfaces are affected; indirect illumination does not necessarily share that limit.
+
+If the affected receivers cannot be identified, rebake the dependent assembly pass. Otherwise invalidate the affected entries and reuse only passes whose recorded inputs and validated outputs still match. Giving an old map a new filename or cache key does not make its lighting current. Record any accepted approximations and affected regions. A packaging failure does not invalidate completed bakes whose inputs remain unchanged.
+
+## Texture filtering and runtime conventions
+
+Use the [asset delivery format table](asset-delivery.md#texture-delivery-choices) to choose container, codec and GPU format; keep bake masters separate from delivery conversions.
+
+- Normals and AO are linear data. Disable sRGB conversion and avoid premultiplying data channels by alpha.
+- Design island padding in pixels of the final resolution. Account for downsampling and mipmaps; more resolution cannot fix overlapping UVs.
+- For a downsampled normal master, decode RGB to vectors, average, normalize, and re-encode. Average AO separately as a scalar.
+- Choose channels for the actual data and shader. A single AO channel need not occupy an RGBA atlas; packing AO with normals is useful only when sampling and compression requirements are compatible.
+- Preserve lossless masters and choose delivery formats per map. Measure decoded normal angular error and AO value error, including mip levels, against those masters. Verify the actual uploaded format and decoder; KTX2 is a container, not a guarantee of GPU compression or importer support. Two-channel normals need a matching reconstruction convention. Record format support and error tolerances for the target platform instead of prescribing one format for every asset.
+- Estimate uncompressed residency as `width × height × bytesPerTexel`, summed over mip levels. A complete square mip chain is approximately 4/3 of its base: RGBA8 2048² is about 21.33 MiB, while R8 1024² is about 1.33 MiB. Account for the actual target format when compressed textures are used.
+- Verify texture orientation, axis conversion, and the tangent frame through import. Nonuniform scales need correct normal transforms; mirrored transforms affect handedness and winding.
+- Averaged normals can lose length in mipmaps. When specular highlights shimmer, consider filtering and roughness adjustment based on normal variance instead of globally blurring the intended material response.
+
+## Diagnose before changing the bake
+
+First [classify the defect's origin](runtime-parity-and-diagnostics.md#classify-the-defects-origin). A camera, binding or scene-composition error can resemble damaged UVs or a bad bake; the table below narrows asset-specific causes after that separation.
+
+| Symptom | Distinguishing check | Possible correction |
+| --- | --- | --- |
+| Extra highlight or broken edge | Compare HIGH, unbaked LOW, and baked LOW under the same light | Inspect modifier order, bevel scope, and cage before changing the texture |
+| Outer bevel clipped only in LOW | Disable secondary bevel modifiers | Restrict them by weights or groups; angle thresholds can select different edges at different densities |
+| Patches or cuts on flat faces | Inspect isolated projection and cage coverage | Adjust normals, rays, or the cage; increasing its size may capture neighboring surfaces |
+| Detail reverses when rotating or mirroring | Use grazing light, map toggles, and representative transforms | Fix tangent handedness or Y convention instead of arbitrarily inverting channels |
+| Seams appear only at a distance | Compare base texture with mip levels | Correct gutters, filtering, precision, or texel density |
+| Highlights shimmer during motion | Compare still/moving views and disable the normal map | Make normal filtering and roughness response consistent |
+| AO has no visible effect | Compare the real map with neutral AO in the target material | Check the channel, UVs, blend expression, strength, and active material |
+| AO slides or becomes excessive | Toggle AO while moving articulated parts | Isolate changing contacts or reduce bake distance and strength |
+| Openings or recessed details disappear | Inspect close-ups and rays through the opening | Remove obstructing surfaces and coplanar overlaps |
+| Blender and the game disagree | Compare each with maps enabled and disabled | Check lighting, material interpretation, axes, tangent data, and import settings |
+| More detail costs more than expected | Compare per-pass draws, resident textures, and GPU timings | Address the measured bottleneck through materials, instancing, culling, LODs, or shadow simplification |
+
+## Choose review coverage for the change
+
+1. Match old and new assets at the actual gameplay camera.
+2. Compare HIGH, unbaked LOW, and baked LOW under lighting that exposes surface errors.
+3. Inspect edges, seams, openings, and nearby surfaces at close range.
+4. Toggle normals, AO and baked lightmaps independently when present; use image differences where helpful. Keep the direct/indirect lighting contract explicit to detect missing terms or double application.
+5. Exercise relevant motion, articulation, scales, mirrored transforms, and both sides of LOD thresholds.
+6. Check a representative runtime scene with the target renderer; verify resource lifetime when integration changes it.
+
+Scale this review to the edit. Report remaining limits honestly: finite texture resolution remains visible under extreme zoom, and reduced geometry alone does not establish a frame-rate improvement.

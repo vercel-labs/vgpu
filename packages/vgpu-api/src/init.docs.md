@@ -41,7 +41,8 @@ interface InitOptions {
 **Returns:** `Promise<Gpu>` — the context every factory takes first: `surface(gpu, ...)`,
 `target(gpu, ...)`, `draw(gpu, ...)`, `effect(gpu, ...)`, `compute(gpu, ...)`, `geometry(gpu, ...)`,
 `frame(gpu, cb)` / `frameLoop(gpu, cb)`, `storage(gpu, ...)`, `uniforms(gpu, ...)`,
-`sampler(gpu, ...)`, and `bundle(gpu, ...)`.
+`sampler(gpu, ...)`, and `bundle(gpu, ...)`. Each call returns an independent `Gpu` with its own
+device and its own `gpu.lost` promise.
 
 **Throws:** `VGPU-RING1-UNSUPPORTED` when WebGPU is unavailable, adapter request returns `null`, or an entrypoint lacks an adapter factory — use `vgpu/mock` in tests, `vgpu/node` in Node, or pass a valid adapter; `VGPU-FEATURE-UNSUPPORTED` when `requiredFeatures` names a feature the adapter does not support — remove the unsupported name(s) or run on an adapter that supports them.
 
@@ -49,22 +50,29 @@ interface InitOptions {
 
 ```ts
 import { init, effect, frame, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const colorTarget = target(gpu, { size: [64, 64], format: "rgba8unorm" });
-const shader = effect(gpu, `
+const shader = effect(gpu, prepareShader(`
   @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     return vec4f(uv, 0.0, 1.0);
   }
-`);
+`));
 
 frame(gpu, (currentFrame) => {
   currentFrame.pass({ target: colorTarget }, (p) => p.draw(shader));
 });
 ```
 
+```wgsl
+// surface-white.wgsl
+@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }
+```
+
 ```ts
 import { init, effect, frame, surface } from "vgpu";
+import whiteShader from "./surface-white.wgsl";
 
 declare const canvas: HTMLCanvasElement;
 
@@ -73,7 +81,7 @@ const gpu = await init({
   requiredLimits: { maxStorageBuffersInVertexStage: 1 },
 });
 const canvasSurface = surface(gpu, canvas, { dpr: [1, 2] });
-const shader = effect(gpu, `@fragment fn fs_main() -> @location(0) vec4f { return vec4f(1); }`);
+const shader = effect(gpu, whiteShader);
 
 frame(gpu, (currentFrame) => {
   currentFrame.pass({ target: canvasSurface }, (p) => p.draw(shader));
@@ -102,5 +110,6 @@ The granted feature makes `timer(gpu)` succeed. In a browser, drop the `adapter`
 - `init(canvas)` is intentionally not supported. Create surfaces explicitly with `surface(gpu, canvas)`.
 - `size`, `dpr`, and `autoResize` are `SurfaceOptions`, not `InitOptions`.
 - The browser, node, and mock entrypoints all use the same `init(options?)` shape.
+- `init()` is also how you recover from device loss. vgpu never replaces a lost device: when `gpu.lost` resolves, the loops are already stopped and new work on that gpu throws `VGPU-DEVICE-LOST`. Dispose it, call `init()` again, recreate the resources on the new gpu, and restart the loop. See `Gpu` ("Device loss") for the full sequence.
 - In `vgpu/mock`, the default adapter declares no optional features. Pass `adapter: createMockAdapter({ features: [...] })` to test feature-gated paths deterministically; `requiredFeatures` outside that set fails with `VGPU-FEATURE-UNSUPPORTED`, and granted features appear on `gpu.device.features`.
 - **See also:** `Gpu`, `Surface`, `Target`, `FrameRunner`.

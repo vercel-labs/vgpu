@@ -122,12 +122,12 @@ interface DrawCallOptions {
 | buffer.stepMode | `"vertex" \| "instance"` | ✖ | `"vertex"` | Instance streams derive `geometry.instanceCount` from the first instance buffer with data. |
 | options.vertexCount | `number` | ✖ | derived | Derived from the first vertex-step buffer with data. |
 | options.instanceCount | `number` | ✖ | derived | Draw default after `DrawCallOptions.instances` and `DrawOptions.instances`. |
-| options.indices | `Uint16Array \| Uint32Array \| readonly number[]` | ✖ | — | Creates an owned `["index", "copy_dst"]` index buffer. `Uint16Array` infers `"uint16"`; otherwise `"uint32"`. |
+| options.indices | `Uint16Array \| Uint32Array \| readonly number[]` | ✖ | — | Creates an owned `["index", "copy_dst"]` index buffer. `Uint16Array` infers `"uint16"`; otherwise `"uint32"`. An odd-length `Uint16Array` is zero-padded to a 4-byte multiple for the initial upload only; `indexFormat`, `indexCount`, and the logical byte length stay the source's. |
 | options.indexBuffer | `GPUBuffer` | ✖ | — | Caller-owned index buffer escape hatch. Pair with `indexFormat` and `indexCount`. |
 | options.topology | `GPUPrimitiveTopology` | ✖ | `"triangle-list"` | Pipeline-affecting geometry topology. Strip topologies derive `stripIndexFormat` from `indexFormat`. |
 | geometry.slice.opts | `GeometrySliceOptions` | ✖ | full range | Frozen range view sharing buffers and layout identity with the parent geometry. |
 | geometry.write.data | `GeometryData` | ✔ | — | Writes to buffer 0 using `queue.writeBuffer`. No resize. |
-| geometry.writeIndices.data | `Uint16Array \| Uint32Array` | ✔ | — | Writes to an index buffer owned from `options.indices`. Write caller-owned `indexBuffer` objects directly. No resize. |
+| geometry.writeIndices.data | `Uint16Array \| Uint32Array` | ✔ | — | Writes to an index buffer owned from `options.indices`. Write caller-owned `indexBuffer` objects directly. No resize. Capacity is the logical index size. |
 
 **Returns:** `geometry(gpu)` returns `Geometry`; `geometry.slice()` returns `GeometrySlice`; `write()`, `writeIndices()`, and `destroy()` return `void`.
 
@@ -140,7 +140,7 @@ interface DrawCallOptions {
 | `VGPU-MESH-LOCATION-CONFLICT` | Duplicate explicit `location` values. | Give each explicit shader location once. |
 | `VGPU-MESH-DATA-MISALIGNED` | Data byte length is not divisible by stride, or index bytes do not match format. | Repack data or pass an explicit `stride`. |
 | `VGPU-MESH-RANGE-INVALID` | Slice or draw-time range is negative, non-integer, outside parent counts, or uses index ranges on non-indexed geometries. | Clamp ranges and use indexed fields only with indexed geometries. |
-| `VGPU-MESH-WRITE-RANGE` | `write()` or `writeIndices()` would overflow the fixed buffer. | Create a larger geometry; writes do not resize buffers. |
+| `VGPU-MESH-WRITE-RANGE` | `write()` or `writeIndices()` would overflow the fixed logical size, or is not 4-byte aligned. | Create a larger geometry; writes do not resize buffers. |
 | `VGPU-MESH-ATTRIBUTE-UNMATCHED` | Named geometry attribute has no vertex-stage shader input. | Rename the attribute or specify `location`. |
 | `VGPU-MESH-INPUT-MISSING` | Shader declares an uncovered `@location` input. | Add the geometry attribute or remove the shader input. |
 | `VGPU-MESH-FORMAT-MISMATCH` | Vertex format base type does not match the WGSL input base type. | Use a compatible `GPUVertexFormat`; width differences are allowed by WebGPU. |
@@ -204,6 +204,7 @@ const particles = geometry(gpu, {
 
 ```ts
 import { init, draw, geometry } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const vertexData = new Float32Array(3 * 4500);
@@ -214,14 +215,15 @@ const gltfGeometry = geometry(gpu, {
 });
 const hull = gltfGeometry.slice({ firstIndex: 0, indexCount: 3600 });
 const glass = gltfGeometry.slice({ firstIndex: 3600, indexCount: 900, label: "glass" });
-const pbrWgsl = "@vertex fn vs_main(@location(0) position: vec3f) -> @builtin(position) vec4f { return vec4f(position, 1); }";
+const pbrShader = prepareShader("@vertex fn vs_main(@location(0) position: vec3f) -> @builtin(position) vec4f { return vec4f(position, 1); }");
 
-draw(gpu, { shader: pbrWgsl, geometry: hull });
-draw(gpu, { shader: pbrWgsl, geometry: glass, blend: "alpha" });
+draw(gpu, { shader: pbrShader, geometry: hull }); // one prepared shader, reused by both slices
+draw(gpu, { shader: pbrShader, geometry: glass, blend: "alpha" });
 ```
 
 ```ts
 import { init, draw, geometry, target } from "vgpu/mock";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 
 const gpu = await init();
 const glyphQuads = new Float32Array(4 * 4);
@@ -230,8 +232,8 @@ const text = geometry(gpu, {
   buffers: [{ data: glyphQuads, attributes: { pos: "float32x2", uv: "float32x2" } }],
   indices: quadIndices,
 });
-const sdfTextWgsl = "@vertex fn vs_main(@location(0) pos: vec2f, @location(1) uv: vec2f) -> @builtin(position) vec4f { return vec4f(pos, 0, 1); }";
-const textDraw = draw(gpu, { shader: sdfTextWgsl, geometry: text });
+const sdfTextShader = prepareShader("@vertex fn vs_main(@location(0) pos: vec2f, @location(1) uv: vec2f) -> @builtin(position) vec4f { return vec4f(pos, 0, 1); }");
+const textDraw = draw(gpu, { shader: sdfTextShader, geometry: text });
 const colorTarget = target(gpu, { size: [640, 480] });
 
 text.write(new Float32Array(4 * 4));
@@ -254,4 +256,6 @@ const cube = geometry(gpu, box({ size: 2 }));
 - Slices share parent buffers and the same `vertexBufferLayouts` array identity so pipelines are shared.
 - Draw-time range overrides use `DrawCallOptions.indices`, `firstIndex`, and `baseVertex`; non-indexed draws use existing `vertices` and `firstVertex`.
 - Bundles bake counts and ranges at record time. Dynamic per-frame ranges need direct draws or bundle re-recording.
+- Index padding is never drawn or written, and writes stay 4-byte aligned, so `writeIndices()` cannot rewrite the last index of an odd-length `Uint16Array`. To keep every index rewritable, pass an even-length array and set `indexCount` to the draw count.
 - `destroy()` only destroys buffers owned from `data`/`indices`; caller-owned `buffer` and `indexBuffer` remain caller-owned.
+- For repeated scene objects, [`instanceGeometry()`](/reference/vgpu-scene-gpu/instance-geometry) borrows a live base mesh and adds an owned instance buffer. Destroying that bridge leaves the base mesh alive; destroying the base invalidates its composed draws and recorded bundles. Recreate affected draws/bundles before reuse. Known-dead geometry and slices are checked at encoding and bundle replay; raw `GPUBuffer.destroy()` outside the geometry lifecycle cannot be intercepted.

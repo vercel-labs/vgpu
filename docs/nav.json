@@ -7,6 +7,7 @@
     "vgpu",
     "vgpu/three",
     "vgpu/scene",
+    "vgpu/scene/gpu",
     "@vgpu/wgsl",
     "@vgpu/wgsl-std",
     "vgpu/core",
@@ -29,14 +30,17 @@
       "..."
     ],
     "vgpu/scene": [
-      "camera",
-      "orthographic-camera",
-      "perspective-camera",
+      "transforms",
+      "nodes",
+      "hierarchy",
+      "instances",
+      "camera-state",
+      "geometry",
       "deg-to-rad",
       "srgb",
-      "orbit",
       "..."
     ],
+    "vgpu/scene/gpu": ["instance-geometry", "..."],
     "vgpu/three": ["tsl-exports", "..."],
     "vgpu/core": [
       "device",
@@ -62,6 +66,7 @@
     ],
     "@vgpu/wgsl-std": [
       "color",
+      "scene",
       "fullscreen",
       "hash",
       "noise",
@@ -92,11 +97,11 @@
   "guideGroups": [
     {
       "title": "General",
-      "slugs": ["getting-started"]
+      "slugs": ["getting-started", "scene-composition", "scene-migration"]
     },
     {
       "title": "Integrations",
-      "slugs": ["threejs", "nextjs", "no-bundler", "external-ticker"]
+      "slugs": ["scene-math", "threejs", "nextjs", "no-bundler", "external-ticker"]
     },
     {
       "title": "Performance",
@@ -162,11 +167,11 @@
         },
         {
           "title": "General",
-          "slugs": ["getting-started"]
+          "slugs": ["getting-started", "scene-composition", "scene-migration"]
         },
         {
           "title": "Integrations",
-          "slugs": ["threejs", "nextjs", "no-bundler", "external-ticker"]
+          "slugs": ["scene-math", "threejs", "nextjs", "no-bundler", "external-ticker"]
         },
         {
           "title": "Performance",

@@ -1,0 +1,287 @@
+---
+name: vgpu-agent-flow
+description: Lead workflow for developing vgpu features and Blender assets with the repository's subharness specialists. Use for agent-based research, API design, implementation, shaders, materials, simulations, or ImageGen-guided asset iteration, and when the human mentions the agent flow or subharness team.
+---
+
+# vgpu agent flow
+
+You are the lead. Specialists live in `.subharness/agents/` and run through the `subharness` CLI
+(root devDependency; call it as `pnpm exec subharness` or `npx subharness`). You own every
+conversation with the human, every decision, every worktree, and every merge. Specialists never
+talk to the human and never see this conversation — each prompt must carry the full context.
+
+## Team
+
+For Blender assets and image-guided visual refinement, use the
+[asset iteration lane](references/asset-iteration.md). It pairs an Astra author with declared
+Opus 5.5 shader/runtime and critique children, with measured screenshots and evidence-based lessons.
+The normal API phases below still apply if the asset work changes a public API.
+
+| Target | Harness / model | Role |
+|---|---|---|
+| `repo:api-researcher` | fx `google/gemini-3.8-flash` → Codex `gpt-5.6-luna` | How other frameworks/libraries solve it. Raw findings only |
+| `repo:graphics-researcher` | fx `google/gemini-3.8-flash` → Codex `gpt-5.6-luna` | Papers, talks, shipped game techniques. Raw findings only |
+| `repo:eval-designer` | Claude `claude-opus-5.5` high → Codex `gpt-6-astra` high | Eval methodology, independent gates, negative controls, and evidence-based analysis |
+| `repo:api-designer` | Codex `gpt-6-astra` xhigh → Claude `claude-opus-5.5` xhigh | API alternatives + illustrative snippets, agent-ergonomics evaluation |
+| `repo:planner` | Claude `claude-sonnet-5.5` high → Codex `gpt-6-astra` high | Plan folder: index, task specs, agent assignment, lanes, progress log |
+| `repo:implementer` | Claude `claude-opus-5.5` high → Codex `gpt-5.6-sol` high | Complex implementation, test-first; runs `writer` and `reviewer` as children; commits |
+| `repo:implementer-simple` | Claude `claude-sonnet-5.5` high → Codex `gpt-5.6-sol` high | Scaffolding and straightforward tasks; same writer, reviewer, verification, and commit workflow |
+| `repo:writer` | Claude `claude-sonnet-5.5` high → Codex `gpt-5.6-sol` high | Docs in house style (called by either implementer, or by you for docs-only work) |
+| `repo:pr-writer` | Claude `claude-sonnet-5.5` high (no fallback) | Markdown-first problem/solution walkthrough and native code blocks; images only for complex diagrams that need drawing; then the technical PR record; lead reviews and publishes |
+| `repo:reviewer` | Codex `gpt-6-astra` high → Claude `claude-opus-5.5` high | Read-only review (called by either implementer per task, and by you after integration) |
+| `repo:fixer` | Claude `claude-sonnet-5.5` high → Codex `gpt-5.6-sol` high | Applies a bounded list of integration-review findings |
+| `repo:asset-author` | Codex `gpt-6-astra` high (no fallback) | Blender modeling, renders, environment lighting and AO/lightmap bakes; declares runtime and critic children |
+| `repo:asset-runtime` | Claude `claude-opus-5.5` high (no fallback) | Shaders, browser rendering and parity with Blender; called by asset-author |
+| `repo:asset-critic` | Claude `claude-opus-5.5` high (no fallback) | Actual capture and cost review, called by asset-author |
+| `repo:example-builder` | Claude `claude-opus-5.5` xhigh | One docs gallery example end to end from a brief; sees it running through `capture_preview`; runs `example-reviewer`; commits |
+| `repo:example-reviewer` | Claude `claude-opus-5.5` high | Example review: code plus hands-on interaction checks through `capture_preview` (called by example-builder) |
+
+Fallback (→) only happens when the first harness is unavailable before the task starts (missing
+CLI, no login, no fx Gateway access). A task that fails after starting is never retried elsewhere;
+re-run it yourself if needed.
+
+## Workspace
+
+All pipeline artifacts are gitignored scratch under `.context/work/<topic>/` (kebab-case topic):
+
+```text
+.context/work/<topic>/
+  brief.md                 # you: the problem statement in the human's words + constraints
+  research/<angle>.md      # researchers: raw findings
+  design/api-options.md    # api-designer: alternatives + snippets
+  decisions.md             # you: locked decisions (after human validation)
+  plan/index.md            # planner
+  plan/tasks/T01-*.md      # planner
+  plan/progress.md         # planner creates; you keep it current
+  plan/progress/T01.md     # implementers
+  reviews/integration-*.md # you: saved integration review output
+  pr/body.md              # pr-writer: human walkthrough, then technical record
+  pr/title.txt            # pr-writer: proposed title
+  pr/assets.json          # pr-writer: local SVG paths or existing attachment URLs + alt text
+  pr/assets/*.svg         # pr-writer: optional images for justified complex diagrams
+  pr/checks.md             # pr-writer: source revisions, evidence and editorial checks
+.context/worktrees/<topic>-<lane>/   # git worktrees for parallel lanes
+```
+
+Never commit `.context/`.
+
+## Phase 0 — Select the repository workflow
+
+Before Phase 1, follow AGENTS.md and `.github/guides/workflow-context.md`: establish the directing
+person's role (run its `gh` permission lookup if unknown) and the task's origin, then select
+`maintainer-original` (internal work), `maintainer-adoption` (anything originating from an external
+issue/PR), or `external-contributor`. Announce the workflow and record it in `brief.md`:
+
+```text
+Workflow: maintainer-original | maintainer-adoption
+Origin: internal request, or source issue/PR URL + author
+Triage: confirmed problem, evidence, disposition
+Scope: accepted outcome and non-goals
+```
+
+The phases below implement that workflow's plan and implementation stages; they do not replace its
+rules on baseline, changesets, PR delivery, or merge authorization. Every lane branches from a
+freshly fetched `origin/canary` (`<base>` below) unless the task is a documented production lane.
+For adoption, pass the source links to every specialist as evidence and state that the external
+implementation must not be copied, cherry-picked, or merged. Stop at the stage the human asked for:
+a research or design request ends with findings, a planning request with the plan.
+
+## Phase 1 — Research
+
+1. Write `brief.md`. Split the question into 2–5 independent angles (e.g. "three.js / Babylon
+   API shape", "Bevy / wgpu resource lifetime", "screen-space GI papers 2018–2025").
+2. Launch one researcher per angle in parallel, each as its own background command:
+   ```sh
+   npx subharness run repo:api-researcher --prompt "Topic: <topic>. Brief: .context/work/<topic>/brief.md. Question: <angle question>. Write .context/work/<topic>/research/<angle-slug>.md."
+   ```
+   Use `api-researcher` for API questions and `graphics-researcher` for shaders, materials,
+   simulations, and rendering techniques.
+3. Researchers do not conclude. Skim their files yourself only to decide whether an angle needs
+   a follow-up run (`subharness send <session-id> --prompt "..."`).
+
+## Phase 2 — API design (skip for work with no public API change)
+
+```sh
+npx subharness run repo:api-designer --prompt "Topic: <topic>. Read brief.md and research/ under .context/work/<topic>/. Design the public API for <problem>. Write design/api-options.md."
+```
+
+Expect 2–4 alternatives; a single recommendation only when one clearly wins.
+
+## Phase 3 — Validate with the human and lock decisions
+
+1. Present the alternatives to the human: short summary, one key snippet each, trade-offs, the
+   designer's open decisions, and your recommendation. Use the ask-question tool for each open
+   decision. Iterate (re-run the designer with feedback via `send`) until every decision is settled.
+2. Write `decisions.md`: one numbered section per decision (`D1`, `D2`, ...) with the chosen option,
+   the final signatures/defaults/error codes, rejected alternatives with one-line reasons, and
+   explicit non-goals. Mark it `Status: locked (<date>)`. Only the human can reopen a decision.
+
+## Phase 4 — Plan
+
+```sh
+npx subharness run repo:planner --prompt "Topic: <topic>. Plan the implementation of .context/work/<topic>/decisions.md. Write plan/ under .context/work/<topic>/."
+```
+
+Review `plan/index.md` for lane isolation (disjoint files between lanes) and missing tasks
+(docs, changeset, examples, bundle budgets, native GPU tests), and check that its PR record is
+self-contained. Show the human the lane summary before starting implementation.
+
+Each task names its implementation agent. Use `repo:implementer-simple` for fully specified
+scaffolding or mechanical changes with established patterns. Use `repo:implementer` for complex
+behavior, architecture, resource lifetime, or concurrency; task size alone does not decide routing.
+
+## Phase 5 — Implement
+
+For each lane that can start:
+
+1. Create an isolated worktree and bring the pipeline folder into it:
+   ```sh
+   git fetch origin canary
+   git worktree add .context/worktrees/<topic>-<lane> -b <topic>/<lane> <base>   # <base> = origin/canary
+   mkdir -p .context/worktrees/<topic>-<lane>/.context/work
+   cp -R .context/work/<topic> .context/worktrees/<topic>-<lane>/.context/work/
+   (cd .context/worktrees/<topic>-<lane> && pnpm install --frozen-lockfile && pnpm build)
+   ```
+   A single-lane plan can run in the current workspace instead.
+2. Run the lane's tasks in order, using the task's assigned implementation agent, one session per
+   task, each lane as its own background command:
+   ```sh
+   npx subharness run repo:implementer --cwd .context/worktrees/<topic>-<lane> --prompt "Topic: <topic>. Implement task .context/work/<topic>/plan/tasks/T03-<slug>.md. Base ref: <base>. Governing: .context/work/<topic>/decisions.md."
+   ```
+   Substitute `repo:implementer-simple` when assigned by the plan. Both implementers run `writer`
+   for docs in parallel and `reviewer` (max 2 rounds), commit on the lane branch, and write
+   `plan/progress/<id>.md`.
+   Behavior changes use tests first; mechanical tasks use appropriate existing checks instead of
+   tests that only mirror scaffolding. If a simple task needs complex design, return it to the lead
+   for reassignment to `repo:implementer`.
+3. After each task, copy the lane's `plan/progress/<id>.md` back and update `plan/progress.md`.
+   Report blocked tasks and disputed findings to the human instead of forcing them through.
+
+## Phase 6 — Integrate, review, polish
+
+1. Merge lane branches into the feature branch in the plan's integration order; resolve conflicts
+   yourself and run the checks the plan lists after each merge.
+2. Run your own integration review over the whole branch:
+   ```sh
+   npx subharness run repo:reviewer --prompt "Integration review for <topic>. Base: <base>. Governing: .context/work/<topic>/decisions.md and plan/index.md. Review the full branch diff, focusing on cross-task consistency, public API contract, docs vs code, and release hygiene."
+   ```
+   Save the output to `reviews/integration-<n>.md`.
+3. Hand blocker/major findings (and cheap polish) to the fixer as a numbered list:
+   ```sh
+   npx subharness run repo:fixer --prompt "Topic: <topic>. Fix these findings on the current branch: 1. ... 2. ... Verify with: <commands>."
+   ```
+   Re-review if the fixer changed behavior. Then summarize to the human: what shipped, checks
+   run, and remaining findings. When the human asks for a PR, follow
+   `.github/guides/pull-requests.md` and `.github/pull_request_template.md` against `canary`. Run
+   `repo:pr-writer` with the exact base/head revisions, workflow/origin, `plan/index.md`'s PR record,
+   key `decisions.md` entries, implementation/review receipts and any current PR body. It follows
+   the [PR writing guide](../../../.subharness/tools/pr-writing.ts): explicitly label the old
+   problem before the first user-code example, then explain the solution. The shared
+   [visual-explainer skill](../visual-explainer/SKILL.md) defines the narrative, Markdown-first style
+   and separate personal PDF mode. Educational PDFs never become PR attachments. The final
+   technical record must stand alone; reviewers cannot see `.context/`.
+   Review `pr/body.md`, `pr/title.txt`, `pr/assets.json` and `pr/checks.md`. The PR writer drafts
+   only; you own publication. Check that each image needs a complex drawn diagram; replace simple
+   text figures with Markdown. An empty asset list is valid. For justified images, reuse verified
+   existing asset URLs or upload new SVGs as GitHub attachments without committing PR-only assets.
+   Check the installed CLI's `gh pr edit --help`
+   for `--attach` support; use the supported CLI or browser upload flow. Replace local image paths,
+   verify the published assets/body, and check for concurrent description edits before updating.
+   Do not add an approval round when publication is already authorized. Declare exactly one PR type
+   (`development` for normal work) and one release impact matching the diff, and run
+   `pnpm migrations:check`. For adoption, link the sources and credit the actual contribution; add a
+   `Co-authored-by` trailer only when verified and warranted. Opening a PR does not authorize
+   merging, closing sources, or releasing.
+4. Remove finished worktrees: `git worktree remove .context/worktrees/<topic>-<lane>`.
+
+## Gallery examples
+
+A new `apps/docs/examples/<slug>` example skips Phases 1–4: write
+`.context/work/<topic>/briefs/<slug>.md` (idea, quality bar, interactions, constraints, closest
+reference examples) and run one builder session per example in the target checkout:
+
+```sh
+npx subharness run repo:example-builder --prompt "Topic: <topic>. Build the example in .context/work/<topic>/briefs/<slug>.md. Base ref: origin/canary."
+```
+
+The builder carries the example contract in `.subharness/tools/example-playbook.ts` and these tools:
+`capture_preview` (`.subharness/tools/preview/`) loads `/preview/<slug>` from the checkout's docs dev
+server in headless WebGPU Chrome, replays scripted mouse/touch/keyboard input, and returns
+screenshots, burst contact sheets, console problems, and GPU/frame timing; `render_thumbnail`,
+`verify_example`, and `bundle_report` (`.subharness/tools/example/`) cover thumbnails, the
+pre-commit checklist, and chunk budgets. Two also run from a shell:
+`node .subharness/tools/preview/cli.ts <slug> --steps '<json>'` and
+`node .subharness/tools/thumbs/mesa.ts <slug> [--update]` (CI's pinned Mesa renderer).
+
+When several examples are built in sequence, improve the builder between them: ask its session what
+context or tooling would have saved time (`subharness send <session-id> --prompt "..."`), evaluate
+each suggestion against the next brief and the repository rules, apply the ones that generalize to
+the playbook or tools, and log feedback, verdicts, and changes in `.context/work/<topic>/iterations.md`.
+
+## Running specialists
+
+Use the [agent handoff contract](references/agent-handoffs.md) for task assignments, results and
+review follow-ups. Keep full evidence on disk, pass compact revision-specific summaries, and use
+the executor's receipt to establish which artifacts were actually built or reviewed.
+
+- Prefer one ordinary `subharness run ...` per specialist through your background-command
+  controls, continue other work, and collect the result. Otherwise use `--detach` and later
+  `subharness wait <task-id>`. Never use shell `&`.
+- Record the host background-command identifier alongside each task/session identifier. Collect
+  that command's result and inspect its state; an early response can leave descendant work pending.
+  Use `wait <task-id> --after <response-id>` to observe later responses. `--detach` does not configure
+  a completion notification or guarantee external chat reactivation; that depends on the host.
+  Continue coordinating the authorized implementation after each result rather than ending at launch.
+- Follow up in the same session with `subharness send <session-id> --prompt "..."`; cancel with
+  `subharness cancel <task-id>`. `subharness dashboard` shows live sessions.
+- Exit code 0 means a response arrived, not that the goal was met — read the response. A response
+  with `State: waiting` means the specialist paused for a child; follow it with
+  `subharness wait <task-id> --after <response-id>` until `completed`.
+- Version 0.0.5 returns `approval_required` for supported native permission requests. Inspect
+  the actual operation, existing user authorization and returned schema; answer only an authorized,
+  offered choice with `subharness respond <request-id> --content-file <path>`, then observe the same
+  task. Do not replay the prompt or broaden permissions. Hard sandbox denials remain hard denials.
+- In the dashboard, Up/Down selects a run, Enter opens session requests and expands prompt/response
+  details, and Escape returns. Ctrl+C closes the monitor without stopping agents.
+- Check readiness without spending a model turn: `npx subharness check repo:<name>`.
+
+## Personal access (per user, not committed)
+
+All vgpu specialists, including Codex/Claude implementations and child writers/reviewers, must use
+Vercel project OIDC through AI Gateway so repository work is attributed to the project. Do not
+fall back to native subscriptions, direct provider keys, or an unrelated Gateway key. Use the OIDC token of
+the `vercel-labs/vgpu` project, configured once in the **main checkout** (worktrees read it from
+there):
+
+```sh
+cd <main-checkout>
+vercel link --yes --project vgpu --scope vercel-labs   # writes .vercel/project.json
+vercel env pull .env.local --yes                       # writes VERCEL_OIDC_TOKEN
+```
+
+`vercel link` may append `.vercel` / `.env*.local` to `.gitignore`; revert that and add them to
+`.git/info/exclude` instead. Then create `<main-checkout>/.subharness/agents.local.json`
+(auto-excluded from Git):
+
+```json
+{
+  "access": {
+    "codex": [{ "type": "vercel-oidc", "project": ".", "envFile": ".env.local" }],
+    "claudeCode": [{ "type": "vercel-oidc", "project": ".", "envFile": ".env.local" }],
+    "fx": [{ "type": "vercel-oidc", "project": ".", "envFile": ".env.local" }]
+  }
+}
+```
+
+Verify every role with `pnpm exec subharness check repo:<name>`, including implementation, writer,
+reviewer, and both researchers. A readiness check validates startup, not provider quota or a paid
+inference result. Never print tokens or commit `.env.local`/`agents.local.json`.
+
+The OIDC token expires after about 12 hours. The lead may renew it for this established project
+through the existing authenticated Vercel CLI, following Subharness's `sdk/access-config.md`;
+children report failures instead of racing to change shared credentials. Do not switch billing
+routes when renewal fails. Credential changes apply only to new native sessions: checkpoint and
+close older sessions, then start new sessions from those artifacts. A follow-up to an existing
+session retains its original credentials. Record which sessions were restarted and the verified
+project/expiry, without exposing credentials. The main-checkout access file covers linked worktrees;
+a worktree-local copy is not an override.

@@ -3,8 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import type { ShaderFunctionExport, ShaderSource } from "@vgpu/wgsl";
+import { prepareShader } from "@vgpu/wgsl/prepare";
 import { transformWgsl } from "@vgpu/wgsl/loader-vite";
 import wgslWebpackLoader from "@vgpu/wgsl/loader-webpack";
+import { evaluateShaderModule } from "./helpers/evaluate-shader-module.ts";
 
 type EmittedShaderSource = ShaderSource & {
   readonly functionExports: readonly ShaderFunctionExport[];
@@ -17,22 +19,23 @@ const importGraphLoaders = [
 
 test("ordinary leaf artifacts preserve WGSL and authoritatively expose no function exports", async () => {
   const source = `// ordinary leaf\n@compute @workgroup_size(1) fn main() {\n  var value = 1u;\n}\n`;
-  const vite = artifact(await transformWgsl(source, "/ordinary-vite.wgsl"));
+  const vite = await artifact(await transformWgsl(source, "/ordinary-vite.wgsl"));
   const webpackCode = wgslWebpackLoader.call({ resourcePath: "/ordinary-webpack.wgsl" }, source);
 
   expect(typeof webpackCode).toBe("string");
-  const webpack = artifact(webpackCode ?? "");
+  const webpack = await artifact(webpackCode ?? "");
   for (const emitted of [vite, webpack]) {
     expect(emitted.wgsl).toBe(source);
     expect(emitted.functionExports).toEqual([]);
+    expectPreparedArtifact(emitted);
   }
 });
 
 test("direct-export leaf artifacts resolve their in-memory source before identifier minification", async () => {
   const source = `export fn surfaceValue(authoredValue: f32) -> f32 { return authoredValue * 2.0; }`;
-  const vite = artifact(await transformWgsl(source, "/missing/exported-vite.wgsl", { minify: true }));
+  const vite = await artifact(await transformWgsl(source, "/missing/exported-vite.wgsl", { minify: true }));
   const webpackResult = await webpack(source, "/missing/exported-webpack.wgsl", { minify: true });
-  const webpackArtifact = artifact(webpackResult.code);
+  const webpackArtifact = await artifact(webpackResult.code);
 
   expect(webpackResult.synchronous).toBe(false);
   for (const emitted of [vite, webpackArtifact]) {
@@ -46,26 +49,28 @@ test("direct-export leaf artifacts resolve their in-memory source before identif
     expect(emitted.wgsl).not.toMatch(/\bexport\b/u);
     expect(emitted.wgsl).not.toContain("authoredValue");
     expect(emitted.wgsl).toMatch(functionDeclaration(emitted.functionExports[0]!.resolvedName));
+    expectPreparedArtifact(emitted);
   }
 });
 
 test("direct-export leaf DCE removes attributes attached through comment trivia", async () => {
   const source = `@fragment fn main() -> @location(0) vec4f { return vec4f(1.0); }
 export @must_use /* attached trivia */ fn dead(value: f32) -> f32 { return value; }`;
-  const vite = artifact(await transformWgsl(source, "/missing/dead-vite.wgsl"));
-  const webpackArtifact = artifact((await webpack(source, "/missing/dead-webpack.wgsl")).code);
+  const vite = await artifact(await transformWgsl(source, "/missing/dead-vite.wgsl"));
+  const webpackArtifact = await artifact((await webpack(source, "/missing/dead-webpack.wgsl")).code);
 
   for (const emitted of [vite, webpackArtifact]) {
     expect(emitted.functionExports).toEqual([]);
     expect(emitted.wgsl).not.toContain("@must_use");
     expect(emitted.wgsl).not.toContain("fn dead");
+    expectPreparedArtifact(emitted);
   }
 });
 
 test("direct-export leaf entry points allow comment trivia after fn", async () => {
   const source = "@fragment export fn /* declaration trivia */ fs_main() -> @location(0) vec4f { return vec4f(1.0); }";
-  const vite = artifact(await transformWgsl(source, "/missing/entry-vite.wgsl"));
-  const webpackArtifact = artifact((await webpack(source, "/missing/entry-webpack.wgsl")).code);
+  const vite = await artifact(await transformWgsl(source, "/missing/entry-vite.wgsl"));
+  const webpackArtifact = await artifact((await webpack(source, "/missing/entry-webpack.wgsl")).code);
 
   for (const emitted of [vite, webpackArtifact]) {
     expect(emitted.functionExports).toEqual([
@@ -79,8 +84,8 @@ test.each([
   ["block comment", "export /* declaration gap */ fn surfaceValue(value: f32) -> f32 { return value; }"],
   ["line comment", "export // declaration gap\nfn surfaceValue(value: f32) -> f32 { return value; }"],
 ] as const)("direct-export leaf artifacts accept $0 trivia between export and fn", async (_label, source) => {
-  const vite = artifact(await transformWgsl(source, "/missing/comment-vite.wgsl"));
-  const webpackArtifact = artifact((await webpack(source, "/missing/comment-webpack.wgsl")).code);
+  const vite = await artifact(await transformWgsl(source, "/missing/comment-vite.wgsl"));
+  const webpackArtifact = await artifact((await webpack(source, "/missing/comment-webpack.wgsl")).code);
 
   for (const emitted of [vite, webpackArtifact]) {
     expect(emitted.functionExports).toEqual([
@@ -106,8 +111,8 @@ test("minified import-graph artifacts expose authored metadata for final declara
   await writeFile(entry, source);
   await writeFile(helper, "export fn surfaceValue(authoredValue: f32) -> f32 { return authoredValue * 2.0; }");
 
-  const vite = artifact(await transformWgsl(await readFile(entry, "utf8"), entry, { minify: true }));
-  const webpackArtifact = artifact((await webpack(source, entry, { minify: true })).code);
+  const vite = await artifact(await transformWgsl(await readFile(entry, "utf8"), entry, { minify: true }));
+  const webpackArtifact = await artifact((await webpack(source, entry, { minify: true })).code);
 
   for (const emitted of [vite, webpackArtifact]) {
     expect(emitted.functionExports).toEqual([
@@ -119,6 +124,7 @@ test("minified import-graph artifacts expose authored metadata for final declara
     ]);
     expect(emitted.wgsl).not.toContain("surfaceValue");
     expect(emitted.wgsl).toMatch(functionDeclaration(emitted.functionExports[0]!.resolvedName));
+    expectPreparedArtifact(emitted);
   }
 });
 
@@ -156,12 +162,20 @@ export fn memoryValue(value: f32) -> f32 { return helperValue(value); }`;
       "memoryValue",
       "helperValue",
     ]);
+    expectPreparedArtifact(emitted);
   }
 });
 
-function artifact(codeOrResult: string | { readonly code: string }): EmittedShaderSource {
+function expectPreparedArtifact(emitted: EmittedShaderSource): void {
+  expect(emitted).toEqual(prepareShader({
+    wgsl: emitted.wgsl,
+    functionExports: emitted.functionExports,
+  }));
+}
+
+async function artifact(codeOrResult: string | { readonly code: string }): Promise<EmittedShaderSource> {
   const code = typeof codeOrResult === "string" ? codeOrResult : codeOrResult.code;
-  return Function(code.replace(/^export default /u, "return ").replace(/;$/u, ";"))() as EmittedShaderSource;
+  return await evaluateShaderModule(code) as EmittedShaderSource;
 }
 
 function webpack(
