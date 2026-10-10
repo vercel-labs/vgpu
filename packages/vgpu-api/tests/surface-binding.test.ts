@@ -152,11 +152,12 @@ test("explicit Textures, the current-frame Surface color escape, and Surface col
     expect(() => stored.dispatch(1)).not.toThrow();
     expect(() => frame(gpu, (currentFrame) => {
       sampled.set({ source: canvasSurface.color });
+      currentFrame.pass(canvasSurface, () => undefined);
       currentFrame.pass(output, sampled);
     })).not.toThrow();
     expect(sampledWithSampler).toBeDefined();
     await expect(canvasSurface.color.read({ mipLevel: 0, region: "all" })).resolves.toHaveLength(4 * 4 * 4);
-    expect(getCurrentTexture).toHaveBeenCalledTimes(2);
+    expect(getCurrentTexture).toHaveBeenCalledTimes(4);
   } finally { gpu.dispose(); }
 });
 

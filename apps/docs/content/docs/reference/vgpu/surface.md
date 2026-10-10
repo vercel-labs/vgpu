@@ -85,6 +85,7 @@ interface Surface extends Target {
 - `VGPU-PASS-PRESERVE-MSAA` for `clear: false` on an `msaa` surface, and `VGPU-PASS-DEPTH-READONLY-MSAA` for `depthReadOnly` on one — multisample attachments are discarded at the end of each pass; use a single-sample surface or target.
 - `VGPU-R1-BINDING-DESTROYED` at draw time when a binding still holds a `surface.depth` texture that a resize or `dispose()` destroyed — rebind the current `surface.depth` and re-record bundles that captured the old one.
 - `VGPU-SURFACE-NOT-BINDABLE` when the surface itself is an input binding (see below).
+- `VGPU-SURFACE-READ-UNAVAILABLE` when `surface.color.read()` / `readFloats()` does not refer to the current canvas texture submitted by a completed frame, or while a frame is active — read immediately after `frame()` returns or use an offscreen target for deferred readback.
 - Native WebGPU validation still applies to the configured formats, features, and compatibility-mode restrictions; synchronous allocation errors propagate unchanged.
 
 A surface is never a valid input binding. Passing one as a binding value to `draw(gpu)`, `effect(gpu)`, or `compute(gpu)` — in the constructor `set` option or a later `.set()`, inside or outside a frame — throws `VGPU-SURFACE-NOT-BINDABLE` from that call. The error names the binding and drawable in `where` (for example `post.source`). vgpu rejects the surface before it reads `color`, `colors`, or `depth`, so no canvas texture is acquired; that holds for disposed surfaces too. Fix: “Render to an offscreen target and bind that target or its texture. Use Surface only as a render destination.”
@@ -111,6 +112,11 @@ const wave = effect(gpu, surfaceColorShader);
 frame(gpu, (currentFrame) => {
   currentFrame.pass({ target: canvasSurface }, (pass) => pass.draw(wave));
 });
+
+// Read immediately, before the browser advances the canvas texture. For deferred readback,
+// render to an offscreen target instead.
+const pixels = await canvasSurface.color.read({ mipLevel: 0, region: "all" });
+console.log(pixels.byteLength);
 ```
 
 ### Render 3D directly to the canvas
@@ -410,6 +416,7 @@ The pass descriptor also reconciles dimensions changed during a frame, before ac
 ## Notes
 
 - Use a `Surface` for the swapchain/backbuffer: it renders the current browser frame, including direct 3D with `depth` and `msaa`. Use `target(gpu, ...)` for intermediate, reusable, sampleable/readable images — post-processing, history, ping-pong; see `Target` for the contrast.
+- `surface.color.read(...)` / `readFloats(...)` only read the current canvas texture after its frame was submitted and before presentation advances. Reads before submission, after cancellation, during a frame, or from a stale canvas texture throw `VGPU-SURFACE-READ-UNAVAILABLE`. For reliable or deferred readback, render to an offscreen `Target` instead.
 - A surface pass may be the final presentation pass; do not use a surface as a ping-pong resource. For post-processing, render into a `Target`, then sample it in a draw or effect targeting the surface in the same frame.
 - Do not bind a surface: `set({ source: canvasSurface })` throws `VGPU-SURFACE-NOT-BINDABLE` in every resource slot (sampled color or depth, storage texture, sampler, buffer). Bind an offscreen `Target` to follow its attachment across resizes, or bind an explicit `Texture` such as `sceneTarget.color` or a single-sample `canvasSurface.depth` to keep that exact texture until you rebind it.
 - `surface.color` is still a `Texture`, but it wraps the canvas's current texture, which the browser replaces after each presentation. Binding it explicitly is not a substitute for an offscreen target: the binding does not follow later frames and is not safe to reuse after the frame presents.

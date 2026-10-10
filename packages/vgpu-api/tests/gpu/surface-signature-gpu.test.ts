@@ -23,14 +23,15 @@ describe.skipIf(process.env.VGPU_DOCKER_TEST !== "1")("Surface signature Docker 
       frame(gpu, (currentFrame) => currentFrame.pass(screen, (pass) => pass.bundles(recorded)));
       expect(canvas.acquisitions()).toBe(1);
       const initial = await screen.color.read({ mipLevel: 0, region: "all" });
-      expect(canvas.acquisitions()).toBe(2);
+      // The color wrapper acquires the texture, then readback verifies its current identity.
+      expect(canvas.acquisitions()).toBe(3);
       expect(rgbaAt(initial, 8, 4, 4)).toEqual([255, 0, 0, 255]);
 
       screen.resize([12, 4]);
       frame(gpu, (currentFrame) => currentFrame.pass(screen, (pass) => pass.bundles(recorded)));
-      expect(canvas.acquisitions()).toBe(3);
-      const resized = await screen.color.read({ mipLevel: 0, region: "all" });
       expect(canvas.acquisitions()).toBe(4);
+      const resized = await screen.color.read({ mipLevel: 0, region: "all" });
+      expect(canvas.acquisitions()).toBe(6);
       expect(resized.byteLength).toBe(12 * 4 * 4);
       expect(rgbaAt(resized, 12, 6, 2)).toEqual([255, 0, 0, 255]);
     } finally {

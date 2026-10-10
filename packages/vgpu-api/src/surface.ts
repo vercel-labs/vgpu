@@ -1,4 +1,4 @@
-import { Texture, createResourceIdentity, DestroySignal, type Device, type ResourceDestroyCallback, type ResourceIdentity, type UnsubscribeResourceDestroy } from "@vgpu/core";
+import { Texture, createResourceIdentity, DestroySignal, type Device, type ResourceDestroyCallback, type ResourceIdentity, type TextureOptions, type TextureReadOptions, type UnsubscribeResourceDestroy } from "@vgpu/core";
 import { BUILT_IN_CLEAR_COLOR, colorAttachment, copyClearColor, depthAttachment, sameSize, validateClearColor, type ClearColor } from "./target-utils.ts";
 import type { RenderPassDescriptorOptions, Target, TargetSignature } from "./target.ts";
 import {
@@ -8,9 +8,11 @@ import {
   surfaceDepthInvalidError,
   surfaceDuplicateError,
   surfaceMsaaInvalidError,
+  surfaceReadUnavailableError,
   surfaceResizeReentrantError,
 } from "./errors.ts";
 import { frameState } from "./frame-state.ts";
+import type { FrameHandle, FrameOwner } from "./frame-protocols.ts";
 import { SURFACE_TARGET, TARGET_SIGNATURE } from "./draw-protocols.ts";
 import { liveKernel } from "./live-kernel.ts";
 import { serviceToken, type Gpu, type Kernel } from "./kernel.ts";
@@ -99,7 +101,7 @@ interface SurfaceAttachments {
   readonly all: readonly Texture[];
 }
 
-export class CanvasSurface implements Surface {
+export class CanvasSurface implements Surface, FrameOwner {
   readonly [SURFACE_TARGET] = true;
   readonly resourceIdentity = createResourceIdentity("render-target");
   readonly label: string | undefined;
@@ -119,6 +121,9 @@ export class CanvasSurface implements Surface {
   #generationSize!: readonly [number, number];
   #isDisposed = false;
   #notifying = false;
+  #attachmentTexture: GPUTexture | undefined;
+  readonly #frameTextures = new WeakMap<FrameHandle, GPUTexture>();
+  #lastSubmittedTexture: GPUTexture | undefined;
 
   constructor(
     private readonly device: Device,
@@ -166,13 +171,14 @@ export class CanvasSurface implements Surface {
   get texelSize(): readonly [number, number] { const size = this.size; return [1 / size[0], 1 / size[1]]; }
   get color(): Texture {
     this.#assertLive();
-    return new Texture(this.device, this.context.getCurrentTexture(), {
+    const gpuTexture = this.context.getCurrentTexture();
+    return new SurfaceColorTexture(this.device, gpuTexture, {
       kind: "2d",
       size: this.size,
       format: this.format,
       usage: ["render_attachment", "texture_binding", "copy_src"],
       label: this.options.label ? `${this.options.label}.color` : "surface.color",
-    }, "external");
+    }, (where) => this.#assertReadable(gpuTexture, where));
   }
   get colors(): readonly [Texture, ...Texture[]] { return [this.color]; }
   get depth(): Texture | undefined { this.#assertLive(); return this.#attachments.depth; }
@@ -230,6 +236,7 @@ export class CanvasSurface implements Surface {
       this.#applyResize(currentCanvasSize, this.#currentDpr, false);
     }
     const resolved = this.context.getCurrentTexture();
+    this.#attachmentTexture = resolved;
     return {
       colorAttachments: [colorAttachment(resolved, this.#attachments.msaaColor, clear, preserve)],
       depthStencilAttachment: this.#attachments.depth
@@ -238,9 +245,30 @@ export class CanvasSurface implements Surface {
     };
   }
 
+  attachFrame(frame: FrameHandle): void {
+    if (this.#attachmentTexture) {
+      this.#frameTextures.set(frame, this.#attachmentTexture);
+      this.#lastSubmittedTexture = undefined;
+    }
+  }
+
+  finalizeFrame(): void {}
+
+  frameSubmitted(frame: FrameHandle): void {
+    const texture = this.#frameTextures.get(frame);
+    this.#frameTextures.delete(frame);
+    if (texture) this.#lastSubmittedTexture = texture;
+  }
+
+  frameAbandoned(frame: FrameHandle): void {
+    this.#frameTextures.delete(frame);
+  }
+
   dispose(): void {
     if (this.#isDisposed) return;
     this.#isDisposed = true;
+    this.#attachmentTexture = undefined;
+    this.#lastSubmittedTexture = undefined;
     try { this.context.unconfigure?.(); } catch { /* ignore native cleanup failures */ }
     const errors: unknown[] = [];
     try { this.unregister(this); } catch (error) { errors.push(error); }
@@ -270,6 +298,8 @@ export class CanvasSurface implements Surface {
       this.#currentDpr = dpr;
       this.#generationSize = nextSize;
       this.#attachments = next;
+      this.#attachmentTexture = undefined;
+      this.#lastSubmittedTexture = undefined;
       const errors: unknown[] = [];
       try { this.#emitTexturesRecreated(); } catch (error) { errors.push(error); }
       if (notifyPublic) {
@@ -311,6 +341,13 @@ export class CanvasSurface implements Surface {
     if (this.#isDisposed) throw surfaceDisposedError(this.options.label);
   }
 
+  #assertReadable(texture: GPUTexture, where: string): void {
+    this.#assertLive();
+    if (isFrameActive() || this.#lastSubmittedTexture !== texture || this.context.getCurrentTexture() !== texture) {
+      throw surfaceReadUnavailableError(this.options.label, where);
+    }
+  }
+
   #allocateAttachments(size: readonly [number, number]): SurfaceAttachments {
     const allocated: Texture[] = [];
     const create = (options: Parameters<Device["createTexture"]>[0]): Texture => {
@@ -340,6 +377,22 @@ export class CanvasSurface implements Surface {
       try { destroyTextures(allocated); } catch { /* Preserve the allocation error. */ }
       throw error;
     }
+  }
+}
+
+class SurfaceColorTexture extends Texture {
+  constructor(device: Device, gpu: GPUTexture, options: TextureOptions, private readonly assertReadable: (where: string) => void) {
+    super(device, gpu, options, "external");
+  }
+
+  override async read(options: TextureReadOptions): Promise<Uint8Array> {
+    this.assertReadable("Surface.color.read");
+    return super.read(options);
+  }
+
+  override async readFloats(options: TextureReadOptions): Promise<Float32Array> {
+    this.assertReadable("Surface.color.readFloats");
+    return super.readFloats(options);
   }
 }
 
