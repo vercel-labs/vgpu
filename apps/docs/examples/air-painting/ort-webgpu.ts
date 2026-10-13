@@ -57,6 +57,11 @@ async function createSession(
     return await ort.InferenceSession.create(bytes, {
       executionProviders: ["webgpu"],
       preferredOutputLocation: options.preferredOutputLocation,
+      // Errors only. ORT otherwise prints a partial-EP-assignment warning
+      // (shape ops pinned to CPU) to stderr during session creation, which
+      // Emscripten routes to console.error and the Next dev overlay surfaces
+      // as a Console Error. depth-estimation sets the same level.
+      logSeverityLevel: 3,
     });
   } catch (error) {
     throw new Error(`Could not create a WebGPU session for ${options.label}.`, {
