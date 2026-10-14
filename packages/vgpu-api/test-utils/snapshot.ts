@@ -63,7 +63,7 @@ function snapshotFixit(path: string, actualPath: string, diffPath: string): stri
 }
 
 function artifactPath(path: string, suffix: string): string {
-  return path.replace(/\.png$/u, `.${suffix}.png`);
+  return `${path.replace(/\.png$/iu, "")}.${suffix}.png`;
 }
 
 function pngFromRgba(bytes: Uint8Array, width: number, height: number): PNG {
