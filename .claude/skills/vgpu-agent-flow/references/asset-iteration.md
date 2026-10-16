@@ -4,14 +4,17 @@ Use this lane when the user requests an authored Blender asset, screenshot-drive
 or an ImageGen concept translated into a runtime example. Follow the selected repository workflow;
 reuse the user's creative delegation instead of inventing a public-API approval stage.
 
-`repo:asset-author` runs Astra (`gpt-6-astra`) with two declared Opus 5.5 children:
+`repo:asset-author` runs Astra (`gpt-6-astra`) with declared Opus 5.5 children:
+`subagent:producer` handles LOW meshes, bakes and packaging when production is assigned;
 `subagent:runtime` specializes in shaders and disjoint browser rendering files; `subagent:critic` reviews actual captures
 and costs. These roles intentionally have no model fallback: report unavailable requested models.
 Reading a skill does not grant a CLI child access to the lead's image-generation tools.
 
-Astra owns modeling, Blender renders, authored materials, environment design, camera composition,
-lighting and AO/indirect bakes. It uses actual Blender renders to refine concepts and directs the
-next visual change. Opus owns runtime PBR and baked-lighting composition, sky/water shaders,
+Astra owns modeling, Blender renders, authored materials, environment design, camera composition
+and intended lighting. For web delivery or optimization, read [asset production](asset-production.md):
+the producer derives LOW and its bakes from a pinned HIGH source. The author can handle a small
+combined assignment itself when requested; avoid overlapping ownership. It uses actual Blender renders to refine concepts and directs the
+next visual change. The runtime specialist owns runtime PBR and baked-lighting composition, sky/water shaders,
 reflections, shadows and color-management parity with that scene. If native Blender execution
 requires the lead, Astra still specifies the render and inspects the returned images; the lead
 provides execution support without transferring artistic ownership to the runtime child.

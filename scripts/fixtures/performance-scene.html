@@ -1,0 +1,67 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Performance bridge protocol fixture</title>
+<canvas></canvas>
+<script type="module">
+// Tiny real-WebGPU protocol smoke, not application performance evidence.
+let device, target, queries, resolveBuffer, readBuffer, mode, failure;
+const source = "protocol-fixture-v1";
+const scope = { cpu: "clear-pass command encoding", gpu: "clear-pass timestamp interval" };
+globalThis.__vgpuPerf = {
+  async prepare(plan) {
+    const s = plan.case.settings;
+    if (s.camera !== "fixed" || s.quality !== "fixture" || s.seed !== 7 || s.dt !== 0 || s.variant !== "baseline") throw new Error("Unsupported fixture state");
+    mode = plan.budget.mode;
+    const adapter = await navigator.gpu?.requestAdapter();
+    if (!adapter) throw new Error("WebGPU unavailable");
+    if (mode === "gpu" && !adapter.features.has("timestamp-query")) throw new Error("GPU timestamps unavailable");
+    device = await adapter.requestDevice({ requiredFeatures: mode === "gpu" ? ["timestamp-query"] : [] });
+    device.lost.then((info) => { if (info.reason !== "destroyed") failure = new Error(info.message || "device lost"); });
+    device.addEventListener("uncapturederror", (event) => { failure = event.error; });
+    const canvas = document.querySelector("canvas");
+    canvas.width = s.width * s.dpr; canvas.height = s.height * s.dpr;
+    canvas.style.width = s.width + "px"; canvas.style.height = s.height + "px";
+    const format = navigator.gpu.getPreferredCanvasFormat();
+    target = device.createTexture({ size: [canvas.width, canvas.height], format, usage: GPUTextureUsage.RENDER_ATTACHMENT });
+    if (mode === "gpu") {
+      queries = device.createQuerySet({ type: "timestamp", count: 2 });
+      resolveBuffer = device.createBuffer({ size: 16, usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC });
+      readBuffer = device.createBuffer({ size: 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+    }
+    const info = adapter.info;
+    const description = [info.vendor, info.architecture, info.device, info.description].filter(Boolean).join(" ");
+    return {
+      source, build: source, settings: { width: canvas.width / s.dpr, height: canvas.height / s.dpr, dpr: devicePixelRatio, camera: "fixed", quality: "fixture", seed: 7, dt: 0, variant: "baseline" },
+      scope: scope[mode], method: mode === "gpu" ? "gpu-timestamps" : "cpu-scopes",
+      device: description || "unidentified WebGPU adapter",
+      backend: /swiftshader|llvmpipe|software/i.test(description) ? "software" : /apple|nvidia|amd|intel/i.test(description) ? "hardware" : "unknown",
+      runtime: navigator.userAgent, buildMode: "test",
+    };
+  },
+  async sample(input) {
+    if (failure) throw failure;
+    if (input.mode !== mode || input.dt !== 0) throw new Error("Changed fixture mode/state");
+    const start = performance.now();
+    const encoder = device.createCommandEncoder();
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [{ view: target.createView(), clearValue: { r: 0.1, g: 0.3, b: 0.5, a: 1 }, loadOp: "clear", storeOp: "store" }],
+      ...(mode === "gpu" ? { timestampWrites: { querySet: queries, beginningOfPassWriteIndex: 0, endOfPassWriteIndex: 1 } } : {}),
+    });
+    pass.end();
+    if (mode === "gpu") { encoder.resolveQuerySet(queries, 0, 2, resolveBuffer, 0); encoder.copyBufferToBuffer(resolveBuffer, 0, readBuffer, 0, 16); }
+    device.queue.submit([encoder.finish()]);
+    let valueMs = performance.now() - start;
+    if (mode === "gpu") {
+      await readBuffer.mapAsync(GPUMapMode.READ);
+      const values = new BigUint64Array(readBuffer.getMappedRange());
+      valueMs = Number(values[1] - values[0]) / 1e6;
+      readBuffer.unmap();
+    }
+    if (failure) throw failure;
+    return { valueMs };
+  },
+  async dispose() {
+    target?.destroy(); queries?.destroy(); resolveBuffer?.destroy(); readBuffer?.destroy(); device?.destroy();
+  },
+};
+</script>

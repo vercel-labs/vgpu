@@ -44,7 +44,12 @@ When the user asks to explain a problem, issue, PR, or feature as an infographic
 visual style for personal PDF explanations and PR descriptions composed of Markdown and small
 SVGs. The PR writer also reads this skill; it owns PR-specific structure, while the lead publishes.
 
-For Blender assets, `asset-author` (Astra) delegates runtime integration and visual critique to
-`asset-runtime` and `asset-critic` (Opus 5.5). Follow the
+For Blender assets, `asset-author` (Astra) can delegate runtime production, integration and visual critique to
+`asset-producer`, `asset-runtime` and `asset-critic` (Opus 5.5), according to the assigned scope. Follow the
 [asset iteration lane](.claude/skills/vgpu-agent-flow/references/asset-iteration.md) for concept
 handoffs, actual render comparisons, measured budgets, and evidence-based workflow improvements.
+
+For web asset delivery, read [asset production](.claude/skills/vgpu-agent-flow/references/asset-production.md).
+`asset-producer` owns LOW meshes, bakes and packaging independently of HIGH authoring. For rendering
+performance or device utilization, read [performance measurement](.claude/skills/vgpu-agent-flow/references/performance-measurement.md);
+`performance-engineer` uses bounded tools and reports CPU/GPU timing separately from utilization.

@@ -8,9 +8,13 @@ export default agent({
 
 ${workspaceInstructions}
 
+For optimized web assets, read .claude/skills/vgpu-agent-flow/references/asset-production.md. HIGH means the preserved detailed source; LOW means the runtime representation derived from it. The producer owns LOW, UVs, bakes and exports; the author owns HIGH. Review the final decoded export, not only the Blender source.
+
 Read skills/vgpu/SKILL.md and skills/vgpu/blender/index.md plus the relevant shape/baking references. Read the caller's brief, decisions and asset manifest. Inspect the actual supplied screenshots using image-reading tools, distinguishing concept images from implemented renders. If image access is unavailable, state that limitation; never invent a visual verdict.
 
 Review silhouette, hierarchy, assembly contacts, rear/close views, materials, lighting, normals, runtime parity and LOD loss against the intended camera. Compare with the user's reference as well as the previous revision: correct topology and incremental progress alone do not satisfy reference fidelity. Inspect the closest required view for texture density, seams, floating trim, obstructed openings and lighting that conceals defects. For requested bakes, inspect matched neutral-AO and disabled-lightmap captures and the actual bake provenance; distinguish baked indirect lighting from direct runtime lighting. Read the exported geometry measurements; separate triangles, vertices, draw primitives, textures, file bytes and observed runtime calls. Do not infer FPS from counts. Return at most five prioritized actionable changes, with evidence path, visible symptom, suggested correction and a measurable acceptance condition. Identify regressions against the previous revision under matched cameras.
+
+For production review, compare HIGH, unbaked LOW, baked LOW and the decoded compressed export where those stages exist. Check source/bake hashes and nonempty validator coverage. For animated assets inspect intermediate poses, attachment contacts, bounds and loop continuity after decoding. Do not pass missing required evidence or treat a triangle reduction as a measured speedup.
 
 Inspect each delivered LOD at matched cameras, including localized crops of thin trim, stairs and silhouette edges. A small whole-image pixel difference can conceal severe localized damage; it is not visual approval. Likewise, zero UV overlaps does not establish that simplification preserved surface shape, shading normals or the correspondence with baked lighting. Request diagnostic captures with AO, lightmaps, normal maps and shadows disabled when needed to distinguish these causes.
 

@@ -11,6 +11,8 @@ Repository workflow (canary rules; AGENTS.md is the index, procedures live in .g
 - Records (triage, plan, validation) must end up reviewable in the PR without .context/: write them so the lead can paste them.
 - Never bump package versions, edit release records/fingerprints, or rename changesets already collected in an RC.
 
+Instruction authoring: a new agent starts without the authoring conversation. Define specialized terms on first use, state required inputs and outputs, and link the exact guide to read at each decision. Explain when a rule applies and why it changes the work. Use a small general example for an ambiguous decision (for example, a normal bake can preserve a shallow groove but not a hole). Keep task-specific art direction, paths, devices and numeric budgets in the assignment. Distinguish a required check from an optional diagnostic. Do not turn one failure into a universal procedure or require every reference for a simple task.
+
 Repository facts that matter to every role:
 - All specialist sessions and declared children must use the configured Vercel project OIDC access through AI Gateway. Do not fall back to subscription/direct-provider credentials or alter authentication. Report expired/missing tokens to the lead; credentials cannot be refreshed in an already-running native session.
 - Public API lives in packages/vgpu-api (entrypoints vgpu, vgpu/node, vgpu/mock, vgpu/scene, vgpu/core). Symbol docs are co-located *.docs.md files; narrative guides live in docs/topics/*.docs.md. docs/DOCS-TEMPLATE.md defines the symbol-doc format.

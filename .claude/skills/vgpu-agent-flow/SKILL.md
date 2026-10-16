@@ -15,6 +15,9 @@ talk to the human and never see this conversation — each prompt must carry the
 For Blender assets and image-guided visual refinement, use the
 [asset iteration lane](references/asset-iteration.md). It pairs an Astra author with declared
 Opus 5.5 shader/runtime and critique children, with measured screenshots and evidence-based lessons.
+For web delivery and high-to-low conversion, use [asset production](references/asset-production.md).
+For CPU/GPU measurements, use [performance measurement](references/performance-measurement.md).
+These workflows also work with one agent when delegation is disabled.
 The normal API phases below still apply if the asset work changes a public API.
 
 | Target | Harness / model | Role |
@@ -30,7 +33,9 @@ The normal API phases below still apply if the asset work changes a public API.
 | `repo:pr-writer` | Claude `claude-sonnet-5.5` high (no fallback) | Markdown-first problem/solution walkthrough and native code blocks; images only for complex diagrams that need drawing; then the technical PR record; lead reviews and publishes |
 | `repo:reviewer` | Codex `gpt-6-astra` high → Claude `claude-opus-5.5` high | Read-only review (called by either implementer per task, and by you after integration) |
 | `repo:fixer` | Claude `claude-sonnet-5.5` high → Codex `gpt-5.6-sol` high | Applies a bounded list of integration-review findings |
-| `repo:asset-author` | Codex `gpt-6-astra` high (no fallback) | Blender modeling, renders, environment lighting and AO/lightmap bakes; declares runtime and critic children |
+| `repo:asset-author` | Codex `gpt-6-astra` high (no fallback) | Blender modeling, renders and authored lighting; declares producer, runtime and critic children |
+| `repo:asset-producer` | Claude `claude-opus-5.5` high (no fallback) | LOW meshes, UVs, cages, bakes, compressed exports and decoded validation |
+| `repo:performance-engineer` | Claude `claude-sonnet-5.5` high (no fallback) | Bounded measurement plans/runs, offline comparison and device-telemetry interpretation |
 | `repo:asset-runtime` | Claude `claude-opus-5.5` high (no fallback) | Shaders, browser rendering and parity with Blender; called by asset-author |
 | `repo:asset-critic` | Claude `claude-opus-5.5` high (no fallback) | Actual capture and cost review, called by asset-author |
 | `repo:example-builder` | Claude `claude-opus-5.5` xhigh | One docs gallery example end to end from a brief; sees it running through `capture_preview`; runs `example-reviewer`; commits |
@@ -207,7 +212,7 @@ npx subharness run repo:example-builder --prompt "Topic: <topic>. Build the exam
 The builder carries the example contract in `.subharness/tools/example-playbook.ts` and these tools:
 `capture_preview` (`.subharness/tools/preview/`) loads `/preview/<slug>` from the checkout's docs dev
 server in headless WebGPU Chrome, replays scripted mouse/touch/keyboard input, and returns
-screenshots, burst contact sheets, console problems, and GPU/frame timing; `render_thumbnail`,
+screenshots, burst contact sheets, console problems, and queue-completion latency/frame cadence; `render_thumbnail`,
 `verify_example`, and `bundle_report` (`.subharness/tools/example/`) cover thumbnails, the
 pre-commit checklist, and chunk budgets. Two also run from a shell:
 `node .subharness/tools/preview/cli.ts <slug> --steps '<json>'` and
