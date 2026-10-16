@@ -4,24 +4,29 @@
 /**
  * Installed before any page script runs. It stays dormant until `window.__capturePerf.measure(ms)`
  * is awaited, then records rAF frame deltas, the time each page rAF callback spends in JavaScript,
- * and each `GPUQueue.submit` → `onSubmittedWorkDone` latency (an upper bound on GPU time for that
- * submit, since it includes queueing).
+ * and queue completion latency observed after each GPUQueue.submit. This includes queueing and
+ * promise scheduling and is neither GPU execution time nor utilization.
  */
 export const perfInitScript = `(() => {
-  const state = { recording: false, js: [], gpu: [] };
+  let active = null;
   const raf = window.requestAnimationFrame.bind(window);
   window.requestAnimationFrame = (callback) => raf((time) => {
-    if (!state.recording) return callback(time);
+    const window = active;
+    if (!window) return callback(time);
     const started = performance.now();
-    try { return callback(time); } finally { state.js.push({ t: started, ms: performance.now() - started }); }
+    try { return callback(time); } finally { window.js.push({ t: started, ms: performance.now() - started }); }
   });
   if (window.GPUQueue) {
     const submit = GPUQueue.prototype.submit;
     GPUQueue.prototype.submit = function (buffers) {
       const result = submit.call(this, buffers);
-      if (state.recording) {
+      const window = active;
+      if (window) {
+        window.submits++;
         const started = performance.now();
-        this.onSubmittedWorkDone().then(() => state.gpu.push({ t: started, ms: performance.now() - started }), () => {});
+        this.onSubmittedWorkDone().then(() => {
+          if (!window.closed) window.completions.push({ t: started, ms: performance.now() - started });
+        }, () => { if (!window.closed) window.failures++; });
       }
       return result;
     };
@@ -35,9 +40,9 @@ export const perfInitScript = `(() => {
   };
   window.__capturePerf = {
     async measure(ms) {
-      state.js = [];
-      state.gpu = [];
-      state.recording = true;
+      if (active) throw new Error("A preview measurement is already active");
+      const window = { js: [], completions: [], submits: 0, failures: 0, closed: false };
+      active = window;
       const frames = [];
       const start = performance.now();
       let last = start;
@@ -49,18 +54,24 @@ export const perfInitScript = `(() => {
         };
         raf(tick);
       });
-      state.recording = false;
+      active = null;
       await new Promise((resolve) => setTimeout(resolve, 150));
+      window.closed = true;
       frames.shift();
       const deltas = frames.map((frame) => frame.ms);
       const median = stats(deltas)?.p50 ?? 16.7;
       return {
+        schemaVersion: 2,
+        timingScope: "Preview diagnostics: rAF callback CPU duration, frame cadence and queue completion latency; no GPU execution or utilization measurement",
         frames: frames.length,
         frameMs: stats(deltas),
-        jsMsPerFrame: frames.length ? +(state.js.reduce((sum, entry) => sum + entry.ms, 0) / frames.length).toFixed(2) : null,
-        jsCallbackMs: stats(state.js.map((entry) => entry.ms)),
-        gpuSubmitsPerFrame: frames.length ? +(state.gpu.length / frames.length).toFixed(2) : null,
-        gpuSubmitToDoneMs: stats(state.gpu.map((entry) => entry.ms)),
+        jsMsPerFrame: frames.length ? +(window.js.reduce((sum, entry) => sum + entry.ms, 0) / frames.length).toFixed(2) : null,
+        jsCallbackMs: stats(window.js.map((entry) => entry.ms)),
+        queueSubmitsPerFrame: frames.length ? +(window.submits / frames.length).toFixed(2) : null,
+        queueCompletionMs: stats(window.completions.map((entry) => entry.ms)),
+        queueCompletionSamples: window.completions.length,
+        queueCompletionFailures: window.failures,
+        queueCompletionPending: window.submits - window.completions.length - window.failures,
         longFrames: frames.filter((frame) => frame.ms > Math.max(25, median * 1.5)).slice(0, 20).map((frame) => ({ tMs: +frame.t.toFixed(1), ms: +frame.ms.toFixed(1) })),
       };
     },

@@ -132,21 +132,23 @@ export async function runSteps(context: StepContext, steps: readonly CaptureStep
   return results;
 }
 
-type PerfRun = { gpuSubmitToDoneMs?: { p95: number } | null; frameMs?: { avg: number } | null; jsMsPerFrame?: number | null };
+type PerfRun = { queueCompletionMs?: { p95: number } | null; queueCompletionPending?: number; queueCompletionFailures?: number; frameMs?: { avg: number } | null; jsMsPerFrame?: number | null };
 
 /**
- * GPU clocks ramp (DVFS), so one window is noisy: warm up for 400 ms, measure `runs` windows, and
- * report the median of the per-run GPU p95 next to the last run's full breakdown.
+ * Repeat diagnostic windows after a 400 ms warmup. Queue completion latency includes queued
+ * work and callback scheduling; repeated windows do not turn it into GPU execution time.
  */
 async function measure(page: ChromePage, ms: number, runs: number) {
   await evaluate(page, perfExpression(400));
   const windows: PerfRun[] = [];
   for (let index = 0; index < runs; index++) windows.push(await evaluate(page, perfExpression(ms)) as PerfRun);
-  const p95s = windows.map((window) => window.gpuSubmitToDoneMs?.p95).filter((value): value is number => typeof value === "number").sort((a, b) => a - b);
+  const perRun = windows.map((window) => window.queueCompletionPending || window.queueCompletionFailures ? null : window.queueCompletionMs?.p95 ?? null);
+  const p95s = perRun.filter((value): value is number => typeof value === "number").sort((a, b) => a - b);
   return {
     runs,
-    gpuP95MedianMs: p95s.length ? p95s[Math.floor(p95s.length / 2)] : null,
-    gpuP95PerRunMs: p95s,
+    windows,
+    queueCompletionP95MedianMs: p95s.length ? p95s[Math.floor(p95s.length / 2)] : null,
+    queueCompletionP95PerRunMs: perRun,
     ...windows[windows.length - 1],
   };
 }

@@ -8,7 +8,11 @@ export default agent({
 
 ${workspaceInstructions}
 
+For optimized web assets, read .claude/skills/vgpu-agent-flow/references/asset-production.md. HIGH means the preserved detailed source; LOW means the runtime representation derived from it. The producer owns LOW, UVs, bakes and exports; the author owns HIGH. Review the final decoded export, not only the Blender source.
+
 Read skills/vgpu/SKILL.md and skills/vgpu/blender/index.md, the supplied task/decisions and the agreed export contract before editing. Use installed-package documentation for runtime APIs. Implement only caller-assigned runtime files; do not change Blender source, agent definitions or a concurrently edited lockfile. Respect axes, scale, material interpretation and LOD contract. Expose useful viewer controls and measured geometry/asset costs, clearly separating runtime counters from offline estimates. Keep HIGH and authoring references out of normal runtime loading. Dispose resources and handle loading failures.
+
+Agree the material channels, UV/tangent conventions, units, axes, pivots, animation and supported codecs with the producer before full-scene baking. Validate one representative baked part through the actual loader and shaders first. For timing or device-utilization claims, follow .claude/skills/vgpu-agent-flow/references/performance-measurement.md; report unsupported metrics as unavailable.
 
 Focus on shaders and the browser rendering pipeline: PBR interpretation, normals, correct composition of baked AO and indirect lightmaps, sky/water/reflections, shadow quality, color management and measured GPU resource costs. Match Astra's authored Blender lighting and camera contract; report differences with actual captures and propose fixes to the author instead of silently redesigning the environment or bakes. Keep modeling, Blender renders and artistic lighting decisions with Astra.
 

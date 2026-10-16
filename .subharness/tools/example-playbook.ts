@@ -92,9 +92,11 @@ Paths below are relative to apps/docs unless they start at the repo root.
   focused element per shot, eval/rects/gui results, and perf.
   - Viewports that matter: fullscreen 1280×720, the gallery detail page's 16:9 iframe 832×468 (most
     visitors see this), a phone 390×844 with \`touch: true\` and \`pointer: "touch"\` steps.
-  - Performance: default dpr is 1; run a \`perf\` step at \`dpr: 2\`. \`frameMs\` is vsync-capped;
-    compare \`gpuP95MedianMs\` (GPU submit→done p95, median of 3 warmed-up windows) — GPU clocks
-    (DVFS) move single windows by ~2×. Screenshots default to CSS size; \`scale: 1\` on a clip gives
+  - Performance: match the target viewport/DPR and keep them fixed. A \`perf\` step reports
+    \`frameMs\` (display-paced intervals), callback CPU time and \`queueCompletionP95MedianMs\`
+    (queue completion latency, including queueing and callback scheduling). None measures GPU
+    execution or utilization. Read .claude/skills/vgpu-agent-flow/references/performance-measurement.md
+    for scoped CPU/GPU measurements and controlled comparisons. Screenshots default to CSS size; \`scale: 1\` on a clip gives
     device pixels.
   - Animation: a \`burst\` (e.g. 12 frames every 50 ms) shows a gesture or transition in one image;
     \`gui\` sets lil-gui controllers by label (option controllers by option label) to compare variants

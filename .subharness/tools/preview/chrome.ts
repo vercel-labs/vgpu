@@ -17,6 +17,8 @@ export interface ChromePage {
   close(): Promise<void>;
 }
 
+export class ChromeCleanupError extends Error {}
+
 const macChrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
 /**
@@ -64,6 +66,7 @@ export async function launchChrome(viewport: { width: number; height: number }):
     if (browser.exitCode === null && browser.signalCode === null) {
       browser.kill("SIGKILL");
       await waitForExit(browser, 3000);
+      if (browser.exitCode === null && browser.signalCode === null) throw new ChromeCleanupError("Owned Chrome did not exit after SIGKILL");
     }
     await rm(profile, { recursive: true, force: true }).catch(() => undefined);
   })();
@@ -148,12 +151,18 @@ function waitForExit(browser: ReturnType<typeof spawn>, timeoutMs: number): Prom
 async function connectPage(url: string, shutdown: () => Promise<void>): Promise<ChromePage> {
   const socket = new WebSocket(url);
   await new Promise((resolve, reject) => {
-    socket.addEventListener("open", resolve, { once: true });
-    socket.addEventListener("error", () => reject(new Error("CDP WebSocket failed to open.")), { once: true });
+    const timer = setTimeout(() => { socket.close(); reject(new Error("CDP WebSocket startup timed out.")); }, 20_000);
+    socket.addEventListener("open", () => { clearTimeout(timer); resolve(undefined); }, { once: true });
+    socket.addEventListener("error", () => { clearTimeout(timer); reject(new Error("CDP WebSocket failed to open.")); }, { once: true });
   });
   let nextId = 0;
   const pending = new Map<number, { resolve: (value: Record<string, unknown>) => void; reject: (error: Error) => void }>();
   const listeners: Array<(event: CdpEvent) => void> = [];
+  const rejectPending = () => {
+    for (const request of pending.values()) request.reject(new Error("Owned Chrome connection closed"));
+    pending.clear();
+  };
+  socket.addEventListener("close", rejectPending);
   socket.addEventListener("message", (message) => {
     const data = JSON.parse(String(message.data)) as { id?: number; result?: Record<string, unknown>; error?: { message: string }; method?: string; params?: Record<string, unknown> };
     if (data.id !== undefined) {
@@ -184,6 +193,7 @@ async function connectPage(url: string, shutdown: () => Promise<void>): Promise<
       listeners.push(listener);
     },
     async close() {
+      rejectPending();
       socket.close();
       await shutdown();
     },

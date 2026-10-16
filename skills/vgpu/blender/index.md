@@ -12,6 +12,8 @@ For texture format selection, model/download size or slow first-frame loading, r
 
 For reducing an existing dense model and transferring its detail to a new LOW mesh, read [high-to-low baking](references/high-to-low-baking.md). It covers regional reduction, a representative projection proof, multi-UV normal frames, assembled AO and matched acceptance.
 
+For openings that produce long thin triangles or distorted shading, read [local retopology](references/local-retopology.md). For animated exports and compressed clips, read [animation production](references/animation-production.md). Skip these references for assets without those requirements.
+
 ## 1. Establish a baseline
 
 - Inspect the supplied references, source mesh, materials, rig, collision shapes, and export/import pipeline before editing.
