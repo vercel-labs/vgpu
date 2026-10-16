@@ -133,6 +133,11 @@ DPR, and the bridge must reject a mismatch. Keep those settings fixed across mat
 Run A/B/A/B serially; report block medians and repeat spread, and collect more only when needed to
 distinguish a change from noise. Short samples do not establish production p95/p99 or FPS.
 
+A block is one independent bounded run: A is the baseline and B the candidate. Start a fresh agent
+session after changing agent definitions or tool code; existing sessions retain loaded definitions.
+Reports fingerprint the runner sources at module load, so later edits cannot relabel a running
+session as the new implementation.
+
 Wall pacing limits average activity, not instantaneous GPU use. It also changes clocks/cache
 behavior. Use an actual application run for frame-rate claims. CPU and GPU work can overlap;
 adding their milliseconds does not give whole-frame latency. Likewise, hiding one object changes

@@ -6,6 +6,9 @@ import { ChromeCleanupError, launchChrome, type ChromePage } from "../preview/ch
 import { acquireLease } from "./lease.ts";
 import { distribution, planCase, sampleSchema, verifyMetadata, type Plan, type Report } from "./contract.ts";
 
+// Subharness keeps loaded modules for a session. Later edits must not relabel old code as new.
+const loadedRunnerIdentity = runnerIdentity();
+
 export async function evaluate(page: ChromePage, expression: string) {
   const response = await page.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
   const exception = response.exceptionDetails as { text?: string; exception?: { description?: string } } | undefined;
@@ -15,6 +18,11 @@ export async function evaluate(page: ChromePage, expression: string) {
 
 function deadline<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
+    if (ms <= 0) {
+      void promise.catch(() => {}); // The operation may already be in flight; cleanup still owns it.
+      reject(new Error("Measurement deadline exceeded"));
+      return;
+    }
     const timer = setTimeout(() => reject(new Error("Measurement deadline exceeded")), Math.max(0, ms));
     promise.then((result) => { clearTimeout(timer); resolve(result); }, (error) => { clearTimeout(timer); reject(error); });
   });
@@ -26,7 +34,7 @@ export async function runCase(input: Plan, options: {
   outRoot?: string; leaseDirectory?: string; launch?: typeof launchChrome; runnerRevision?: string;
 } = {}) {
   const plan = planCase(input.case, input.budget); // Fail unsupported requests before hardware.
-  const revision = options.runnerRevision ?? runnerIdentity();
+  const revision = options.runnerRevision ?? loadedRunnerIdentity;
   const release = await acquireLease(options.leaseDirectory);
   const report: Report = {
     schemaVersion: 1, id: randomUUID(), startedAt: new Date().toISOString(),
